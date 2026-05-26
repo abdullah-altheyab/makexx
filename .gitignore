@@ -12,6 +12,7 @@ makefile_graph.gv
 makefile_graph.pdf
 makefile_nodes.txt
 makefile_tmp.txt
+.makexx_menu
 tmp_makexx.cpp
 tmp_makexx
 tmp_makexx.exe

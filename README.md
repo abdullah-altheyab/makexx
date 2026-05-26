@@ -48,8 +48,10 @@ int main() {
 
 ```bash
 makexx          # generates and runs the pipeline
+makexx -i       # interactive target selector (TUI)
 make            # reruns only what changed
 make image.bin  # run up to a specific target
+make help       # list all targets with descriptions
 ```
 
 ---
@@ -82,6 +84,49 @@ for (auto& s : runs) {
 }
 ```
 
+**Self-documenting pipelines.** Add descriptions and organize targets into groups:
+
+```cpp
+mf.help_title = "Seismic Pipeline v2";
+
+mf.HELP_GROUP("Processing");
+mf.add("filtered.bin", "raw.segy")
+    << FINAL << HELP("Apply bandpass filter") << "atbpfilt $< $@";
+
+mf.HELP_GROUP("QC");
+mf.add("report.pdf", "filtered.bin")
+    << HELP("Generate QC report") << "qcplot $< $@";
+```
+
+Then `make help` prints:
+
+```
+Seismic Pipeline v2
+
+Processing:
+  filtered.bin ─── Apply bandpass filter
+
+QC:
+    report.pdf ─── Generate QC report
+
+Built-in:
+           all ─── Build all final targets
+    full_clean ─── Remove all generated files
+          help ─── Show this help
+           ...
+```
+
+**Interactive mode.** Run `makexx -i` for a terminal UI with arrow key navigation, foldable groups, and Enter to run a target.
+
+**Helper functions.** Path manipulation utilities available in your `makefile.cpp`:
+
+```cpp
+stem("dir/file.cpp")            // "file"
+basename("dir/file.cpp")        // "file.cpp"
+change_ext("file.cpp", ".o")    // "file.o"
+join_path("obj", "file.o")      // "obj/file.o"
+```
+
 ---
 
 ## Why GNU make as the backend?
@@ -100,6 +145,8 @@ The generated `makefile` is a plain text file. On most HPC clusters, `make` is t
 | Full programming model | ✓ | — | ✓ | — |
 | Runs on bare HPC (needs only `make`) | ✓ | ✓ | — | — |
 | No new language for C++ users | ✓ | — | — | — |
+| Interactive target selector | ✓ | — | — | — |
+| Self-documenting targets | ✓ | — | ✓ | — |
 
 ---
 

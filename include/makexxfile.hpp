@@ -82,6 +82,7 @@ inline std::string to_string(std::set<std::string> const &list) {
 }
 
 enum target_type { FINAL, OPTIONAL, INPUT };
+enum group_display { FOLDED };
 
 class Rule {
   public:
@@ -255,6 +256,7 @@ class Makefile {
 	std::vector<std::string> help_group_order;
 	std::set<std::string> soft_clean_retain_nodes;
 	std::string current_help_group;
+	std::set<std::string> folded_groups;
 
 	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources) {
 		commands.push_back(std::make_unique<Rule>());
@@ -358,7 +360,14 @@ class Makefile {
 	bool echo;
 	std::string help_title;
 
-	void HELP_GROUP(std::string group) { current_help_group = group; }
+	void HELP_GROUP(std::string group) {
+		current_help_group = group;
+	}
+
+	void HELP_GROUP(std::string group, group_display display) {
+		current_help_group = group;
+		if(display == FOLDED) folded_groups.insert(group);
+	}
 
 	Makefile() {
         max_width=20;
@@ -579,6 +588,44 @@ class Makefile {
 			myfile << "\tdot -v -Tpdf makefile_graph.gv -o makefile_graph.pdf\n";
 		}
 		myfile.close();
+		write_menu_file(graph);
+	}
+
+	void write_menu_file(bool graph) {
+		std::ofstream mf(".makexx_menu");
+		auto group_prefix = [&](std::string const &g) {
+			std::string name = g.empty() ? "_" : g;
+			if(folded_groups.count(g)) return "+" + name;
+			return name;
+		};
+		for(auto &itm : help_menu) {
+			bool is_mid = itm.description.find("\xe2\x94\x82") != std::string::npos;
+			bool is_end = itm.description.find("\xe2\x94\x98") != std::string::npos;
+			if(is_mid || is_end) {
+				mf << group_prefix(itm.group) << "\t=" << itm.target << "\t\n";
+				continue;
+			}
+			std::string desc = itm.description;
+			auto pos = desc.find_last_of("\xe2\x94\x80");
+			if(pos != std::string::npos && pos + 1 < desc.size())
+				desc = desc.substr(pos + 1);
+			while(!desc.empty() && desc[0] == ' ') desc = desc.substr(1);
+			mf << group_prefix(itm.group) << "\t" << itm.target << "\t" << desc << "\n";
+		}
+		std::string builtin_group = "Built-in";
+		auto write_builtin = [&](std::string name, std::string desc) {
+			mf << builtin_group << "\t" << name << "\t" << desc << "\n";
+		};
+		write_builtin("all",          "Build all final targets");
+		write_builtin("full_clean",   "Remove all generated files");
+		write_builtin("soft_clean",   "Remove generated files (except retained)");
+		write_builtin("list",         "List all tracked files");
+		write_builtin("list_unknown", "List untracked files in directory");
+		write_builtin("list_input",   "List input files");
+		write_builtin("help",         "Show this help");
+		if(graph)
+			write_builtin("makefile_graph.pdf", "Generate dependency graph (requires Graphviz)");
+		mf.close();
 	}
 
 	void generate_graph(std::string filename = "makefile_graph.gv") {

@@ -26,8 +26,8 @@ When `makexx` is invoked in a user's project directory:
 2. Creates `makefile.cpp` from the embedded example template (only if it doesn't exist yet)
 3. Selects a C++ compiler: uses `CXX` env var if set, otherwise probes `g++`, `clang++`, `icpx`, `icpc` in order
 4. Compiles `makefile.cpp` → `makefile_gen` executable
-5. Runs `makefile_gen` which calls `mf.generate()` to produce `makefile`
-6. Runs `make` with any extra args passed to `makexx` (except `-u`, `-f`, `-c`)
+5. Runs `makefile_gen` which calls `mf.generate()` to produce `makefile` and `.makexx_menu`
+6. Runs `make` with any extra args passed to `makexx` (except `-u`, `-f`, `-c`, `-i`)
 7. Cleans up temp files (`tmp_makexx*`, `err_makexx.txt`, `makefile_gen`)
 
 **Makefile protection:** makexx checks whether an existing `makefile` starts with the header `# This is an automatically generated makefile via makexx.`. If not, it refuses to overwrite it unless `-f` is passed.
@@ -40,6 +40,7 @@ When `makexx` is invoked in a user's project directory:
 | `-f` | Force overwrite `makefile` even if not makexx-generated |
 | `-c` | Compile only — skip running `make` |
 | `-v` | Verbose output |
+| `-i` | Interactive target selector (TUI with arrow keys, foldable groups) |
 
 All other flags are forwarded to `make`.
 
@@ -64,19 +65,45 @@ rule << TEMP({"tmp1", "tmp2"});     // cleaned by full_clean and soft_clean
 rule << BYPROD("byproduct.log");    // cleaned by full_clean and soft_clean
 rule << TARGET("manual_output");    // hidden/non-reproducible target
 rule << HELP("builds the thing");   // shown by 'make help'
+rule << HELP("Deploy", "deploy it"); // with explicit group
 
 mf.on_softclean_retain("expensive_output"); // exclude from soft_clean
 
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
 
-mf.generate();              // write the makefile
-mf.generate_with_graph();   // write the makefile + makefile_graph.gv (Graphviz DOT)
+// Help organization
+mf.help_title = "My Project";       // printed at top of 'make help'
+mf.HELP_GROUP("Build");             // subsequent HELP() entries belong to this group
+// HELP("group", "desc") overrides the group for a single rule
+
+mf.generate();              // write the makefile + .makexx_menu
+mf.generate_with_graph();   // write the makefile + .makexx_menu + makefile_graph.gv (Graphviz DOT)
 ```
 
-The generated makefile always includes: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help` rules.
+### Helper functions
+
+```cpp
+stem("dir/file.cpp")            // "file" — filename without directory or extension
+basename("dir/file.cpp")        // "file.cpp" — filename without directory
+change_ext("file.cpp", ".o")    // "file.o" — replace file extension
+join_path("obj", "file.o")      // "obj/file.o" — join directory and filename
+get_extension("file.cpp")       // "cpp" — file extension without dot
+replace_all(str, from, to)      // string replacement
+to_upper(str) / to_lower(str)   // case conversion
+```
+
+### Generated makefile features
+
+The generated makefile always includes `.PHONY` and the built-in targets: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help`. The `help` target shows user-defined targets with box-drawing brackets for multi-target rules, organized by groups, with built-in targets listed at the bottom. Long descriptions word-wrap to the terminal width.
+
+The `### GENERATING` decoration is suppressed for phony/built-in targets.
 
 On Windows, the `<<` operator automatically replaces `/` with `\` in shell commands.
+
+### Interactive mode
+
+`makexx -i` launches a terminal UI for selecting and running targets. It reads the `.makexx_menu` file generated alongside the makefile. Controls: ↑↓ navigate, ←→ fold/unfold groups, Enter to run, q/Esc to quit. POSIX only.
 
 ## Examples
 
