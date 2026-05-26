@@ -1,1 +1,0 @@
-/usr/bin/c++     CMakeFiles/makexx.dir/src/makexx.cpp.o  -o makexx 
