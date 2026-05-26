@@ -3,69 +3,51 @@
 #include <utility>
 #include <typeinfo>
 #include <string>
-using std::string;
 #include <vector>
-using std::vector;
-using std::set;
 #include <iostream>
 #include <fstream>
-using std::cout;
-using std::cerr;
-using std::endl;
-using std::ofstream;
-using std::to_string;
 #include <initializer_list>
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <iomanip>
-using std::initializer_list;
-typedef initializer_list<string> slist;
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 
-/*
-namespace atmake {
-string to_string(int i) {
-	return std::to_string((long long) i);
-}
-string to_string(float i) {
-	return std::to_string((long double) i);
-}
-}
-using namespace atmake;
-*/
+typedef std::initializer_list<std::string> StringList;
 
-long double rand1() {
+inline long double random_float() {
 	return (long double)(std::rand()) / RAND_MAX;
 }
-string rand(float min = 0, float max = 1, bool randomize = false) {
-	//if(randomize)
-	//		srand(time(NULL));
+inline std::string random_string(float min = 0, float max = 1) {
 	return std::to_string(min + (max - min) * (long double)(std::rand()) / RAND_MAX);
 }
-string basename(string const a) {
-	string base_filename = a.substr(a.find_last_of("/\\") + 1);
+inline std::string stem(std::string const a) {
+	std::string base_filename = a.substr(a.find_last_of("/\\") + 1);
 	std::string::size_type const p(base_filename.find_last_of('.'));
 	return base_filename.substr(0, p);
 }
-string to_string(vector<string> const &list) {
-	string output = "";
+inline std::string to_string(std::vector<std::string> const &list) {
+	std::string output = "";
 	if(list.size() <= 0)
 		return output;
 	output = list[0];
-	for(int i = 1; i < list.size(); i++)
+	for(int i = 1; i < (int)list.size(); i++)
 		output += " " + list[i];
 	return output;
 }
-inline string toupper(string input) {
+inline std::string to_upper(std::string input) {
 	for(auto &c : input) c = std::toupper(c);
 	return input;
 }
-inline string tolower(string input) {
+inline std::string to_lower(std::string input) {
 	for(auto &c : input) c = std::tolower(c);
 	return input;
 }
 
-string to_string(set<string> const &list) {
-	string output = "";
+inline std::string to_string(std::set<std::string> const &list) {
+	std::string output = "";
 	if(list.size() <= 0)
 		return output;
 	bool isfirst = true;
@@ -84,19 +66,19 @@ enum target_type { FINAL, OPTIONAL, INPUT };
 
 class Rule {
   public:
-	vector<string> cmds;
-	set<string> temps; // temp files
-	set<string> byprods; // byproduct files
-	set<string> hidden_targets; // hidden_target
-	target_type tt;
-	string help;
+	std::vector<std::string> commands;
+	std::set<std::string> temp_files;
+	std::set<std::string> byproducts;
+	std::set<std::string> hidden_targets; // hidden_target
+	target_type type;
+	std::string help;
 	Rule() {
-		tt = OPTIONAL; //run by default
+		type = OPTIONAL;
 		help = "";
 	}
-	string cmd(string prefix = "\t") {
-		string a = "";
-		for(auto k : cmds) {
+	std::string formatted(std::string prefix = "\t") {
+		std::string a = "";
+		for(auto k : commands) {
 			a += prefix + k + "\n";
 		}
 		return a;
@@ -104,7 +86,7 @@ class Rule {
 
 };
 
-string get_extension(string const filename) {
+inline std::string get_extension(std::string const filename) {
 	auto idx = filename.rfind('.');
 	if(idx != std::string::npos) {
 		return filename.substr(idx + 1);
@@ -113,7 +95,7 @@ string get_extension(string const filename) {
 	}
 }
 
-std::string replace_all(std::string str, const std::string &from, const std::string &to) {
+inline std::string replace_all(std::string str, const std::string &from, const std::string &to) {
 	size_t start_pos = 0;
 	while((start_pos = str.find(from, start_pos)) != std::string::npos) {
 		str.replace(start_pos, from.length(), to);
@@ -122,84 +104,83 @@ std::string replace_all(std::string str, const std::string &from, const std::str
 	return str;
 }
 
-Rule &operator<<(Rule &a, string const command) {
+inline Rule &operator<<(Rule &a, std::string const command) {
 	#ifdef _WIN32
 	//define something for Windows (32-bit and 64-bit, this part is common)
 	#ifdef _WIN64
 	//define something for Windows (64-bit only)
-	string const runsys = "win64";
+	std::string const runsys = "win64";
 	#else
 	//define something for Windows (32-bit only)
 	#endif
 	#elif __APPLE__
-#include "TargetConditionals.h"
 	#if TARGET_IPHONE_SIMULATOR
 	// iOS Simulator
 	#elif TARGET_OS_IPHONE
 	// iOS device
 	#elif TARGET_OS_MAC
 	// Other kinds of Mac OS
-	string const runsys = "macos";
+	std::string const runsys = "macos";
 	#else
 #   error "Unknown Apple platform"
 	#endif
 	#elif __linux__
 	// linux
-	string const runsys = "linux";
+	std::string const runsys = "linux";
 	#elif __unix__ // all unices not caught above
 	// Unix
-	string const runsys = "unix";
+	std::string const runsys = "unix";
 	#elif defined(_POSIX_VERSION)
 	// POSIX
-	string const runsys = "posix";
+	std::string const runsys = "posix";
 	#else
 #error "Unknown compiler"
 	#endif
-	string command2;
+	std::string command2;
 	if(runsys == "win64") {
 		command2 = replace_all(command, "/", "\\");
 	} else {
 		command2 = command;
 	}
-	a.cmds.push_back(command2);
+	a.commands.push_back(command2);
 	return a;
 }
 
-Rule &operator<<(Rule &a, target_type t) {
-	a.tt = t;
+inline Rule &operator<<(Rule &a, target_type t) {
+	a.type = t;
 	return a;
 }
 
 class TEMP { // list of temprorary filenames
   public:
-	set<string> filenames;
-	TEMP(string filename) {
+	std::set<std::string> filenames;
+	TEMP(std::string filename) {
 		this->filenames.insert(filename);
 	};
-	TEMP(slist filenames) {
+	TEMP(StringList filenames) {
 		for(auto itm : filenames) {
 			this->filenames.insert(itm);
 		}
 	}
-	TEMP(vector<string> filenames) {
+	TEMP(std::vector<std::string> filenames) {
 		for(auto itm : filenames) {
 			this->filenames.insert(itm);
 		}
 	}
 };
 
-class BYPROD { // by products
+class BYPRODUCT { // by products
   public:
-	set<string> filenames;
-	BYPROD(string filename) {
+	std::set<std::string> filenames;
+	BYPRODUCT(std::string filename) {
 		this->filenames.insert(filename);
 	};
-	BYPROD(slist filenames) {
+	BYPRODUCT(StringList filenames) {
 		for(auto itm : filenames) {
 			this->filenames.insert(itm);
 		}
 	}
-	BYPROD(vector<string> filenames) {
+	BYPRODUCT(std::vector<std::string> filenames) {
 		for(auto itm : filenames) {
 			this->filenames.insert(itm);
 		}
@@ -207,68 +188,68 @@ class BYPROD { // by products
 };
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
   public:
-	set<string> filenames;
-	TARGET(string filename) {
+	std::set<std::string> filenames;
+	TARGET(std::string filename) {
 		this->filenames.insert(filename);
 	};
-	TARGET(slist filenames) {
+	TARGET(StringList filenames) {
 		for(auto itm : filenames) {
 			this->filenames.insert(itm);
 		}
 	}
-	TARGET(vector<string> filenames) {
+	TARGET(std::vector<std::string> filenames) {
 		for(auto itm : filenames) {
 			this->filenames.insert(itm);
 		}
 	}
 };
 
-class HELP { // add help to the menue
+class HELP { // add help to the menu
   public:
-	string help;
-	HELP(string help) {
+	std::string help;
+	HELP(std::string help) {
 		this->help = help;
 	};
 };
 
-Rule &operator<<(Rule &a, TEMP t) {
+inline Rule &operator<<(Rule &a, TEMP t) {
 	for(auto &tmp : t.filenames)
-		a.temps.insert(tmp);
+		a.temp_files.insert(tmp);
 	return a;
 }
 
-Rule &operator<<(Rule &a, BYPROD t) {
+inline Rule &operator<<(Rule &a, BYPRODUCT t) {
 	for(auto &tmp : t.filenames)
-		a.byprods.insert(tmp);
+		a.byproducts.insert(tmp);
 	return a;
 }
-Rule &operator<<(Rule &a, TARGET t) {
+inline Rule &operator<<(Rule &a, TARGET t) {
 	for(auto &tmp : t.filenames)
 		a.hidden_targets.insert(tmp);
 	return a;
 }
 
-Rule &operator<<(Rule &a, HELP t) {
+inline Rule &operator<<(Rule &a, HELP t) {
 	a.help = t.help;
 	return a;
 }
 
 char const *makefile_header = "# This is an automatically generated makefile via makexx.";
 
-class BuildGraph {
+class Makefile {
   private:
-	std::set<string> nodes;
-	std::vector<Rule *> commands;
-	std::map<string, Rule *> target_rule;
-	std::multimap<Rule *, string> rule_source;
-	std::multimap<Rule *, string> rule_target;
-	std::vector<std::pair<string, string>> help_menu;
-	std::set<string> soft_clean_retain_nodes;
+	std::set<std::string> nodes;
+	std::vector<std::unique_ptr<Rule>> commands;
+	std::map<std::string, Rule *> target_rule;
+	std::multimap<Rule *, std::string> rule_source;
+	std::multimap<Rule *, std::string> rule_target;
+	std::vector<std::pair<std::string, std::string>> help_menu;
+	std::set<std::string> soft_clean_retain_nodes;
   public:
-	std::set<string> hidden_nodes; //notes to execlude from makefile graph
+	std::set<std::string> hidden_nodes; //notes to execlude from makefile graph
 
 	//help functionalities
-	void add_to_help_menue(string make_rule, string helpstr) {
+	void add_to_help_menu(std::string make_rule, std::string helpstr) {
 		help_menu.push_back({make_rule, helpstr});
 	};
 
@@ -285,20 +266,20 @@ class BuildGraph {
 	bool silent;
 	bool echo;
 
-	BuildGraph() {
+	Makefile() {
         max_width=20;
 		silent = false;
 		echo = true;
 	};
 
-	void add_source(Rule &f, string node) {
-		rule_source.insert(std::pair<Rule *, string>(&f, node));
+	void add_source(Rule &f, std::string node) {
+		rule_source.insert(std::pair<Rule *, std::string>(&f, node));
 	}
-	void add_target(Rule &f, string node) {
-		rule_target.insert(std::pair<Rule *, string>(&f, node));
+	void add_target(Rule &f, std::string node) {
+		rule_target.insert(std::pair<Rule *, std::string>(&f, node));
 	}
 
-	Rule &get_rule(string target) {
+	Rule &get_rule(std::string target) {
         if(target_rule.find(target) != target_rule.end()) {
 			return (*target_rule[target]);
         }else{
@@ -306,126 +287,105 @@ class BuildGraph {
         }
     }
 
-	Rule &add(string target) {
-		//cerr<<"$$$"<<__LINE__<<endl;
+	Rule &add(std::string target) {
 		return add({target});
 	}
-	Rule &add(slist targets) {
-		//cerr<<"$$$"<<__LINE__<<endl;
+	Rule &add(StringList targets) {
 		return add(targets, {});
 	}
-	Rule &add(string target, string source) {
-		//cerr<<"$$$"<<__LINE__<<endl;
+	Rule &add(std::string target, std::string source) {
 		return add({target}, {source});
 	}
-	Rule &add(string targets, slist sources) {
-		//cerr<<"$$$"<<__LINE__<<endl;
+	Rule &add(std::string targets, StringList sources) {
 		return add({targets}, sources);
 	}
-	Rule &add(slist targets, string source) {
-		//cerr<<"$$$"<<__LINE__<<endl;
+	Rule &add(StringList targets, std::string source) {
 		return add(targets, {source});
 	}
-	Rule &add(slist targets, slist sources) {
-		//cerr<<"$$$"<<__LINE__<<endl;
-		Rule *A = new Rule;
-		commands.push_back(A);
+	Rule &add(StringList targets, StringList sources) {
+		commands.push_back(std::make_unique<Rule>());
+		Rule *A = commands.back().get();
 		for(auto i = sources.begin(); i != sources.end(); i++) {
 			nodes.insert(*i);
-			rule_source.insert(std::pair<Rule *, string>(A, *i));
-			//cerr<<"$$$source:"<<*i<<endl;
+			rule_source.insert(std::pair<Rule *, std::string>(A, *i));
 		}
 		for(auto i = targets.begin(); i != targets.end(); i++) {
 			if(target_rule.find(*i) != target_rule.end()) {
-				cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << endl;
+				std::cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << std::endl;
 			}
 			nodes.insert(*i);
 			target_rule[*i] = A;
-			//cerr<<"$$$targert:"<<*i<<endl;
-			rule_target.insert(std::pair<Rule *, string>(A, *i));
+			rule_target.insert(std::pair<Rule *, std::string>(A, *i));
 		}
 		return *A;
 	}
 
-	Rule &add(vector<string> const targets, vector<string> const sources) {
-		//cerr<<"$$$"<<__LINE__<<endl;
-		Rule *A = new Rule;
-		commands.push_back(A);
+	Rule &add(std::vector<std::string> const targets, std::vector<std::string> const sources) {
+		commands.push_back(std::make_unique<Rule>());
+		Rule *A = commands.back().get();
 		for(auto i = sources.begin(); i != sources.end(); i++) {
 			nodes.insert(*i);
-			rule_source.insert(std::pair<Rule *, string>(A, *i));
-			//cerr<<"$$$source:"<<*i<<endl;
+			rule_source.insert(std::pair<Rule *, std::string>(A, *i));
 		}
 		for(auto i = targets.begin(); i != targets.end(); i++) {
 			if(target_rule.find(*i) != target_rule.end()) {
-				cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << endl;
+				std::cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << std::endl;
 			}
 			nodes.insert(*i);
 			target_rule[*i] = A;
-			//cerr<<"$$$targert:"<<*i<<endl;
-			rule_target.insert(std::pair<Rule *, string>(A, *i));
+			rule_target.insert(std::pair<Rule *, std::string>(A, *i));
 		}
 		return *A;
 	}
 
-	Rule &add(slist targets, vector<string> const sources) {
-		//cerr<<"$$$"<<__LINE__<<endl;
-		Rule *A = new Rule;
-		commands.push_back(A);
+	Rule &add(StringList targets, std::vector<std::string> const sources) {
+		commands.push_back(std::make_unique<Rule>());
+		Rule *A = commands.back().get();
 		for(auto i = sources.begin(); i != sources.end(); i++) {
 			nodes.insert(*i);
-			rule_source.insert(std::pair<Rule *, string>(A, *i));
-			//cerr<<"$$$source:"<<*i<<endl;
+			rule_source.insert(std::pair<Rule *, std::string>(A, *i));
 		}
 		for(auto i = targets.begin(); i != targets.end(); i++) {
 			if(target_rule.find(*i) != target_rule.end()) {
-				cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << endl;
+				std::cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << std::endl;
 			}
 			nodes.insert(*i);
 			target_rule[*i] = A;
-			//cerr<<"$$$targert:"<<*i<<endl;
-			rule_target.insert(std::pair<Rule *, string>(A, *i));
+			rule_target.insert(std::pair<Rule *, std::string>(A, *i));
 		}
 		return *A;
 	}
 
-	Rule &add(vector<string> const targets, string const source) {
-		vector<string> a = {source};
+	Rule &add(std::vector<std::string> const targets, std::string const source) {
+		std::vector<std::string> a = {source};
 		return add(targets, a);
 	}
 
-	Rule &add(string target, vector<string> const sources) {
-		vector<string> targetvec;
+	Rule &add(std::string target, std::vector<std::string> const sources) {
+		std::vector<std::string> targetvec;
 		targetvec.push_back(target);
 		return add(targetvec, sources);
 	}
 
-    /*
-	void rename(string node_name, string new_name) {
-		if(target_rule.find(node_name) != target_rule.end()) {
-		} else {
-		}
-	}
-    */
-	void on_softclean_retain(string filename) {
+	void on_softclean_retain(std::string filename) {
         this->soft_clean_retain_nodes.insert(filename);
     }
-	void on_softclean_retain(slist filenames) {
+	void on_softclean_retain(StringList filenames) {
 		for(auto itm : filenames) {
 			this->soft_clean_retain_nodes.insert(itm);
 		}
     }
-	void on_softclean_retain(vector<string> filenames) {
+	void on_softclean_retain(std::vector<std::string> filenames) {
 		for(auto itm : filenames) {
 			this->soft_clean_retain_nodes.insert(itm);
 		}
     }
 
 	void dump_help() {
-		for(auto cmd : commands) {
+		for(auto const& cmd : commands) {
 			if(!(cmd->help == "")) {
-				string targets_str = "";
-				auto trange = rule_target.equal_range(cmd);
+				std::string targets_str = "";
+				auto trange = rule_target.equal_range(cmd.get());
 				bool first = true;
 				for(auto j = trange.first; j != trange.second; j++) {
 					if(first) {
@@ -436,8 +396,8 @@ class BuildGraph {
 					targets_str += j->second;
 				}
 				if(!first) { // there is at least one source
-					add_to_help_menue(targets_str, cmd->help);
-                    if(max_width<targets_str.size()){
+					add_to_help_menu(targets_str, cmd->help);
+                    if(max_width<(int)targets_str.size()){
                         max_width=targets_str.size();
                     }
 				}
@@ -445,30 +405,30 @@ class BuildGraph {
 		}
 		add_help_rule();
 	}
-	void dump_makefile() {
+	void generate() {
 		dump_help();
-		std::set<string> processed_nodes;
-		string makefile;
-		set<string> defaultmake_list;
-		set<string> inputfiles_list;
-		ofstream myfile;
-		set<string> temps_list;
-		set<string> byprods_list;
-		set<string> hidden_targets_list;
+		std::set<std::string> processed_nodes;
+		std::string makefile;
+		std::set<std::string> defaultmake_list;
+		std::set<std::string> inputfiles_list;
+		std::ofstream myfile;
+		std::set<std::string> temps_list;
+		std::set<std::string> byprods_list;
+		std::set<std::string> hidden_targets_list;
 		myfile.open("makefile");
-		myfile << makefile_header << endl;
-		myfile << "# DO NOT EDIT!" << endl;
-		myfile << "# You can control the generation via makefile.cpp!" << endl;
-		myfile << "SHELL=/bin/bash" << endl;
+		myfile << makefile_header << std::endl;
+		myfile << "# DO NOT EDIT!" << std::endl;
+		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
+		myfile << "SHELL=/bin/bash" << std::endl;
 		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
 			if(target_rule.find(*itr) != target_rule.end()) {
 				if(processed_nodes.find(*itr) == processed_nodes.end()) {
 					auto command = target_rule[*itr];
-					auto isfinal = (command->tt == FINAL);
+					auto isfinal = (command->type == FINAL);
 					auto trange = rule_target.equal_range(command);
-					string to;
-					set<string> to_list;
-					set<string> from_list;
+					std::string to;
+					std::set<std::string> to_list;
+					std::set<std::string> from_list;
 					for(auto j = trange.first; j != trange.second; j++) {
 						to += j->second + " ";
 						to_list.insert(j->second);
@@ -480,7 +440,7 @@ class BuildGraph {
 							defaultmake_list.insert(itm);
 					}
 					makefile += ": ";
-					string from;
+					std::string from;
 					auto srange = rule_source.equal_range(command);
 					for(auto j = srange.first; j != srange.second; j++) {
                         from_list.insert(j->second);
@@ -489,26 +449,25 @@ class BuildGraph {
 					makefile += from;
 					makefile += "\n";
 					if(echo){
-						//makefile += string("\t@echo \"      # # # # # Generating [ ") + to + "] from [ " + from + "] # # # # #\"\n";
 						makefile += "\t@echo \"### GENERATING : \"\n";
                         for(auto & i: to_list)
-                            makefile += string("\t@echo \"###   "+i+"\"\n");
+                            makefile += std::string("\t@echo \"###   "+i+"\"\n");
                         if(from_list.size()>0)
                             makefile += "\t@echo \"### FROM : \"\n";
                         else
                             makefile += "\t@echo \"### FROM SCRATCH. \"\n";
 
                         for(auto & i: from_list)
-                            makefile += string("\t@echo \"###   "+i+"\"\n");
+                            makefile += std::string("\t@echo \"###   "+i+"\"\n");
                     }
 					if(silent)
-						makefile += command->cmd("\t@") + "\n";
+						makefile += command->formatted("\t@") + "\n";
 					else
-						makefile += command->cmd("\t") + "\n";
-					for(auto tmp : command->temps) {
+						makefile += command->formatted("\t") + "\n";
+					for(auto tmp : command->temp_files) {
 						temps_list.insert(tmp);
 					}
-					for(auto tmp : command->byprods) {
+					for(auto tmp : command->byproducts) {
 						byprods_list.insert(tmp);
 					}
 					for(auto tmp : command->hidden_targets) {
@@ -519,11 +478,10 @@ class BuildGraph {
 				inputfiles_list.insert(*itr);
 			}
 		}
-		//myfile << "#input files:" << inputfiles << endl;
-		myfile << "#input files:" << to_string(inputfiles_list) << endl;
-		myfile << "all : " << to_string(defaultmake_list) << endl;
+		myfile << "#input files:" << to_string(inputfiles_list) << std::endl;
+		myfile << "all : " << to_string(defaultmake_list) << std::endl;
         {
-            myfile << "full_clean: \n"<<endl;
+            myfile << "full_clean: \n"<<std::endl;
             for(auto &itm : processed_nodes){
                 myfile << "\trm -f \"" << itm << "\"\n";
             }
@@ -536,7 +494,7 @@ class BuildGraph {
         }
         //soft cleaning
         {
-            myfile << "soft_clean: \n"<<endl;
+            myfile << "soft_clean: \n"<<std::endl;
             for(auto &itm : processed_nodes){
                 if(soft_clean_retain_nodes.find(itm)==soft_clean_retain_nodes.end())
                     myfile << "\trm -f \"" << itm << "\"\n";
@@ -573,34 +531,26 @@ class BuildGraph {
 		for(auto &itm : defaultmake_list)
 			myfile << "\t@echo \"\t" + itm + "\"\n";
 		myfile << "\t@echo \"Unknown Files in Directory:\"\n";
-		string u_command = "\t@ls --ignore={\"makefile.cpp\",\"makefile.hpp\",\"makefile_gen\",makefile,makefile_graph.*"
+		std::string u_command = "\t@ls --ignore={\"makefile.cpp\",\"makefile.hpp\",\"makefile_gen\",makefile,makefile_graph.*"
 						   ",\"*.*@\",\"*.dbf\",\"*.prj\",\"*.shx\",\"*.cpg\",\"*.aux\",\"*.lt\",\"*.acn\",\"*.bbl\",\"*.blg\",\"*.glo\",\"*ist\",\"*.log\""
 						   ",\"*.toc\",\"*.sbl\",\"*.out\",\"makefile_tmp.txt\",\"makefile_nodes.txt\",\"tmp_makexx.cpp\",\"tmp_makexx\",\"err_makexx.txt\"}>makefile_tmp.txt\n"
 						   ;
 		u_command += "\t@grep -xv -f makefile_nodes.txt makefile_tmp.txt | sed 's/^/\t/'\n\trm -f makefile_tmp.txt";
-		ofstream exception_file("makefile_nodes.txt");
-		//#define _CMD myfile << "\t@grep -v \"^"+itm+"$$\" makefile_tmp.txt >makefile_tmp2.txt && mv makefile_tmp2.txt makefile_tmp.txt\n";
-#define _CMD exception_file<<""+itm+"\n";
+		std::ofstream exception_file("makefile_nodes.txt");
+		auto write_exception = [&](std::string const &itm) { exception_file << itm << "\n"; };
 		{
-			for(auto &itm : inputfiles_list){
-				_CMD;
-            }
-            //myfile << "| grep -v \"^"+itm+"$$\"\\\n\t";
-            for(auto &itm : processed_nodes){
-                _CMD;
-            }
-            for(auto &itm : temps_list){
-                _CMD;
-            }
-            for(auto &itm : byprods_list){
-                _CMD;
-            }
-            for(auto &itm : hidden_targets_list){
-                _CMD;
-            }
-            for(auto &itm : hidden_nodes){
-                _CMD;
-            }
+			for(auto &itm : inputfiles_list)
+				write_exception(itm);
+            for(auto &itm : processed_nodes)
+                write_exception(itm);
+            for(auto &itm : temps_list)
+                write_exception(itm);
+            for(auto &itm : byprods_list)
+                write_exception(itm);
+            for(auto &itm : hidden_targets_list)
+                write_exception(itm);
+            for(auto &itm : hidden_nodes)
+                write_exception(itm);
         }
 		exception_file.close();
 		myfile << u_command;
@@ -608,20 +558,6 @@ class BuildGraph {
 		myfile << "\t@echo \"Unknown Files in Directory:\"\n";
 		{
 			myfile << u_command;
-			/*
-			for(auto &itm:inputfiles_list)
-			    _CMD
-			//    myfile << ",\""+itm+"\"";
-			for(auto &itm:processed_nodes)
-			    _CMD
-			for(auto &itm:temps_list)
-			    _CMD
-			for(auto &itm:byprods_list)
-			    _CMD
-			myfile << "\t@sed 's/^/\t/' <makefile_tmp.txt\n";
-			myfile << "\t@rm -f makefile_tmp.txt makefile_tmp2.txt"<<endl;
-			//myfile << "| sed 's/^/\t/'"<<endl;
-			*/
 		}
 		myfile << "\nlist_input:\n";
 		for(auto &itm : inputfiles_list)
@@ -630,31 +566,29 @@ class BuildGraph {
 		myfile.close();
 	}
 
-	void generate_graph(string filename = "makefile_graph.gv") {
-		ofstream myfile;
+	void generate_graph(std::string filename = "makefile_graph.gv") {
+		std::ofstream myfile;
 		myfile.open("makefile_graph.gv");
 		myfile << "digraph G{\n";
 		myfile << "rankdir=\"LR\";\n";
-		//myfile<<"rank=min;\n";
 		myfile << "graph[ranksep=\"40\"];\n";
-		//myfile<<"splines=ortho;\n";
 		int cmd_counter = 0;
-		std::map<string, string> filetype_color;
-		std::set<string> zero_rank_nodes;
+		std::map<std::string, std::string> filetype_color;
+		std::set<std::string> zero_rank_nodes;
 		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
 			if(hidden_nodes.find(*itr) != hidden_nodes.end())
 				continue;
-			string const scheme = "set312"; //"pastel28"
-			string extension = get_extension(*itr);
+			std::string const scheme = "set312"; //"pastel28"
+			std::string extension = get_extension(*itr);
 			if(extension == "") {
 				//rule that is not a file
 				myfile << "\"" + (*itr) + "\" [shape=box, style=filled, fillcolor=black, fontcolor=white];\n";
 			} else {
 				if(filetype_color.find(extension) == filetype_color.end()) {
-					filetype_color[extension] = to_string((filetype_color.size() % 8 + 1));
+					filetype_color[extension] = std::to_string((filetype_color.size() % 8 + 1));
 				}
-				string penwidth = "";
-				string postfix = "";
+				std::string penwidth = "";
+				std::string postfix = "";
 				if(target_rule.find(*itr) != target_rule.end()) {
 				} else {
 					postfix = "*";
@@ -664,30 +598,30 @@ class BuildGraph {
 				myfile << "\"" + (*itr) + "\" [label=\"" + (*itr) + postfix + "\", shape=box, style=filled, colorscheme=" + scheme + ", fillcolor=" + filetype_color[extension] + ", fontcolor=black " + penwidth + "];\n";
 			}
 		}
-		for(auto cmd : commands) {
+		for(auto const& cmd : commands) {
 			cmd_counter++;
-			string const scheme = "set312"; //"pastel28"
-			string randcolor = to_string(1 + cmd_counter % 12); //"\""+rand(0, 1)+" "+rand(0.5, 1)+" "+rand(0.5, 1)+"\"";
-			myfile << " \"node" + to_string(cmd_counter) + "\" [label=\"\", shape=circle, style=filled, colorscheme=" + scheme + ", fillcolor=" + randcolor + "];\n";
-			auto srange = rule_source.equal_range(cmd);
+			std::string const scheme = "set312"; //"pastel28"
+			std::string randcolor = std::to_string(1 + cmd_counter % 12);
+			myfile << " \"node" + std::to_string(cmd_counter) + "\" [label=\"\", shape=circle, style=filled, colorscheme=" + scheme + ", fillcolor=" + randcolor + "];\n";
+			auto srange = rule_source.equal_range(cmd.get());
 			int nsource = 0;
 			for(auto j = srange.first; j != srange.second; j++) {
 				if(hidden_nodes.find(j->second) != hidden_nodes.end()) {
 					continue;
 				}
-				myfile << "  \"" << j->second << "\" -> \"node" << to_string(cmd_counter) << "\" [colorscheme=" + scheme + ", color=" + randcolor + ", penwidth=3];\n";
+				myfile << "  \"" << j->second << "\" -> \"node" << std::to_string(cmd_counter) << "\" [colorscheme=" + scheme + ", color=" + randcolor + ", penwidth=3];\n";
 				nsource++;
 			}
 			if(nsource == 0) {
 				//in this case the command has no source
-				zero_rank_nodes.insert("\"node" + to_string(cmd_counter) + "\"");
+				zero_rank_nodes.insert("\"node" + std::to_string(cmd_counter) + "\"");
 			}
-			auto trange = rule_target.equal_range(cmd);
+			auto trange = rule_target.equal_range(cmd.get());
 			for(auto j = trange.first; j != trange.second; j++) {
 				if(hidden_nodes.find(j->second) != hidden_nodes.end()) {
 					continue;
 				}
-				myfile << "  \"node" << to_string(cmd_counter) << "\" -> \"" << j->second << "\" [colorscheme=" + scheme + ", color=" + randcolor + ", penwidth=3];\n";
+				myfile << "  \"node" << std::to_string(cmd_counter) << "\" -> \"" << j->second << "\" [colorscheme=" + scheme + ", color=" + randcolor + ", penwidth=3];\n";
 			}
 		}
 		myfile << "{rank = same;";
@@ -701,4 +635,3 @@ class BuildGraph {
 		myfile.close();
 	}
 };
-

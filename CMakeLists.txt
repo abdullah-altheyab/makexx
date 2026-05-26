@@ -39,3 +39,11 @@ target_include_directories(makexx PRIVATE
 )
 
 install(TARGETS makexx RUNTIME DESTINATION bin)
+
+enable_testing()
+
+add_executable(test_dsl tests/test_dsl.cpp)
+target_include_directories(test_dsl PRIVATE ${CMAKE_SOURCE_DIR}/include)
+set_target_properties(test_dsl PROPERTIES CXX_STANDARD 17)
+
+add_test(NAME dsl COMMAND test_dsl)

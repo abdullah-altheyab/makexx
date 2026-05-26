@@ -79,7 +79,7 @@ public:
     }
 };
 
-void addexec(BuildGraph& bg, std::vector<CompileRule> & rules, bool optional=false, vector<string> groups={}) {
+void addexec(Makefile& mf, std::vector<CompileRule> & rules, bool optional=false, vector<string> groups={}) {
     string docpath="doc/";
     for(auto r:rules) {
         auto tgt= r.target;
@@ -90,8 +90,8 @@ void addexec(BuildGraph& bg, std::vector<CompileRule> & rules, bool optional=fal
         for(auto k:depv) {
             dep+=k+ " ";
         }
-        string docfname=basename(depv[0])+".h";
-        auto & mr = bg.add(tgt, depv);
+        string docfname=stem(depv[0])+".h";
+        auto & mr = mf.add(tgt, depv);
         if(optional)
             mr<<OPTIONAL;
         else
@@ -103,105 +103,105 @@ void addexec(BuildGraph& bg, std::vector<CompileRule> & rules, bool optional=fal
             mr<<exec_build+" -I" I " -I " R " -I./doc/ -I./lib -L../libs -DAUTODOC='\""+docfname+"\"' "+dep+" -o $@ "+flags;
         }
         for(auto g:groups){
-            auto & mr = bg.get_rule(g);
-            bg.add_source(mr, tgt);
+            auto & mr = mf.get_rule(g);
+            mf.add_source(mr, tgt);
         }
     }
 };
-void addobj(BuildGraph& bg, string tgt, vector<string> depv){
-    bg.add(tgt, depv)
+void addobj(Makefile& mf, string tgt, vector<string> depv){
+    mf.add(tgt, depv)
             <<obj_build+" -I" I " -I" R " -c "+depv[0]+" -o $@";
 }
 int main(int argc, char **argv) {
-    BuildGraph bg;
+    Makefile mf;
     cout<<"compiling on "<<runsys<<endl;
 
-    bg.add("astyle")
+    mf.add("astyle")
         <<HELP("style source files")
         <<"astyle --options=astylerc java/*.java src/*.cpp inc/*.hpp dev/* qt/*/*.h qt/*/*.cpp";
-    bg.add("documentation.txt")
+    mf.add("documentation.txt")
             <<"ls bin/* | awk '{print \"echo \"$0\"############################################### 1>&2; \"$0}' | sh 2>$@";
 
-    bg.add("rm_all")
+    mf.add("rm_all")
         <<HELP("remove all object and binary files")
         <<"rm -rf *.o obj/* bin/*";
 
     //special builds using gcc
     //sqlite library
-    bg.add(O "sqlite3.o", {S "sqlite3.c", I "sqlite3.h"})
+    mf.add(O "sqlite3.o", {S "sqlite3.c", I "sqlite3.h"})
             <<"gcc -I" I " -c $< -o $@ -lpthread -ldl";
     //shapefiles handling library
-    bg.add(O "shpopen.o", {S "shpopen.c"})
+    mf.add(O "shpopen.o", {S "shpopen.c"})
             <<"gcc -I" I " -c $< -o $@  ";
-    bg.add(O "dbfopen.o", {S "dbfopen.c"})
+    mf.add(O "dbfopen.o", {S "dbfopen.c"})
             <<"gcc -I" I " -c $< -o $@ ";
-    bg.add(O "safeileio.o", {S "safileio.c"})
+    mf.add(O "safeileio.o", {S "safileio.c"})
             <<"gcc -I" I " -c $< -o $@ ";
     //UTM-geographic coordinate conversion library
-    bg.add(O "UTM.o", {S "UTM.cpp", I "UTM.h"})
+    mf.add(O "UTM.o", {S "UTM.cpp", I "UTM.h"})
             <<"gcc -I" I " -c $< -o $@ ";
     // hash-code library (checksum)
     if(!(runsys=="win64")){
-        bg.add(O "sha256.o", {S "sha256.cpp", I "sha256.h"})
+        mf.add(O "sha256.o", {S "sha256.cpp", I "sha256.h"})
             <<"gcc -I" I " -c $< -o $@ ";
     }
     //zipfile handling library
-    bg.add(O "miniz.o", {S "miniz.c", I "miniz.h"})
+    mf.add(O "miniz.o", {S "miniz.c", I "miniz.h"})
             <<"gcc -I" I " -c $< -o $@ ";
     //XML library
-    bg.add(O "pugixml.o", {S "pugixml.cpp", I "pugixml.hpp", I "pugiconfig.hpp"})
+    mf.add(O "pugixml.o", {S "pugixml.cpp", I "pugixml.hpp", I "pugiconfig.hpp"})
             <<"gcc -std=c++2a -I" I " -c $< -o $@ ";
-    bg.add(O "jsoncpp.o", {S "jsoncpp.cpp", I "json.h", I "json-forwards.h"})
+    mf.add(O "jsoncpp.o", {S "jsoncpp.cpp", I "json.h", I "json-forwards.h"})
             <<"gcc -std=c++2a -I" I " -c $< -o $@ ";
     //FFTW library
-    bg.add(O "atfftw.o", {S "atfftw.cpp", I "atfftw.hpp", I "atlib.hpp"})
+    mf.add(O "atfftw.o", {S "atfftw.cpp", I "atfftw.hpp", I "atlib.hpp"})
             <<obj_build+" -I" I " -c src/atfftw.cpp -L/home/exp_8/theyabaa/libs -o $@";
 
     string instantclient_path = "/work0/usr/instantclient_23_6/";
     /*
-    bg.add(B "ateppr2tbl" EXT, {S "ateppr2tbl.cpp", O "atlib.o", O "attable.o", O "attutil.o"}) <<OPTIONAL
+    mf.add(B "ateppr2tbl" EXT, {S "ateppr2tbl.cpp", O "atlib.o", O "attable.o", O "attutil.o"}) <<OPTIONAL
             <<string()+"bash ./atautodocgen src/ateppr2tbl.cpp >./doc/ateppr2tbl.h"
             <<exec_build+" -I" I" -I./doc/ -DAUTODOC='\"ateppr2tbl.h\"' -I"+instantclient_path+"sdk/include -L"+instantclient_path+" $^ -o $@ -locci -lclntsh -lclntshcore -loramysql -lociei -lnnz21 -D_GLIBCXX_USE_CXX11_ABI=0";
-    bg.add(B "atsde2tbl" EXT, {S "atsde2tbl.cpp", O "atlib.o", O "attable.o", O "attutil.o"}) <<OPTIONAL
+    mf.add(B "atsde2tbl" EXT, {S "atsde2tbl.cpp", O "atlib.o", O "attable.o", O "attutil.o"}) <<OPTIONAL
             <<string()+"bash ./atautodocgen src/atsde2tbl.cpp >./doc/atsde2tbl.h"
             <<exec_build+" -I" I" -I./doc/ -DAUTODOC='\"atsde2tbl.h\"' -I"+instantclient_path+"sdk/include -L"+instantclient_path+" $^ -o $@ -locci -lclntsh -lnnz12 -lclntshcore -lmql1 -lons -lipc1";
             */
     //oracle uses and old cxx11 ABI, so I had to revert to g++4.8 compiler!
-    bg.add(B "atsdeget" EXT, {S "atsdeget.cpp"}) <<OPTIONAL
+    mf.add(B "atsdeget" EXT, {S "atsdeget.cpp"}) <<OPTIONAL
             <<string()+"bash ./atautodocgen src/atsdeget.cpp >./doc/atsdeget.h"
             <<"/usr/bin/g++ -std=c++2a -c src/atlib.cpp -I" I " -o " O "atlib_x.o"
             <<"/usr/bin/g++ -std=c++2a -c src/attable.cpp -I" I " -o " O "attable_x.o"
             <<"/usr/bin/g++ -std=c++2a -I" I" -I./doc/ -DAUTODOC='\"atoracle2tbl.h\"' -I"+instantclient_path+"sdk/include -L"+instantclient_path+" $^ obj/atlib_x.o obj/attable_x.o -o $@ -locci -lclntsh -lnnz -lclntshcore ";
-    bg.add(B "atoracle2tbl" EXT, {S "atoracle2tbl.cpp", S "atlib.cpp", S "attable.cpp", I "atlib.hpp", I "attable.hpp"}) <<OPTIONAL
+    mf.add(B "atoracle2tbl" EXT, {S "atoracle2tbl.cpp", S "atlib.cpp", S "attable.cpp", I "atlib.hpp", I "attable.hpp"}) <<OPTIONAL
             <<string()+"bash ./atautodocgen src/atsde2tbl.cpp >./doc/atoracle2tbl.h"
             <<"/usr/bin/g++ -std=c++2a -w -c src/atlib.cpp -I" I " -o " O "atlib_x.o"
             <<"/usr/bin/g++ -std=c++2a -w -c src/attable.cpp -I" I " -o " O "attable_x.o"
             //<<"/usr/bin/g++ -std=c++2a -I" I" -I./doc/ -DAUTODOC='\"atoracle2tbl.h\"' -I"+instantclient_path+"sdk/include -L"+instantclient_path+" $^ obj/atlib_x.o obj/attable_x.o -o $@ -locci -lclntsh -lnnz21 -lclntshcore ";
             <<"/usr/bin/g++ -std=c++2a -w -I" I" -I./doc/ -DAUTODOC='\"atoracle2tbl.h\"' -I"+instantclient_path+"sdk/include -L"+instantclient_path+" "+S+"atoracle2tbl.cpp obj/atlib_x.o obj/attable_x.o -o $@ -locci -lclntsh -lnnz -lclntshcore ";
-    bg.add("oracle", {B "atoracle2tbl" EXT, B "atsdeget" EXT})
+    mf.add("oracle", {B "atoracle2tbl" EXT, B "atsdeget" EXT})
         <<HELP("build Oracle-based executables")
         <<OPTIONAL;
 
     //petrosys tools
-    bg.add(I "atpseis_rasterhdr_seg1_xxd.hpp", I "atpseis_rasterhdr_seg1.h")
+    mf.add(I "atpseis_rasterhdr_seg1_xxd.hpp", I "atpseis_rasterhdr_seg1.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_rasterhdr_seg2_xxd.hpp", I "atpseis_rasterhdr_seg2.h")
+    mf.add(I "atpseis_rasterhdr_seg2_xxd.hpp", I "atpseis_rasterhdr_seg2.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_rasterhdr_seg3_xxd.hpp", I "atpseis_rasterhdr_seg3.h")
+    mf.add(I "atpseis_rasterhdr_seg3_xxd.hpp", I "atpseis_rasterhdr_seg3.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_dbm_header_xxd.hpp", I "atpseis_dbm_header.h")
+    mf.add(I "atpseis_dbm_header_xxd.hpp", I "atpseis_dbm_header.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_dbm_bglayers_xxd.hpp", I "atpseis_dbm_bglayers.h")
+    mf.add(I "atpseis_dbm_bglayers_xxd.hpp", I "atpseis_dbm_bglayers.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_dbm_gri_entry_xxd.hpp", I "atpseis_dbm_gri_entry.h")
+    mf.add(I "atpseis_dbm_gri_entry_xxd.hpp", I "atpseis_dbm_gri_entry.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_dbm_shp_entry_xxd.hpp", I "atpseis_dbm_shp_entry.h")
+    mf.add(I "atpseis_dbm_shp_entry_xxd.hpp", I "atpseis_dbm_shp_entry.h")
             <<"xxd -i $< >$@";
-    bg.add(I "atpseis_dbm_group_xxd.hpp", I "atpseis_dbm_group.h")
+    mf.add(I "atpseis_dbm_group_xxd.hpp", I "atpseis_dbm_group.h")
             <<"xxd -i $< >$@";
 
     //compiling resources to be included in source files as hpp includes
-    bg.add(R "theme1.xml_xxd.hpp", R "theme1.xml")
+    mf.add(R "theme1.xml_xxd.hpp", R "theme1.xml")
             <<"xxd -i $< >$@";
 
 
@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
         auto flags = r.flags;
         auto depv = r.dep;
         assert(depv.size()>0);
-        bg.add(tgt, depv)
+        mf.add(tgt, depv)
                 <<obj_build+" -I" I " -I" R " -c "+depv[0]+" -o $@";
     }
     std::vector<CompileRule> lop_rules= {
@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
         auto flags = r.flags;
         auto depv = r.dep;
         assert(depv.size()>0);
-        bg.add(tgt, depv)
+        mf.add(tgt, depv)
                 <<obj_build+" -I" I " "+flags+" -I" R " -c "+depv[0]+" -o $@";
     }
     //translators rules
@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
         transl_rules.push_back({B "atwavencode" EXT, {S "atwavencode.cpp", O "atwav.o", O "atlib.o", O "atutil.o", O "atfftw.o", O "sha256.o"}, "-lfftw3f"});
         transl_rules.push_back({B "atwavdecode" EXT, {S "atwavdecode.cpp", O "atwav.o", O "atlib.o", O "atutil.o", O "atfftw.o", O "sha256.o"}, "-lfftw3f"});
     }
-    addexec(bg, transl_rules);
+    addexec(mf, transl_rules);
     //general utilities
     std::vector<CompileRule> genutil_rules= {
         {B "atgetval" EXT, {S "atgetval.cpp", O "atlib.o", O "atutil.o"}},
@@ -352,7 +352,7 @@ int main(int argc, char **argv) {
         {B "atallocate" EXT, {S "atallocate.cpp", O "atlib.o"}},
         {B "atpptslidegrid" EXT, {S "atpptslidegrid.cpp", O "atgeom.o", O "atlib.o", O "attable.o", O "attutil.o", O "atutil.o", O "atvecop.o"}},
     };
-    addexec(bg, genutil_rules);
+    addexec(mf, genutil_rules);
 
     //grid operations
     std::vector<CompileRule> arrayop_rules= {
@@ -414,7 +414,7 @@ int main(int argc, char **argv) {
         {B "athilbert_phase" EXT, {S "athilbert_phase.cpp", O "atfftw.o", O "atlib.o"}, "-lfftw3f"},
         {B "atbestscale" EXT, {S "atbestscale.cpp", O "atinv.o", O "atlib.o", O "atvecop.o"}},
     };
-    addexec(bg, arrayop_rules);
+    addexec(mf, arrayop_rules);
 
     //signal processing // any thing that deals with waveforms
     std::vector<CompileRule> signal_rules= {
@@ -448,7 +448,7 @@ int main(int argc, char **argv) {
         {B "atresamp" EXT, {S "atresamp.cpp", O "atfftw.o", O "atlib.o", O "atvecop.o"}, "-lfftw3f"},
         {B "atspectralfactorization" EXT, {S "atspectralfactorization.cpp", O "atfftw.o", O "atgeom.o", O "atlib.o", O "attable.o", O "atutil.o", O "atvecop.o"}, "-lfftw3f"},
     };
-    addexec(bg, signal_rules);
+    addexec(mf, signal_rules);
 
 
     //grids and tables
@@ -463,7 +463,7 @@ int main(int argc, char **argv) {
         {B "atimgpocs" EXT, {S "atimgpocs.cpp", O "atfftw.o", O "atlib.o", O "atvecop.o"}, "-lfftw3f"},
         {B "atsplice2" EXT, {S "atsplice2.cpp", O "atlib.o", O "attable.o", O "attutil.o"}},
     };
-    addexec(bg, gnt_rules);
+    addexec(mf, gnt_rules);
 
     //table operations
     std::vector<CompileRule> tblop_rules= {
@@ -547,7 +547,7 @@ int main(int argc, char **argv) {
     if(!(runsys=="win64")){
         tblop_rules.push_back({B "attdate2int" EXT, {S "attdate2int.cpp", O "atlib.o", O "attable.o"}});
     }
-    addexec(bg, tblop_rules);
+    addexec(mf, tblop_rules);
 
     //matrix operations
     //   - few developed during Long-Beach project
@@ -560,14 +560,14 @@ int main(int argc, char **argv) {
         {B "atdiag" EXT, {S "atdiag.cpp", O "atlib.o", O "atvecop.o"}},
         {B "atccmat" EXT, {S "atccmat.cpp", O "atlib.o", O "atvecop.o"}},
     };
-    addexec(bg, matrixop_rules);
+    addexec(mf, matrixop_rules);
 
     //geological computations
     std::vector<CompileRule> geo_rules= {
         {B "atgeodist" EXT, {S "atgeodist.cpp", O "atlib.o"}},
         {B "atalphavel" EXT, {S "atalphavel.cpp", O "atlib.o", O "atvecop.o"}},
     };
-    addexec(bg, geo_rules);
+    addexec(mf, geo_rules);
 
     //seismic modeling
     std::vector<CompileRule> seismdl_rules= {
@@ -606,7 +606,7 @@ int main(int argc, char **argv) {
         {B "atpsmodel1d" EXT, {S "atpsmodel1d.cpp", O "atfftw.o", O "atlib.o", O "atvecop.o", O "atwave.o"}, "-lfftw3f"},
         //{B "atpsmigres" EXT, {S "atpsmigres.cpp", O "atfftw.o", O "atlib.o", O "atvecop.o", O "atwave.o"}, "-lfftw3f"},
     };
-    addexec(bg, seismdl_rules);
+    addexec(mf, seismdl_rules);
 
     //seismic computations
     std::vector<CompileRule> seisproc_rules= {
@@ -663,7 +663,7 @@ int main(int argc, char **argv) {
         {B "attaup" EXT, {S "attaup.cpp", O "atfftw.o", O "atlib.o"}, "-lfftw3f"},
         {B "atlstaup" EXT, {S "atlstaup.cpp", O "atfftw.o", O "atinv.o", O "atlib.o", O "atvecop.o", O "T2StretchLOp.o", O "TauPLOp.o", O "TauVLOp.o"}, "-lfftw3f"},
     };
-    addexec(bg, seisproc_rules);
+    addexec(mf, seisproc_rules);
 
     //seismic interferometry
     std::vector<CompileRule> seisif_rules= {
@@ -726,7 +726,7 @@ int main(int argc, char **argv) {
     if(!(runsys=="win64")){
         seisif_rules.push_back({B "atusaginterp" EXT, {P "atusaginterp.cpp", O "atgeom.o", O "atlib.o", O "attable.o", O "atutil.o", O "atvecop.o"}});
     }
-    addexec(bg, seisif_rules);
+    addexec(mf, seisif_rules);
 
 
     //seismic interpretation tools
@@ -797,7 +797,7 @@ int main(int argc, char **argv) {
         {B "atranktops" EXT, {S "atranktops.cpp", O "atlib.o", O "attable.o"}},
         {B "atnudge" EXT, {S "atnudge.cpp", O "atlib.o", O "attable.o", O "attutil.o", O "atutil.o"}},
     };
-    addexec(bg, seisinterp_rules);
+    addexec(mf, seisinterp_rules);
 
     std::vector<CompileRule> ai_rules= {
         {B "atdbscan" EXT, {S "atdbscan.cpp", O "atlib.o", O "attable.o", O "attutil.o"}},
@@ -805,9 +805,9 @@ int main(int argc, char **argv) {
         {B "atnnrun" EXT, {S "atnnrun.cpp", O "atgeom.o", O "atinv.o", O "atlib.o", O "atml.o", O "attable.o", O "atutil.o", O "atvecop.o"}},
         {B "atcovid" EXT, {S "atcovid.cpp", O "atlib.o", O "attable.o", O "attutil.o", O "atutil.o"}},
     };
-    addexec(bg, ai_rules);
+    addexec(mf, ai_rules);
 
-    addobj(bg, O "atdseval1.o", {S "atdseval1.cpp", I "atdseval1.hpp"});
+    addobj(mf, O "atdseval1.o", {S "atdseval1.cpp", I "atdseval1.hpp"});
 
     std::vector<CompileRule> decision_rules= {
         {B "atdecisiontree" EXT, {S "atdecisiontree.cpp", O "atlib.o", O "atdecision.o", O "atexpr.o", O "atjson.o", O "attable.o", O "atutil.o", O "jsoncpp.o"}},
@@ -832,7 +832,7 @@ int main(int argc, char **argv) {
         {B "atollama" EXT, {S "atollama.cpp", O "atlib.o"}},
         {B "atllama" EXT, {S "atllama.cpp", O "atlib.o"}, "-I/work0/usr/include -L/work0/usr/lib64 -lllama"},
     };
-    addexec(bg, decision_rules);
+    addexec(mf, decision_rules);
     //pap tools
     std::vector<CompileRule> pap_rules= {
         {B "atbplan_gen" EXT, {S "atbplan_gen.cpp", O "atlib.o", O "atutil.o"}}, //check this one !
@@ -872,7 +872,7 @@ int main(int argc, char **argv) {
         {B "atjointdistribution" EXT, {S "atjointdistribution.cpp", O "atlib.o", O "attable.o", O "atutil.o", O "atvecop.o", O "atinv.o", O "atdecision.o", O "jsoncpp.o"}},
         {B "atwellcostrate" EXT, {S "atwellcostrate.cpp", O "atlib.o", O "attable.o", O "atutil.o", O "atvecop.o", O "atinv.o", O "atdecision.o", O "jsoncpp.o"}},
     };
-    addexec(bg, pap_rules);
+    addexec(mf, pap_rules);
     //family tree
     std::vector<CompileRule> family_rules= {
         //{B "atgedcom2sql" EXT, {S "atgedcom2sql.cpp", O "atlib.o", O "attable.o", O "atsqlite.o", O "sqlite3.o"}},
@@ -883,7 +883,7 @@ int main(int argc, char **argv) {
         {B "atjson2family" EXT, {S "atjson2family.cpp", O "atlib.o", O "attable.o", O "atsqlite.o", O "atutil.o", O "sqlite3.o", O "atjson.o", O "jsoncpp.o"}},
         
     };
-    addexec(bg, family_rules);
+    addexec(mf, family_rules);
 
     //social
     std::vector<CompileRule> design_rules= {
@@ -894,14 +894,14 @@ int main(int argc, char **argv) {
         {B "atyoutubepost" EXT, {S "atyoutubepost.cpp", O "atlib.o", O "attable.o", O "attutil.o", O "jsoncpp.o"},"-I/usr/include/opencv4/ -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio -lcurl -lcpr -lssl -lcrypto "},
         {B "attiktokpost" EXT, {S "attiktokpost.cpp", O "atlib.o", O "attable.o", O "attutil.o", O "jsoncpp.o"},"-I/usr/include/opencv4/ -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio -lcurl -lcpr -lssl -lcrypto "},
     };
-    addexec(bg, design_rules, true, {"social"});
+    addexec(mf, design_rules, true, {"social"});
 
     //testing and development codes
     std::vector<CompileRule> testing_rules= {
         //{B "atparallelblocksolver_test" EXT, {D "atparallelblocksolver_test.cpp", O "atinv.o", O "atlib.o", O "atvecop.o"}},
         //{B "atsqlitetest" EXT, {D "atsqlitetest.cpp", O "atlib.o", O "atsqlite.o"}},
     };
-    addexec(bg, testing_rules);
+    addexec(mf, testing_rules);
 
     //std::vector<CompileRule> cairo_rules={
     //    {B "at2png" EXT, {S "at2png.cpp", O "atlib.o"}},
@@ -909,9 +909,9 @@ int main(int argc, char **argv) {
     //    {B "atpngvtile" EXT, {S "atpngvtile.cpp", O "atlib.o"}},
     //    {B "atpnghtile" EXT, {S "atpnghtile.cpp", O "atlib.o"}},
     //};
-    //addexec(bg, cairo_rules);
+    //addexec(mf, cairo_rules);
 
-    bg.silent=false;
-    bg.echo=false;
-    bg.dump_makefile();
+    mf.silent=false;
+    mf.echo=false;
+    mf.generate();
 }

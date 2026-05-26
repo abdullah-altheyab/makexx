@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-**makexx** is a C++ build system generator. Instead of writing Makefiles by hand, users write `makefile.cpp` (a C++ program using the `BuildGraph` DSL) and run `makexx` to compile and execute it, producing a standard GNU `makefile`.
+**makexx** is a C++ build system generator. Instead of writing Makefiles by hand, users write `makefile.cpp` (a C++ program using the `Makefile` DSL) and run `makexx` to compile and execute it, producing a standard GNU `makefile`.
 
 ## Building makexx itself
 
@@ -24,9 +24,9 @@ When `makexx` is invoked in a user's project directory:
 
 1. Extracts `makefile.hpp` from the embedded hex blob (skips if already present, unless `-u`)
 2. Creates `makefile.cpp` from the embedded example template (only if it doesn't exist yet)
-3. Auto-detects a C++ compiler (`g++-8`, `g++-7`, `g++`, `icpc`) by trying each
+3. Selects a C++ compiler: uses `CXX` env var if set, otherwise probes `g++`, `clang++`, `icpx`, `icpc` in order
 4. Compiles `makefile.cpp` → `makefile_gen` executable
-5. Runs `makefile_gen` which calls `bg.dump_makefile()` to produce `makefile`
+5. Runs `makefile_gen` which calls `mf.generate()` to produce `makefile`
 6. Runs `make` with any extra args passed to `makexx` (except `-u`, `-f`, `-c`)
 7. Cleans up temp files (`tmp_makexx*`, `err_makexx.txt`, `makefile_gen`)
 
@@ -39,19 +39,19 @@ When `makexx` is invoked in a user's project directory:
 | `-u` | Force re-extract `makefile.hpp` (update it) |
 | `-f` | Force overwrite `makefile` even if not makexx-generated |
 | `-c` | Compile only — skip running `make` |
-| `-0` | Verbose output |
+| `-v` | Verbose output |
 
 All other flags are forwarded to `make`.
 
-## The BuildGraph DSL (`inc/makexxfile.hpp`)
+## The Makefile DSL (`inc/makexxfile.hpp`)
 
 This is the API that users write in their `makefile.cpp`. Key concepts:
 
 ```cpp
-BuildGraph bg;
+Makefile mf;
 
-// Add a rule: bg.add(targets, sources)
-auto& rule = bg.add("output.o", "input.cpp");
+// Add a rule: mf.add(targets, sources)
+auto& rule = mf.add("output.o", "input.cpp");
 rule << "g++ -c input.cpp -o output.o";  // shell commands via <<
 
 // target_type enum controls 'all' target membership
@@ -65,13 +65,13 @@ rule << BYPROD("byproduct.log");    // cleaned by full_clean and soft_clean
 rule << TARGET("manual_output");    // hidden/non-reproducible target
 rule << HELP("builds the thing");   // shown by 'make help'
 
-bg.on_softclean_retain("expensive_output"); // exclude from soft_clean
+mf.on_softclean_retain("expensive_output"); // exclude from soft_clean
 
-bg.silent = true;   // prefix commands with @ in makefile
-bg.echo = false;    // suppress ### GENERATING echo lines
+mf.silent = true;   // prefix commands with @ in makefile
+mf.echo = false;    // suppress ### GENERATING echo lines
 
-bg.dump_makefile();         // write the makefile
-bg.generate_graph();        // write makefile_graph.gv (Graphviz DOT)
+mf.generate();         // write the makefile
+mf.generate_graph();        // write makefile_graph.gv (Graphviz DOT)
 ```
 
 The generated makefile always includes: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help` rules.
@@ -86,9 +86,9 @@ Shows how to manage a project with many executables and shared object files. Key
 
 - **Path macros**: `#define O "./obj/"`, `#define S "./src/"`, etc. to keep rule definitions concise
 - **`CompileRule` struct**: groups target, dependencies, and extra flags; then batched into `vector<CompileRule>` by category (translators, signal processing, seismic, AI, etc.) and passed to helper functions
-- **`addexec()` / `addobj()` helpers**: wrap `bg.add()` + `<<` to reduce repetition and handle platform differences
+- **`addexec()` / `addobj()` helpers**: wrap `mf.add()` + `<<` to reduce repetition and handle platform differences
 - **`$<`, `$@`, `$^`** GNU make automatic variables work normally inside command strings
-- **Groups**: `bg.get_rule(group)` + `bg.add_source(rule, target)` wires multiple executables as dependencies of a named group target (e.g., `"social"`)
+- **Groups**: `mf.get_rule(group)` + `mf.add_source(rule, target)` wires multiple executables as dependencies of a named group target (e.g., `"social"`)
 - **Conditional rules**: platform detection inside `makefile.cpp` itself controls which rules are added
 - **`xxd -i` embed pattern**: used in user projects to compile binary resources (e.g. header files) into `_xxd.hpp` byte arrays and list them as dependencies so make reruns the embed when the source changes
 
@@ -105,7 +105,7 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 
 ```
 src/makexx.cpp                — main binary: compiler detection, file bootstrapping, orchestration
-include/makexxfile.hpp        — the BuildGraph DSL header (source of truth, embedded at build time)
+include/makexxfile.hpp        — the Makefile DSL header (source of truth, embedded at build time)
 src/starter.cpp               — starter makefile.cpp written to new project directories (source of truth, embedded at build time)
 CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding

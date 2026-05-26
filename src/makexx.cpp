@@ -1,9 +1,14 @@
 #include <stdio.h>
 #include <iostream>
 #include <string>
+#include <vector>
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 using std::cout;
 using std::endl;
 using std::string;
+using std::vector;
 #ifdef _WIN32
 	//define something for Windows (32-bit and 64-bit, this part is common)
 	#ifdef _WIN64
@@ -13,7 +18,6 @@ using std::string;
 		//define something for Windows (32-bit only)
 	#endif
 #elif __APPLE__
-	#include "TargetConditionals.h"
 	#if TARGET_IPHONE_SIMULATOR
 		// iOS Simulator
 	#elif TARGET_OS_IPHONE
@@ -40,7 +44,7 @@ using std::string;
 #include "makexxfile_embed.hpp"
 #include "starter_embed.hpp"
 #include <cstring>
-//#include <atlib.hpp>
+#include <cerrno>
 #include <cassert>
 
 bool exists(char const *file) {
@@ -52,40 +56,35 @@ bool exists(char const *file) {
 		return true;
 	}
 }
-void char2file(char const *file, const unsigned char *str, unsigned int len) {
+void write_file(char const *file, const unsigned char *str, unsigned int len) {
 	FILE *fb = fopen(file, "w");
+	if(fb == NULL) {
+		std::cerr << "error: cannot write '" << file << "': " << strerror(errno) << std::endl;
+		exit(1);
+	}
 	fwrite(str, len, sizeof(unsigned char), fb);
 	fclose(fb);
 }
-void char2file(char const *file, const char *str, int len) {
+void write_file(char const *file, const char *str, int len) {
 	FILE *fb = fopen(file, "w");
+	if(fb == NULL) {
+		std::cerr << "error: cannot write '" << file << "': " << strerror(errno) << std::endl;
+		exit(1);
+	}
 	fwrite(str, len, sizeof(char), fb);
 	fclose(fb);
 }
-#include <cstdio>
-#include <memory>
-#include <stdexcept>
-#include <array>
 #include "makexxfile.hpp"
 
-std::string exec(char const *cmd) {
-	std::array<char, 128> buffer;
-	std::string result;
-	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-	if(!pipe) {
-		throw std::runtime_error("popen() failed!");
-	}
-	while(fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-		result += buffer.data();
-	}
-	return result;
-}
-
-char *atgrab_ascii_file(char const *file) {
+char *read_file(char const *file) {
 	FILE *f = fopen(file, "r");
+	if(f == NULL) {
+		std::cerr << "error: cannot read '" << file << "': " << strerror(errno) << std::endl;
+		exit(1);
+	}
 	fseek(f, 0, SEEK_END);
 	long fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);  //same as rewind(f);
+	fseek(f, 0, SEEK_SET);
 	char *string = (char *) malloc(fsize + 1);
 	fread(string, fsize, 1, f);
 	fclose(f);
@@ -93,16 +92,13 @@ char *atgrab_ascii_file(char const *file) {
 	return string;
 }
 
-void run_cmd(string cmd) {
-	//cout<<">cmd:"<<cmd<<endl;
-	system(cmd.c_str());
-	//cout<<">done"<<endl;
+int run_cmd(string cmd) {
+	return system(cmd.c_str());
 }
 
 int main(int argc, char **argv) {
-	//open atbuild.hpp first
-	char const *hppmake = "makefile.hpp";
-	char const *cppmake = "makefile.cpp";
+	char const *hpp_path = "makefile.hpp";
+	char const *cpp_path = "makefile.cpp";
 	bool update_makefile_hpp = false;
 	bool force_overwrite = false;
 	bool compile_only = false;
@@ -110,7 +106,7 @@ int main(int argc, char **argv) {
 	for(int i = 1; i < argc; i++) {
 		if(strcmp(argv[i], "-u") == 0) {
 			update_makefile_hpp = true;
-		} else if(strcmp(argv[i], "-0") == 0) {
+		} else if(strcmp(argv[i], "-v") == 0) {
 			verbose = true;
 		} else if(strcmp(argv[i], "-f") == 0) {
 			force_overwrite = true;
@@ -118,72 +114,76 @@ int main(int argc, char **argv) {
 			compile_only = true;
 		}
 	}
-	if(!exists(hppmake) || update_makefile_hpp) {
-		char2file(hppmake, makefile_hpp_content, sizeof(makefile_hpp_content) - 1);
+	if(!exists(hpp_path) || update_makefile_hpp) {
+		write_file(hpp_path, makefile_hpp_content, sizeof(makefile_hpp_content) - 1);
 		if(verbose)
 			cout << "Generating makefile.hpp..." << endl;
 		update_makefile_hpp = true;
 	}
-	if(!exists(cppmake)) {
+	if(!exists(cpp_path)) {
 		if(verbose)
-			cout << "Generating " << cppmake << "." << endl;
-		char2file(cppmake, makefile_example_content, sizeof(makefile_example_content) - 1);
+			cout << "Generating " << cpp_path << "." << endl;
+		write_file(cpp_path, makefile_example_content, sizeof(makefile_example_content) - 1);
 	}
-	vector<string> compilers = {"g++-8", "g++-7", "g++", "icpc"};
-	int compiler_id = 0;
+	bool is_windows = (runsys == "win64");
 	if(verbose)
 		cout << "SYSTEM:" << runsys << endl;
-	bool is_windows = (runsys == "win64");
 	if(is_windows) {
 		run_cmd("del tmp_makexx.cpp tmp_makexx tmp_makexx.exe err_makexx.txt makefile_gen");
 	} else {
 		run_cmd("rm -f tmp_makexx.cpp tmp_makexx tmp_makexx.exe err_makexx.txt makefile_gen");
 	}
+
+	// Respect CXX env var; otherwise probe candidates in order.
+	vector<string> compilers;
+	const char *cxx_env = std::getenv("CXX");
+	if(cxx_env && cxx_env[0] != '\0') {
+		compilers = {string(cxx_env)};
+	} else {
+		compilers = {"g++", "clang++", "icpx", "icpc"};
+	}
+
 	if(verbose)
 		cout << "SEARCHING FOR A COMPILER:" << endl;
-	//system("echo \"int main(){}\" >tmp.cpp");
 	string small_prog = "int main(){}";
-	char2file("tmp_makexx.cpp", small_prog.c_str(), small_prog.size());
+	write_file("tmp_makexx.cpp", small_prog.c_str(), small_prog.size());
+	int compiler_id = 0;
 	while(true) {
-		run_cmd(compilers[compiler_id] + " -std=c++11 tmp_makexx.cpp -o tmp_makexx 2>err_makexx.txt");
-		if(exists("tmp_makexx")) {
+		run_cmd(compilers[compiler_id] + " -std=c++17 tmp_makexx.cpp -o tmp_makexx 2>err_makexx.txt");
+		if(exists("tmp_makexx") || exists("tmp_makexx.exe")) {
 			break;
-		} else if(exists("tmp_makexx.exe")) {
-			break;
-		} else {
-			//cout << (compilers[compiler_id] ) << " didn't work trying something else!" << endl;
-			compiler_id++;
-			if(compiler_id >= compilers.size()) {
-				std::cerr << "Coudn't find a C++ compiler!" << endl;
-				return -1;
-			}
+		}
+		compiler_id++;
+		if(compiler_id >= (int)compilers.size()) {
+			std::cerr << "error: could not find a C++ compiler. Set CXX to specify one." << endl;
+			return -1;
 		}
 	}
 	if(verbose)
-		cout << (compilers[compiler_id]) << " is used." << endl;
-	assert(compiler_id < compilers.size());
-	run_cmd(compilers[compiler_id] + " -std=c++11 makefile.cpp -o makefile_gen");
+		cout << compilers[compiler_id] << " is used." << endl;
+	run_cmd(compilers[compiler_id] + " -std=c++17 makefile.cpp -o makefile_gen");
+	if(!exists("makefile_gen") && !exists("makefile_gen.exe")) {
+		std::cerr << "error: failed to compile makefile.cpp" << endl;
+		return -1;
+	}
 	if(exists("makefile")) {
-		auto a = atgrab_ascii_file("makefile");
+		auto a = read_file("makefile");
 		if(strncmp(a, makefile_header, strlen(makefile_header)) != 0) {
-			//this means that the make file is not automatically generated
 			if(!force_overwrite) {
-				cout << "makefile is not updated becuase it is not generated by makexx" << endl;
+				cout << "error: makefile was not generated by makexx; use -f to overwrite" << endl;
 				exit(-1);
 			}
 		}
 		free(a);
 	}
-	//update the makefile
 	if(verbose)
 		cout << "Generating makefile.." << endl;
-	if(!is_windows) {
-		run_cmd("./makefile_gen");
-	} else {
-		run_cmd("makefile_gen.exe");
+	int gen_ret = run_cmd(is_windows ? "makefile_gen.exe" : "./makefile_gen");
+	if(gen_ret != 0) {
+		std::cerr << "error: makefile_gen exited with code " << gen_ret << endl;
+		return -1;
 	}
-	//run GNU make with the rest of parameters
-	std::string a = "make " ;
+	std::string a = "make ";
 	for(int i = 1; i < argc; i++) {
 		if(strcmp(argv[i], "-u") == 0) {
 		} else if(strcmp(argv[i], "-f") == 0) {
@@ -193,7 +193,6 @@ int main(int argc, char **argv) {
 			a += " ";
 		}
 	}
-	//exec(a.c_str());
 	if(!compile_only)
 		run_cmd(a);
 	if(is_windows) {

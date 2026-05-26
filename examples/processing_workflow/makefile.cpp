@@ -112,13 +112,13 @@ string package_stats(string dist, string prefix, string output, string format="\
 
 //short hand to convert filename.it to filename.lt and filename.t
 strings itable(string base_name){
-    string bname=basename(base_name);
+    string bname=stem(base_name);
     return {bname+".lt", bname+".t"};
 }
 
 //short hand to convert filename.it to filename.lt and filename.t and include filename.it in the list as well
 strings iitable(string base_name){
-    string bname=basename(base_name);
+    string bname=stem(base_name);
     return {bname+".it", bname+".lt", bname+".t"};
 }
 
@@ -127,7 +127,7 @@ strings iitable(string base_name){
 //Main Class executing portfolio analytics and planning workflows
 class Main{
   public:
-    BuildGraph bg;
+    Makefile mf;
 #ifdef TRIAL
     bool trial_run=true; // is this a trial run
     int const nitr=2; // number of Monte-Carlo Simulation iterations
@@ -1076,7 +1076,7 @@ class Main{
         }
         //list the plays
         {
-            auto & f = bg.add("list_plays");
+            auto & f = mf.add("list_plays");
             f<<HELP("to list all the defined plays");
             for(auto item: seq_plays){
                 std::stringstream ss;
@@ -1098,7 +1098,7 @@ class Main{
         }
         //list the plays
         {
-            auto & f = bg.add("list_plays_short");
+            auto & f = mf.add("list_plays_short");
             for(auto item: seq_plays){
                 std::stringstream ss;
                 ss<<item;
@@ -1119,9 +1119,9 @@ class Main{
         for(auto & item : plays){
             string play_prefix="play_"+item.first;
             auto & p = item.second;
-            auto & f = bg.add(play_prefix+"_stratcol.pdf", p.basin.strat_col+".pdf");
+            auto & f = mf.add(play_prefix+"_stratcol.pdf", p.basin.strat_col+".pdf");
             f<<"pdfcrop --margins '-"+p.basin.strat_col_left_trim+" -"+to_string(p.strat_col_top_clip2)+" -"+p.basin.strat_col_right_trim+" -"+to_string(p.strat_col_bot_clip2)+"' "+p.basin.strat_col+" $@";
-            bg.add(play_prefix+"_stratcol.png", play_prefix+"_stratcol.pdf")
+            mf.add(play_prefix+"_stratcol.png", play_prefix+"_stratcol.pdf")
                 <<"convert -density 300 $<  -quality 90 $@"
                 ;
         }
@@ -1129,7 +1129,7 @@ class Main{
 
     void load_sde_layers(){
 
-        slist dbfiles={
+        StringList dbfiles={
             "sdegis_booked.it",
             "completed3d.it",
             "pvad_booked.it",
@@ -1147,16 +1147,16 @@ class Main{
 
         };
         {
-            auto & f =bg.add("rm_db_data");
+            auto & f =mf.add("rm_db_data");
             for(auto file:dbfiles){
                 f<<"rm -f "+file;
             }
-            bg.add("load_db_data", dbfiles);
-            bg.add("reload_db_data", {"rm_db_data", "load_db_data"})
+            mf.add("load_db_data", dbfiles);
+            mf.add("reload_db_data", {"rm_db_data", "load_db_data"})
                 <<HELP("reload local copies of EPPR & SDE data");
         }
         //seismic data
-        bg.add("active_seismic3d.it")
+        mf.add("active_seismic3d.it")
             <<"atsdeget layer='SS3D_KSA3DSEISMICAREAS' output=tmp.it login=~/atlogin"
             <<"atitsplitshapes input=tmp.it x=x y=y output=tmp2.it"
             <<"atitselect input=tmp2.it where=\"" _cont
@@ -1171,46 +1171,46 @@ class Main{
             "or blockname like '\%ZIMLAH\%'\" " _cont
             "output=active_seismic3d.it"
             <<"atwgs84toutm input=active_seismic3d.t lon=x lat=y x='u39x' y='u39y'"
-            <<BYPROD(itable("active_seismic3d.it"))
+            <<BYPRODUCT(itable("active_seismic3d.it"))
             ;
-        bg.on_softclean_retain(iitable("active_seismic3d.it"));
-        bg.add("completed3d.it")
+        mf.on_softclean_retain(iitable("active_seismic3d.it"));
+        mf.add("completed3d.it")
             <<"atsdeget layer='SS3D_KSA3DSEISMICAREAS' output=tmp.it login=~/atlogin"
             <<"atitsplitshapes input=tmp.it x=x y=y output=tmp2.it"
             <<"atitselect input=tmp2.it where=\"type_desc like '\%\%complet\%\%'\" output=completed3d.it"
             <<"atwgs84toutm input=completed3d.t lon=x lat=y x='u39x' y='u39y'"
-            <<BYPROD(itable("completed3d.it"))
+            <<BYPRODUCT(itable("completed3d.it"))
             ;
-        bg.on_softclean_retain(iitable("completed3d.it"));
-        bg.add("completed3d.shp", "completed3d.it")
+        mf.on_softclean_retain(iitable("completed3d.it"));
+        mf.add("completed3d.shp", "completed3d.it")
             <<"atit2shpfile input=$< output=$@ x=x y=y poly=true"
             ;
         gis_targets.push_back("completed3d.shp");
         //well status
-        bg.add("eppr_well_status.t", "eppr_well_status.sql")
+        mf.add("eppr_well_status.t", "eppr_well_status.sql")
             <<"atoracle2tbl login=~/atlogin sqlfile=$< output=$@"
             ;
-        bg.on_softclean_retain("eppr_well_status.t");
-        bg.on_softclean_retain("eppr_well_status.t");
+        mf.on_softclean_retain("eppr_well_status.t");
+        mf.on_softclean_retain("eppr_well_status.t");
         //drill schedule
-        bg.add("drill_schedule_orig.t", "drill_schedule.sql")
+        mf.add("drill_schedule_orig.t", "drill_schedule.sql")
             <<"atoracle2tbl sqlfile=drill_schedule.sql login=~/atlogin output=drill_schedule_orig.t"
             ;
-        bg.on_softclean_retain("drill_schedule_orig.t");
-        bg.on_softclean_retain("drill_schedule_orig.t");
+        mf.on_softclean_retain("drill_schedule_orig.t");
+        mf.on_softclean_retain("drill_schedule_orig.t");
         //well cost
-        bg.add("well_cost_history_orig.t", "well_cost_history.sql")
+        mf.add("well_cost_history_orig.t", "well_cost_history.sql")
             <<"atoracle2tbl sqlfile=$< login=~/atlogin output=$@"
             ;
-        bg.on_softclean_retain("well_cost_history_orig.t");
-        bg.on_softclean_retain("well_cost_history_orig.t");
-        bg.add("drill_cost_orig.t", "drill_cost.sql")
+        mf.on_softclean_retain("well_cost_history_orig.t");
+        mf.on_softclean_retain("well_cost_history_orig.t");
+        mf.add("drill_cost_orig.t", "drill_cost.sql")
             <<"atoracle2tbl sqlfile=drill_cost.sql login=~/atlogin output=drill_cost_orig.t"
             ;
-        bg.add("drill_cost.t", "drill_cost_orig.t")
+        mf.add("drill_cost.t", "drill_cost_orig.t")
             <<"attsqltool drill_cost_orig.t sql=\"select * from @1 where w_gnr_name<>'' and is_water='No' and cost_mm>1\" output=$@"
             ;
-        bg.add("drill_schedule.t", {"drill_schedule_orig.t", "pal_eppr_dump.t"})
+        mf.add("drill_schedule.t", {"drill_schedule_orig.t", "pal_eppr_dump.t"})
             <<"attsqltool tables=\"drill_schedule_orig.t pal_eppr_dump.t\" " _cont
             "sql=\"select " _cont
                 "case when pl_w_num='' then w_gnr_name else pl_w_num end as slot_id," _cont
@@ -1226,9 +1226,9 @@ class Main{
             <<"attupdate $@ spud=min_spud"
             <<"attupdate $@ compl=max_compl"
             ;
-        bg.add("rm_drill_schedule")
+        mf.add("rm_drill_schedule")
             <<"rm drill_schedule_orig.t";
-        bg.add("import_last_ds_to_guwi", {"rm_drill_schedule", "drill_schedule.t", "match_ds_portfolio.t"})
+        mf.add("import_last_ds_to_guwi", {"rm_drill_schedule", "drill_schedule.t", "match_ds_portfolio.t"})
             <<HELP("import the current drilling schedule as a plan in to datbase under the plan named '8888-DS-ED'")
             <<"atdialog \"Make sure the planning tool is closed and the portfolio is saved.\""
             <<"sqlite3 "+portfolio_path+" \"PRAGMA foreign_keys=ON; insert or ignore into plan(id) values('8888-DS-ED')\""
@@ -1249,10 +1249,10 @@ class Main{
                 "where plan='8888-DS-ED'"
             "\""
             ;
-        bg.add("import_ds_to_guwi", { "script_load_bp2426.sql", "pal_eppr_dump.t"})
+        mf.add("import_ds_to_guwi", { "script_load_bp2426.sql", "pal_eppr_dump.t"})
             <<HELP("import the a specific drilling schedule as a plan in Guwi")
             <<"atinputbox \"Schedule#\" default=\"`cat plan_id`\"> plan_id"
-            <<BYPROD("plan_id")
+            <<BYPRODUCT("plan_id")
             <<"sed <$< \"s/470557/`cat plan_id`/g\" >tmp.sql"
             <<"atoracle2tbl sqlfile=tmp.sql login=~/atlogin output=tmp_plan_orig.t"
             <<"attsqltool tables=\"tmp_plan_orig.t pal_eppr_dump.t\" " _cont
@@ -1289,7 +1289,7 @@ class Main{
                 "where plan='`cat plan_id`'"
             "\""
             ;
-        bg.add("import_completed_well_timing", "drill_schedule.t")
+        mf.add("import_completed_well_timing", "drill_schedule.t")
             <<HELP("import the spud and completion dates into datbase under the plan named '9999-DS'")
             <<"atdialog \"Make sure the planning tool is closed and the portfolio is saved.\""
             <<"attsqltool tables=\"drill_schedule.t match_ds_portfolio.t\" sql=\"select @2.project as id, * from @1 inner join @2 on @1.slot_id=@2.project\" output=tmp.t"
@@ -1300,30 +1300,30 @@ class Main{
             ;
 
         //pvp
-        bg.add("rrad_pvp.t", "rrad_pvp.txt")
+        mf.add("rrad_pvp.t", "rrad_pvp.txt")
             <<"atreadascii2tbl input=$< output=$@";
-        bg.add("ordered_plays_w_rrad_status.t", {"ordered_plays.t", "rrad_pvp.t"})
+        mf.add("ordered_plays_w_rrad_status.t", {"ordered_plays.t", "rrad_pvp.t"})
             <<"attsqltool tables=\"ordered_plays.t rrad_pvp.t\" sql=\"select @1.*, " _cont
             " (select assessment_type from @2 where @2.play=@1.play) as rrad_assessment_type," _cont
             " (select pvp_date from @2 where @2.play=@1.play) as pvp_date" _cont
             " from @1\" output=$@"
             ;
         //booked limits
-        bg.add("sdegis_booked.it")
+        mf.add("sdegis_booked.it")
             <<"atsdeget layer='RSVO_ReservoirLimits' output=$@ login=~/atlogin"
-            <<BYPROD(itable("sdegis_booked.it"))
+            <<BYPRODUCT(itable("sdegis_booked.it"))
             ;
-        bg.on_softclean_retain(iitable("sdegis_booked.it"));
-        bg.add("pvad_booked.it", "sdegis_booked.it")
+        mf.on_softclean_retain(iitable("sdegis_booked.it"));
+        mf.add("pvad_booked.it", "sdegis_booked.it")
             <<"atitsplitshapes input=$< x=x y=y output=$@"
             <<"atwgs84toutm input=pvad_booked.t lon=x lat=y x='u39x' y='u39y'"
-            <<BYPROD(itable("pvad_booked.it"))
+            <<BYPRODUCT(itable("pvad_booked.it"))
             ;
-        bg.add("pvad_far.t", "pvad_far.txt")
+        mf.add("pvad_far.t", "pvad_far.txt")
             <<"atreadascii2tbl input=pvad_far.txt output=pvad_far.t";
 
 
-        bg.add("pvad_booked_with_far.it", {"pvad_booked.it", "pvad_far.t"}) //with far attributes
+        mf.add("pvad_booked_with_far.it", {"pvad_booked.it", "pvad_far.t"}) //with far attributes
             <<"atittee input=pvad_booked.it output=tmp.it"
             <<"attrmcol input=tmp.lt list='shape'"
             <<"attsqltool tables=\"tmp.lt pvad_far.t\"" _cont 
@@ -1334,42 +1334,42 @@ class Main{
             "       from @1\" output=tmp.lt"
             <<"atittee input=tmp.it output=$@" _cont 
             ;
-        bg.add("pvad_booked_with_far.shp", {"pvad_booked_with_far.it"})
+        mf.add("pvad_booked_with_far.shp", {"pvad_booked_with_far.it"})
             <<"atit2shpfile input=$< output=$@ x=x y=y poly=true";
 
-        bg.add("pvad_booked.shp", "pvad_booked.it")
+        mf.add("pvad_booked.shp", "pvad_booked.it")
             <<"atit2shpfile input=$< output=$@ x=x y=y poly=true";
         gis_targets.push_back("pvad_booked.shp");
 
-        bg.add("sdegis_fldout.it")
+        mf.add("sdegis_fldout.it")
             <<"atsdeget layer='FLDO_KSAHCFIELDANDAREABNDS_VW' output=tmp.it login=~/atlogin"
             <<"atitsplitshapes input=tmp.it x=x y=y output=$@"
             <<"atwgs84toutm input=sdegis_fldout.t lon=x lat=y x='u39x' y='u39y'"
-            <<BYPROD(itable("sdegis_fldout.it"))
+            <<BYPRODUCT(itable("sdegis_fldout.it"))
             ;
-        bg.on_softclean_retain(iitable("sdegis_fldout.it"));
-        bg.add("sdegis_fldout_oil.it","sdegis_fldout.it")
+        mf.on_softclean_retain(iitable("sdegis_fldout.it"));
+        mf.add("sdegis_fldout_oil.it","sdegis_fldout.it")
             <<"atitselect input=sdegis_fldout.it where=\"hybrid_hc_class='OIL'\" output=sdegis_fldout_oil.it"
-            <<BYPROD(itable("sdegis_fldout_oil.it"))
+            <<BYPRODUCT(itable("sdegis_fldout_oil.it"))
             ;
-        bg.add("sdegis_fldout_oil.shp", "sdegis_fldout_oil.it")
+        mf.add("sdegis_fldout_oil.shp", "sdegis_fldout_oil.it")
             <<"atit2shpfile input=$< output=$@ x=x y=y poly=true" ;
         gis_targets.push_back("sdegis_fldout_oil.shp");
 
-        bg.add("sdegis_fldout_gas.it","sdegis_fldout.it")
+        mf.add("sdegis_fldout_gas.it","sdegis_fldout.it")
             <<"atitselect input=sdegis_fldout.it where=\"hybrid_hc_class='GAS'\" output=sdegis_fldout_gas.it"
-            <<BYPROD(itable("sdegis_fldout_gas.it"))
+            <<BYPRODUCT(itable("sdegis_fldout_gas.it"))
             ;
-        bg.add("sdegis_fldout_gas.shp", "sdegis_fldout_gas.it")
+        mf.add("sdegis_fldout_gas.shp", "sdegis_fldout_gas.it")
             <<"atit2shpfile input=$< output=$@ x=x y=y poly=true";
         gis_targets.push_back("sdegis_fldout_gas.shp");
 
         //SPOT input
-        bg.add("pal_eppr_dump.t")
+        mf.add("pal_eppr_dump.t")
             <<"atoracle2tbl db=EPPR login=~/atlogin sql=\"select * from PAL_SUMMARY_VW where pre_drill_ver_flg='Y' and ver_pros_lead_type in ('PROSPECT', 'LEAD')\" output=$@";
-        bg.on_softclean_retain("pal_eppr_dump.t");
+        mf.on_softclean_retain("pal_eppr_dump.t");
 
-        bg.add({"pal_opr.t", "pal_opr.it"}, {"pal_eppr_dump.t", "spot_play_lookup.t","pap_traptype_spot_lookup.t"})
+        mf.add({"pal_opr.t", "pal_opr.it"}, {"pal_eppr_dump.t", "spot_play_lookup.t","pap_traptype_spot_lookup.t"})
             <<"attsqltool tables=\"pal_eppr_dump.t spot_play_lookup.t pap_traptype_spot_lookup.t\" sql="
             "\"select case when w_expl_name not null and not w_expl_name='' then replace(w_expl_name, '_','-') else @1.name end as name, "
             " case when name=lead_name then '' when name=pros_name then lead_name else (case when pros_name<>lead_name then pros_name ||', ' || lead_name else lead_name end) end as old_names, "
@@ -1383,12 +1383,12 @@ class Main{
             <<"atindextable input=tmp.t key=name keep=true output=pal_opr.it";
             ;
 
-        bg.add("pal_sde_dump_orig.it")
+        mf.add("pal_sde_dump_orig.it")
             <<"atsdeget layer='LDPR_PROSPECTANDLEADSEXPL_VW' output=$@ login=~/atlogin"
-            <<BYPROD(itable("pal_sde_dump_orig.it"))
+            <<BYPRODUCT(itable("pal_sde_dump_orig.it"))
             ;
-        bg.on_softclean_retain(iitable("pal_sde_dump_orig.it"));
-        bg.add("pal_sde_dump.it", "pal_sde_dump_orig.it")
+        mf.on_softclean_retain(iitable("pal_sde_dump_orig.it"));
+        mf.add("pal_sde_dump.it", "pal_sde_dump_orig.it")
             <<"atittee input=$< output=tmp.it"
             <<"atwgs84toutm input=tmp.t lon=x lat=y x='u39x' y='u39y'"
             //removing duplicate polygons (same seg_id)!
@@ -1397,13 +1397,13 @@ class Main{
             //index by seg_id now
             <<"attupdate input=tmp2.lt index_col=\"cast(seg_id as int)\""
             <<"atittee input=tmp2.it output=$@"
-            <<BYPROD(itable("pal_sde_dump.it"))
+            <<BYPRODUCT(itable("pal_sde_dump.it"))
             ;
-        bg.add("spot_pda.t", "spot_pda.sql")
+        mf.add("spot_pda.t", "spot_pda.sql")
             <<"atoracle2tbl login=~/atlogin sqlfile=$< output=$@" ;
-        bg.on_softclean_retain("spot_pda.t");
+        mf.on_softclean_retain("spot_pda.t");
 
-        bg.add("spot_pda_simple.t", {"spot_pda.t", "well_utmxy.t", "historical_wellvolumeadd_withxy.t", "spot_play_lookup.t"})
+        mf.add("spot_pda_simple.t", {"spot_pda.t", "well_utmxy.t", "historical_wellvolumeadd_withxy.t", "spot_play_lookup.t"})
             <<"attsqltool tables=\"spot_pda.t historical_wellvolumeadd_withxy.t spot_play_lookup.t\" sql=\"select @1.*, play "
                 ", case when exists(select * from @2 where well=@1.w_gnr_name and @2.play=@3.play and (oil>0 or gas>0)) then 'Yes' else 'No' end as commercial"
                 ", case when post_drill_clsf_typ_cd like 'dry' then 'No' else 'Yes' end as technical"
@@ -1412,87 +1412,87 @@ class Main{
             <<"attsqltool tables=\"well_utmxy.t tmp.t\" sql=\"select @2.*, @1.u39x, @1.u39y from @2 inner join @1 on @2.w_gnr_name=@1.w_gnr_name\" output=$@";
 
         //grab geox assessments
-        bg.add("pal_vn11p_gas_dump.t")
+        mf.add("pal_vn11p_gas_dump.t")
             <<"atoracle2tbl database=VN11P login=~/atlogin sql=\"select * from geox.cu_spot_seg_inplace_non_gas\" output=$@"
             ;
-        bg.on_softclean_retain("pal_vn11p_gas_dump.t");
-        bg.add("pal_vn11p_oil_dump.t")
+        mf.on_softclean_retain("pal_vn11p_gas_dump.t");
+        mf.add("pal_vn11p_oil_dump.t")
             <<"atoracle2tbl database=VN11P login=~/atlogin sql=\"select * from geox.cu_spot_seg_inplace_oil\" output=$@"
             ;
-        bg.on_softclean_retain("pal_vn11p_oil_dump.t");
+        mf.on_softclean_retain("pal_vn11p_oil_dump.t");
         //all geox
-        bg.add("pal_geox_all_gas.t", {"pal_eppr_dump.t", "pal_vn11p_gas_dump.t"})
+        mf.add("pal_geox_all_gas.t", {"pal_eppr_dump.t", "pal_vn11p_gas_dump.t"})
             //<<"attsqltool tables=\"pal_eppr_dump.t pal_vn11p_gas_dump.t\" sql=\"select @1.pos_segment, cast(@1.seg_id as int) as seg_id, cast(@1.geox_anal_id as int) as geox_anal_id, @1.seg_desc, @1.gas_rsk_rsvrs_mean, @1.pros_status_type, @2.* from @2 inner join @1 on @2.seg_ana_id = @1.geox_anal_id \" output=$@"
             <<"attsqltool tables=\"pal_eppr_dump.t pal_vn11p_gas_dump.t\" sql=\"select @1.pos_segment, cast(@1.seg_id as int) as seg_id, cast(@1.geox_anal_id as int) as geox_anal_id, @1.seg_desc, @1.gas_rsk_rsvrs_mean, @1.pros_status_type, @2.* from @2 inner join @1 on @2.seg_ana_id = @1.geox_anal_id where p00<10000\" output=$@"
             ;
-        bg.add("pal_geox_all_oil.t", {"pal_eppr_dump.t", "pal_vn11p_oil_dump.t"})
+        mf.add("pal_geox_all_oil.t", {"pal_eppr_dump.t", "pal_vn11p_oil_dump.t"})
             <<"attsqltool tables=\"pal_eppr_dump.t pal_vn11p_oil_dump.t\" sql=\"select @1.pos_segment, cast(@1.seg_id as int) as seg_id, cast(@1.geox_anal_id as int) as geox_anal_id, @1.seg_desc, @1.oil_rsk_rsvrs_mean, @1.pros_status_type, @2.* from @2 inner join @1 on @2.seg_ana_id = @1.geox_anal_id\" output=$@"
             ;
         //active geox
-        bg.add("pal_geox_active_gas.t", {"pal_eppr_dump.t", "pal_vn11p_gas_dump.t"})
+        mf.add("pal_geox_active_gas.t", {"pal_eppr_dump.t", "pal_vn11p_gas_dump.t"})
             <<"attsqltool tables=\"pal_eppr_dump.t pal_vn11p_gas_dump.t\" sql=\"select @1.pos_segment, cast(@1.seg_id as int) as seg_id, cast(@1.geox_anal_id as int) as geox_anal_id, @1.seg_desc, @1.gas_rsk_rsvrs_mean, @2.* from @2 inner join @1 on @2.seg_ana_id = @1.geox_anal_id where @1.pros_status_type='ACTIVE' and p00<10000\" output=$@"
             ;
-        bg.add("pal_geox_active_oil.t", {"pal_eppr_dump.t", "pal_vn11p_oil_dump.t"})
+        mf.add("pal_geox_active_oil.t", {"pal_eppr_dump.t", "pal_vn11p_oil_dump.t"})
             <<"attsqltool tables=\"pal_eppr_dump.t pal_vn11p_oil_dump.t\" sql=\"select @1.pos_segment, cast(@1.seg_id as int) as seg_id, cast(@1.geox_anal_id as int) as geox_anal_id, @1.seg_desc, @1.oil_rsk_rsvrs_mean, @2.* from @2 inner join @1 on @2.seg_ana_id = @1.geox_anal_id where @1.pros_status_type='ACTIVE'and p00<10000\" output=$@"
             ;
-        bg.add("pal_geox_all_gas.g", "pal_geox_all_gas.t")
+        mf.add("pal_geox_all_gas.g", "pal_geox_all_gas.t")
             <<"atgeox2array input=$< o1=0 d1=10 n1=1001 output=$@"
             ;
-        bg.add("pal_geox_all_oil.g", "pal_geox_all_oil.t")
+        mf.add("pal_geox_all_oil.g", "pal_geox_all_oil.t")
             <<"atgeox2array input=$< o1=0 d1=10 n1=1001 output=$@"
             ;
-        bg.add("pal_geox_active_gas.g", "pal_geox_active_gas.t")
+        mf.add("pal_geox_active_gas.g", "pal_geox_active_gas.t")
             <<"atgeox2array input=$< o1=0 d1=10 n1=1001 output=$@"
             ;
-        bg.add("pal_geox_active_oil.g", "pal_geox_active_oil.t")
+        mf.add("pal_geox_active_oil.g", "pal_geox_active_oil.t")
             <<"atgeox2array input=$< o1=0 d1=10 n1=1001 output=$@"
             ;
-        bg.add("pal_geox_active_gas_agr.g", {"pal_geox_active_gas.g", "pal_geox_active_gas.t"})
+        mf.add("pal_geox_active_gas_agr.g", {"pal_geox_active_gas.g", "pal_geox_active_gas.t"})
             <<"atspotaggregate target_table=pal_geox_active_gas.t target_gasvol=pal_geox_active_gas.g output=$@ n1=10000"
             ;
 
-        bg.add("pal_geox_active_oil_agr.g", {"pal_geox_active_oil.g", "pal_geox_active_oil.t"})
+        mf.add("pal_geox_active_oil_agr.g", {"pal_geox_active_oil.g", "pal_geox_active_oil.t"})
             <<"atspotaggregate target_table=pal_geox_active_oil.t target_gasvol=pal_geox_active_oil.g output=$@ n1=10000"
             ;
-        bg.add("pal_geox_active_gas_stats.dat", "pal_geox_active_gas_agr.g")
+        mf.add("pal_geox_active_gas_stats.dat", "pal_geox_active_gas_agr.g")
             <<"rm -f $@"
             <<package_stats("$<", "gas", "$@")
             ;
-        bg.add("pal_geox_active_oil_stats.dat", "pal_geox_active_oil_agr.g")
+        mf.add("pal_geox_active_oil_stats.dat", "pal_geox_active_oil_agr.g")
             <<"rm -f $@"
             <<package_stats("$<", "oil", "$@")
             ;
 
-        bg.add("spot_active_portfolio_gas.it", "spot_active_portfolio.it") 
+        mf.add("spot_active_portfolio_gas.it", "spot_active_portfolio.it") 
             <<"atitselect input=spot_active_portfolio.it where=\"bscf_mean>0\" output=$@"
-            <<BYPROD(itable("spot_active_portfolio_gas.it"))
+            <<BYPRODUCT(itable("spot_active_portfolio_gas.it"))
             ;
-        bg.add("spot_active_portfolio_oil.it", "spot_active_portfolio.it") 
+        mf.add("spot_active_portfolio_oil.it", "spot_active_portfolio.it") 
             <<"atitselect input=spot_active_portfolio.it where=\"mmbo_mean>0\" output=$@"
-            <<BYPROD(itable("spot_active_portfolio_oil.it"))
+            <<BYPRODUCT(itable("spot_active_portfolio_oil.it"))
             ;
 
-        bg.add("spot_active_portfolio_gas.shp", "spot_active_portfolio_gas.it") 
+        mf.add("spot_active_portfolio_gas.shp", "spot_active_portfolio_gas.it") 
             <<"atit2shpfile input=$< x=u39x y=u39y poly=true output=$@"
             ;
         gis_targets.push_back("spot_active_portfolio_gas.shp");
 
-        bg.add("spot_active_portfolio_oil.shp", "spot_active_portfolio_oil.it") 
+        mf.add("spot_active_portfolio_oil.shp", "spot_active_portfolio_oil.it") 
             <<"atit2shpfile input=$< x=u39x y=u39y poly=true output=$@"
             ;
         gis_targets.push_back("spot_active_portfolio_oil.shp");
 
         //other input
-        bg.add("strat_formations_vw.t")
+        mf.add("strat_formations_vw.t")
             <<"atoracle2tbl login=~/atlogin sql=\"select * from strat_formations_vw\" output=$@";
-        bg.on_softclean_retain("strat_formations_vw.t");
-        bg.add("strat_info.t")
+        mf.on_softclean_retain("strat_formations_vw.t");
+        mf.add("strat_info.t")
             <<"atoracle2tbl login=~/atlogin sql=\"select * from strat_info\" output=$@";
-        bg.on_softclean_retain("strat_info.t");
+        mf.on_softclean_retain("strat_info.t");
     }
     void qc_spot_inputs(){
         int nqc=1;
-        bg.add("spot_stats", 
+        mf.add("spot_stats", 
                 {"pal_eppr_dump.t", 
                 "pal_geox_active_gas.t", "pal_geox_active_gas_stats.dat",
                 "pal_geox_active_oil.t", "pal_geox_active_oil_stats.dat",
@@ -1507,7 +1507,7 @@ class Main{
             <<"@attsqltool tables=\"pal_eppr_dump.t pal_geox_active_gas.t\" sql=\"select round(sum(seg_rsvr_risk*seg_seal_risk*seg_closure_risk*1.0*gas_unrsk_rsvrs_mean)-sum(gas_rsk_rsvrs_mean)) || ' BSCF lost to charge risks' from @1 where pros_status_type='ACTIVE' and seg_id in (select seg_id from @2)\" headers=false"
             <<"@attsqltool tables=\"pal_eppr_dump.t pal_geox_active_gas.t\" sql=\"select round(sum(seg_rsvr_risk*seg_seal_risk*seg_closure_risk*seg_charge_risk*gas_unrsk_rsvrs_mean)-sum(gas_rsk_rsvrs_mean)) || ' BSCF lost to other risks' from @1 where pros_status_type='ACTIVE' and seg_id in (select seg_id from @2)\" headers=false"
         ;
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
                 {"pal_eppr_dump.t", 
                 "pal_geox_active_gas.t", "pal_geox_active_gas_stats.dat",
                 "pal_geox_active_oil.t", "pal_geox_active_oil_stats.dat",
@@ -1553,7 +1553,7 @@ class Main{
             ;
 
         //check SPOT tables before using
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
             {"pal_eppr_dump.t", "pal_sde_dump.it"})
             //<<HELP("cross-check the portfolio data in EPPR and SDE")
             <<"@echo '################################################################'"
@@ -1566,7 +1566,7 @@ class Main{
             <<"attsqltool tables=\"pal_eppr_dump.t pal_sde_dump.lt\" sql=\"select cast(seg_id as int) as seg_id, name, seg_name from @2 where @2.pros_status_type='ACTIVE' and pros_id not in (select pros_id from @1 where pros_status_type='ACTIVE') order by name\""
             ;
         //
-        bg.add("spot_active_portfolio.it", {"pal_eppr_dump.t", "pal_sde_dump.it"})
+        mf.add("spot_active_portfolio.it", {"pal_eppr_dump.t", "pal_sde_dump.it"})
             <<"attsqltool tables=\"pal_sde_dump.lt pal_eppr_dump.t\" sql=\"select objectid, name, seg_name, seg_id from @1 where seg_id>0 and pros_status_type='ACTIVE' and seg_id in (select seg_id from @2 where pros_status_type='ACTIVE')\" output=tmp_pal_common.t"
             <<"atitsubset input=pal_sde_dump.it output=tmp.it subset=tmp_pal_common.t subsetkey=\"seg_id\""
             <<"attsqltool tables=\"tmp.lt pal_eppr_dump.t\" sql=\""
@@ -1599,9 +1599,9 @@ class Main{
             <<"atunifyutm input=tmp.lt x=w_tent_xutm_cord y=w_tent_yutm_cord zone=w_tent_utm_zn newx=u39x newy=u39y output=tmp.lt"
             <<"atittee input=tmp.it output=$@"
             <<TEMP("tmp_pal_common.t")
-            <<BYPROD(itable("spot_active_portfolio.it"))
+            <<BYPRODUCT(itable("spot_active_portfolio.it"))
             ;
-        bg.add("spot_all_portfolio.it", {"pal_eppr_dump.t", "pal_sde_dump.it"})
+        mf.add("spot_all_portfolio.it", {"pal_eppr_dump.t", "pal_sde_dump.it"})
             <<"attsqltool tables=\"pal_sde_dump.lt pal_eppr_dump.t\" sql=\"select objectid, name, seg_name, seg_id from @1 where seg_id>0 \" output=tmp_pal_common.t"
             <<"atitsubset input=pal_sde_dump.it output=tmp.it subset=tmp_pal_common.t subsetkey=\"seg_id\""
             <<"attsqltool tables=\"tmp.lt pal_eppr_dump.t\" sql=\""
@@ -1634,10 +1634,10 @@ class Main{
             <<"atunifyutm input=tmp.lt x=w_tent_xutm_cord y=w_tent_yutm_cord zone=w_tent_utm_zn newx=u39x newy=u39y output=tmp.lt"
             <<"atittee input=tmp.it output=$@"
             <<TEMP("tmp_pal_common.t")
-            <<BYPROD(itable("spot_all_portfolio.it"))
+            <<BYPRODUCT(itable("spot_all_portfolio.it"))
             ;
         //
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
             "spot_all_portfolio.it")
             //<<HELP("check for duplicate P&L in SDE")
             <<"@echo '#############################################################'"
@@ -1645,11 +1645,11 @@ class Main{
             <<"@echo '#############################################################'"
             <<"@attsqltool spot_all_portfolio.lt sql=\"select * from (select seg_id, name, count(*) as c from @1 group by seg_id) where c>1\" headers=false";
 
-        bg.add("spot_active_portfolio.shp", "spot_active_portfolio.it")
+        mf.add("spot_active_portfolio.shp", "spot_active_portfolio.it")
             <<"atit2shpfile input=$< x=u39x y=u39y poly=true output=$@";
         gis_targets.push_back("spot_active_portfolio.shp");
 
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
                 {"spot_all_portfolio.it","papgis_sa.t"})
             //<<HELP("check for P&L polygons outside kingdom")
             <<"@echo '##########################################'"
@@ -1662,7 +1662,7 @@ class Main{
             //<<"atitwind   input=tmp2.it expr=\"inkingdom=0\" output=tmp.it"
             <<"attsqltool tmp.lt sql=\"select name from @1\" headers=false"
                 ;
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
             {"spot_all_portfolio.it", 
                 "pal_vn11p_gas_dump.t",
                 "pal_vn11p_oil_dump.t"
@@ -1673,7 +1673,7 @@ class Main{
             <<"@echo '#########################################################'"
             <<"@attsqltool tables=\"spot_all_portfolio.lt pal_vn11p_gas_dump.t pal_vn11p_oil_dump.t\" headers=true sql=\"select seg_desc, geox_anal_id, seg_id from @1 where geox_anal_id>0 and geox_anal_id not in (select seg_ana_id from @2) union select seg_desc, geox_anal_id, seg_id from @1 where geox_anal_id>0 and geox_anal_id not in (select seg_ana_id from @3)\""
                 ;
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
             "spot_all_portfolio.it")
             //<<HELP("check for zero-gas & zero-oil prospects")
             <<"@echo '######################################'"
@@ -1682,7 +1682,7 @@ class Main{
             <<"attsqltool tables=\"spot_all_portfolio.lt\" sql=\"select seg_desc, geox_anal_id, seg_id, bscf_mean, mmbo_mean from @1 where bscf_mean=0 and mmbo_mean=0 and geox_anal_id>0\""
             <<"attsqltool tables=\"pal_eppr_dump.t\" sql=\"select seg_desc, gas_rsk_rsvrs_mean, oil_rsk_rsvrs_mean, tot_oileqv_rsk_rsvrs_mean, gas_unrsk_rsvrs_mean, oil_unrsk_rsvrs_mean, geox_anal_id from @1 where gas_rsk_rsvrs_mean=0 and oil_rsk_rsvrs_mean=0 and seg_id>0 and pros_status_type='ACTIVE' and geox_anal_id>0\" headers=false"
                 ;
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
                 {"spot_all_portfolio.it"})
             <<"@echo '###########################################################################'"
             <<"@echo '## Prospects with the tentative location not in prospect/segment polygon  ##'"
@@ -1691,7 +1691,7 @@ class Main{
             <<"attsqltool tmp.t sql=\"select * from @1 where match<>'inpolygon' order by distance_from_polygon desc\" headers=true output=tmp2.t"
             <<"attedit tmp2.t"
             ;
-        bg.add("spot_qc"+to_string(nqc++), 
+        mf.add("spot_qc"+to_string(nqc++), 
                 {"spot_pda.t"
                 })
             <<"@echo '###################################################'"
@@ -1706,37 +1706,37 @@ class Main{
             for(int i=1; i<nqc; i++){
                 dep.push_back("spot_qc"+to_string(i));
             }
-            bg.add("spot_qc{1-"+to_string(nqc-1)+"}", dep)
+            mf.add("spot_qc{1-"+to_string(nqc-1)+"}", dep)
                 <<HELP("QC SPOT data");
         }
     }
     void load_pap_text_files(){
         //investment plan targets
-        bg.add("pap_ip_targets.t", "pap_ip_targets.txt")
+        mf.add("pap_ip_targets.t", "pap_ip_targets.txt")
             <<"atreadascii2tbl input=$< output=$@"
             ;
         //loading trap_types
-        bg.add("trap_types.t", "trap_types.txt")
+        mf.add("trap_types.t", "trap_types.txt")
             <<"atreadascii2tbl input=$< output=tmp.t"
             <<"attsqltool tmp.t sql=\"select * from @1 where show='Yes'\" output=$@"
             ;
-        bg.add("pap_traptype_spot_lookup.t", "pap_traptype_translation.txt")
+        mf.add("pap_traptype_spot_lookup.t", "pap_traptype_translation.txt")
             <<"atreadascii2tbl input=$< output=$@";
         //historical cost data
-        bg.add("historical_wellcost.t", "historical_wellcost.txt")
+        mf.add("historical_wellcost.t", "historical_wellcost.txt")
             <<"atreadascii2tbl input=$< output=$@";
         //historical volume add data
-        bg.add("historical_wellvolumeadd.t", "historical_wellvolumeadd.txt")
+        mf.add("historical_wellvolumeadd.t", "historical_wellvolumeadd.txt")
             <<"atreadascii2tbl input=$< output=$@";
-        bg.add("historical_wellvolumeadd_withxy.t", {"historical_wellvolumeadd.t","well_utmxy.t", "pvad_play_lookup.t"})
+        mf.add("historical_wellvolumeadd_withxy.t", {"historical_wellvolumeadd.t","well_utmxy.t", "pvad_play_lookup.t"})
             <<"attsqltool tables=\"well_utmxy.t historical_wellvolumeadd.t\" sql=\"select @2.*, @1.u39x, @1.u39y from @2 inner join @1 on @2.Well=@1.w_gnr_name where is_simple like 'yes' and use_for_fsd='yes'\" output=tmp.t"
             <<"attsqltool tables=\"tmp.t pvad_play_lookup.t\" sql=\"select @1.*, play from @1 inner join @2 on @1.Reservoir=@2.rescd\" output=$@";
         //mapping of plays to formation naming in wellsite reports
-        bg.add("input_target2td_formations.t", "input_target2td_formations.txt")
+        mf.add("input_target2td_formations.t", "input_target2td_formations.txt")
             <<"atreadascii2tbl input=input_target2td_formations.txt output=input_target2td_formations.t";
         //forecasting tables
         {
-            bg.add("forecast_rigdays.t", {
+            mf.add("forecast_rigdays.t", {
                     "analysis_wellcluster_cahwth_all_rigdays.g",
                     "analysis_wellcluster_canyym_all_rigdays.g",
                     "analysis_wellcluster_eghwr_prekhff_rigdays.g",
@@ -1762,7 +1762,7 @@ class Main{
                     "forecast_rigdays.txt"
                     })
                 <<"atreadascii2tbl input=forecast_rigdays.txt output=$@";
-            bg.add("forecast_cost.t", {
+            mf.add("forecast_cost.t", {
                     "analysis_wellcluster_cahwth_all_cost.g",
                     "analysis_wellcluster_canyym_all_cost.g",
                     "analysis_wellcluster_eghwr_prekhff_cost.g",
@@ -1785,7 +1785,7 @@ class Main{
                     "forecast_cost.txt"
                     })
                 <<"atreadascii2tbl input=forecast_cost.txt output=$@";
-            bg.add("forecast_gas_wad.t", {
+            mf.add("forecast_gas_wad.t", {
                     "forecast_gas_wad.txt",
                     "analysis_play_abcr_gas_wad.g",
                     "analysis_play_abdr_gas_wad.g",
@@ -1818,7 +1818,7 @@ class Main{
                     //"analysis_play_*_gas_wad.g",
                     })
                 <<"atreadascii2tbl input=$< output=$@";
-            bg.add("forecast_oil_wad.t", 
+            mf.add("forecast_oil_wad.t", 
                     {"forecast_oil_wad.txt",
                     "analysis_play_abab_oil_wad.g",
                     "analysis_play_abcr_oil_wad.g",
@@ -1855,7 +1855,7 @@ class Main{
                     "analysis_play_ymsl_oil_wad.g",
                     })
                 <<"atreadascii2tbl input=$< output=$@";
-            bg.add("forecast_gas_fsd.t", {
+            mf.add("forecast_gas_fsd.t", {
                     "forecast_gas_fsd.txt",
                     "analysis_play_abcr_gas_fsd.g",
                     "analysis_play_abdr_gas_fsd.g",
@@ -1886,7 +1886,7 @@ class Main{
                     "analysis_play_ymsl_gas_fsd.g",
                     })
                 <<"atreadascii2tbl input=$< output=$@";
-            bg.add("forecast_oil_fsd.t", 
+            mf.add("forecast_oil_fsd.t", 
                     {"forecast_oil_fsd.txt",
                     "analysis_play_abab_oil_fsd.g",
                     "analysis_play_abcr_oil_fsd.g",
@@ -1920,7 +1920,7 @@ class Main{
                     "analysis_play_ymsl_oil_fsd.g",
                     })
                 <<"atreadascii2tbl input=$< output=$@";
-            bg.add("forecast_pos.t", {
+            mf.add("forecast_pos.t", {
                     "forecast_pos.txt",
                     "analysis_play_abab_del_pos.g",
                     "analysis_play_abab_wc_pos.g",
@@ -1985,34 +1985,34 @@ class Main{
                     "analysis_play_ymsl_wc_pos.g",
                     })
                 <<"atreadascii2tbl input=$< output=$@";
-            bg.add("forecast_pcom.t", "forecast_pcom.txt")
+            mf.add("forecast_pcom.t", "forecast_pcom.txt")
                 <<"atreadascii2tbl input=$< output=$@";
         }
     }
     void load_pap_shape_files(){
-        bg.add("papgis_sa_onshore.t", "papgis_sa_onshore_simple.shp")
+        mf.add("papgis_sa_onshore.t", "papgis_sa_onshore_simple.shp")
             <<"atshp2itbl input=$< output=tmp.it"
             <<"atitdumptable input=tmp.it index=0-part1 output=$@"
             ;
-        bg.add("papgis_sa.t", "sa_boundary_onshore_offshore_aat.shp")
+        mf.add("papgis_sa.t", "sa_boundary_onshore_offshore_aat.shp")
             <<"atshp2itbl input=$< output=tmp.it"
             <<"atlargestpolygon input=tmp.it xcol=x ycol=y output=$@"
             ;
 
-        bg.add("rigaoi.it", "papgis_rigaoi.shp")
+        mf.add("rigaoi.it", "papgis_rigaoi.shp")
             <<"atshp2itbl input=$< output=$@"
-            <<BYPROD(itable("rigaoi.it"))
+            <<BYPRODUCT(itable("rigaoi.it"))
             ;
-        bg.add("input_rsed_area.t", "input_rsed_area.shp")
+        mf.add("input_rsed_area.t", "input_rsed_area.shp")
             <<"atshp2tbl input=$< output=$@"
             ;
-        bg.add("papgis_rigdays_spatial_clusters.it", "papgis_rigdays_spatial_clusters.shp")
+        mf.add("papgis_rigdays_spatial_clusters.it", "papgis_rigdays_spatial_clusters.shp")
             <<"atshp2itbl input=$< output=$@"
-            <<BYPROD(itable("papgis_rigdays_spatial_clusters.it"))
+            <<BYPRODUCT(itable("papgis_rigdays_spatial_clusters.it"))
             ;
-        bg.add("papgis_area_maturity.it", "papgis_area_maturity.shp")
+        mf.add("papgis_area_maturity.it", "papgis_area_maturity.shp")
             <<"atshp2itbl input=$< output=$@"
-            <<BYPROD(itable("papgis_area_maturity.it"))
+            <<BYPRODUCT(itable("papgis_area_maturity.it"))
             ;
         {
 
@@ -2020,18 +2020,18 @@ class Main{
             for(auto item: plays){
                 string play=item.first;
                 string basename="papgis_play_"+play+"_phasemap";
-               bg.add(basename+".it", {
+               mf.add(basename+".it", {
                         "pap_play_"+play+"_phasemap.shp",
                         "pap_play_"+play+"_phasemap.cpg",
                         })
                     <<"atshp2itbl input=$< output=$@ cleanup=true"
                     <<"attaddstringcol input="+basename+".lt col=play value="+play
-                    <<BYPROD(itable("papgis_play_"+play+"_phasemap.it"))
+                    <<BYPRODUCT(itable("papgis_play_"+play+"_phasemap.it"))
                     ;
                 dep.push_back(basename+".it");
             }
             bool first=true;
-            auto & f = bg.add("hcphase_byplay.it", dep);
+            auto & f = mf.add("hcphase_byplay.it", dep);
             for(auto item: plays){
                 string play=item.first;
                 string basename="papgis_play_"+play+"_phasemap";
@@ -2043,22 +2043,22 @@ class Main{
                 }
             }
             f<<"atittee input=tmp.it output=$@";
-            f<<BYPROD(itable("hcphase_byplay.it"));
+            f<<BYPRODUCT(itable("hcphase_byplay.it"));
         }
         {
             strings dep;
             for(auto item: drillzones){
                string prefix=item.prefix;
                string basename="papgis_drillzone_"+prefix+"_bop";
-               bg.add(basename+".it", item.bop_shp)
+               mf.add(basename+".it", item.bop_shp)
                     <<"atshp2itbl input=$< output=$@ cleanup=true"
-                    <<"attaddstringcol input="+basename+".lt col=drillzone value=\"DZ-"+toupper(prefix)+"\""
-                    <<BYPROD(itable("papgis_drillzone_"+prefix+"_bop.it"))
+                    <<"attaddstringcol input="+basename+".lt col=drillzone value=\"DZ-"+to_upper(prefix)+"\""
+                    <<BYPRODUCT(itable("papgis_drillzone_"+prefix+"_bop.it"))
                     ;
                 dep.push_back(basename+".it");
             }
             bool first=true;
-            auto & f = bg.add("drillzone_bop.it", dep);
+            auto & f = mf.add("drillzone_bop.it", dep);
             for(auto item: drillzones){
                 string prefix=item.prefix;
                 string basename="papgis_drillzone_"+prefix+"_bop";
@@ -2070,14 +2070,14 @@ class Main{
                 }
             }
             f<<"atittee input=tmp.it output=$@";
-            f<<BYPROD(itable("drillzone_bop.it"));
+            f<<BYPRODUCT(itable("drillzone_bop.it"));
         }
     }
     void create_testing_portfolios(){
         //create a test portfolio  of a single prospect
         {
             string test_name = "tsta";
-            auto & f = bg.add(test_name+"_portfolio.txt");
+            auto & f = mf.add(test_name+"_portfolio.txt");
             f<<"@echo \""
                 " string:play"
                 " string:id"
@@ -2121,7 +2121,7 @@ class Main{
         //create a test portfolio  of a single prospect
         {
             string test_name = "tstb";
-            auto & f = bg.add(test_name+"_portfolio.txt");
+            auto & f = mf.add(test_name+"_portfolio.txt");
             f<<"@echo \""
                 " string:play"
                 " string:id"
@@ -2165,7 +2165,7 @@ class Main{
         //create a test portfolio  of two prospects
         {
             string test_name = "tstc";
-            auto & f = bg.add(test_name+"_portfolio.txt");
+            auto & f = mf.add(test_name+"_portfolio.txt");
             f<<"@echo \""
                 " string:play"
                 " string:id"
@@ -2226,13 +2226,13 @@ class Main{
         //create a test portfolio  of two prospects
         {
             int nprospect=20;
-            bg.add("tstd_fsd.g")
+            mf.add("tstd_fsd.g")
                 //<<"atmath tmp.g=\"d1()*shift*(amp^(n))\"   n=1                            mean=\"(minoil+maxoil)/2\" minoil=200 maxoil=400 shift=\"exp(-2.0*i()*x1()*pi()*(0.5*tau+minoil+n*mean))\" amp=\"0*i()+ifnan(sin(aa)/max(0.0001,aa),1)\" aa=\"x1()*pi()*tau\" tau=\"(maxoil-minoil)\" n1=4000 d1=0.00001 && atifft1 input=tmp.g output=$@";
                 <<"atmath expr=\"(x1()>200)-(x1()>400)\" n1=4000 d1=1 output=$@";
-            bg.add("tstd_ideal_agr.g")
+            mf.add("tstd_ideal_agr.g")
                 <<"atmath tmp.g=\"d1()*shift*(amp^(n))\" n=\""+to_string(nprospect)+"-1\" mean=\"(minoil+maxoil)/2\" minoil=200 maxoil=400 shift=\"exp(-2.0*i()*x1()*pi()*(0.5*tau+minoil+n*mean))\" amp=\"0*i()+ifnan(sin(aa)/max(0.0001,aa),1)\" aa=\"x1()*pi()*tau\" tau=\"(maxoil-minoil)\" n1=4000 d1=0.00001 && atifft1 input=tmp.g output=$@";
             string test_name = "tstd";
-            auto & f = bg.add(test_name+"_portfolio.txt", {"tstd_fsd.g"});
+            auto & f = mf.add(test_name+"_portfolio.txt", {"tstd_fsd.g"});
             f<<"@echo \""
                 " string:play"
                 " string:id"
@@ -2278,9 +2278,9 @@ class Main{
         //create a test portfolio  of two prospects
         {
             string test_name = "tste";
-            bg.add("tste_ideal_agr.g")
+            mf.add("tste_ideal_agr.g")
                 <<"atmath $@=\"if(i1()==0, 0.25)+if((x1()>=100) && (x1()<=200), 0.25/100)+if((x1()>=300) && (x1()<=400), 0.25/100)+if((x1()>400) &&(x1()<=500), (x1()-400)*0.25/100/100)+if((x1()>500) &&(x1()<=600), (600-x1())*0.25/100/100)\" n1=10000 d1=1";
-            auto & f = bg.add(test_name+"_portfolio.txt");
+            auto & f = mf.add(test_name+"_portfolio.txt");
             f<<"@echo \""
                 " string:play"
                 " string:id"
@@ -2342,7 +2342,7 @@ class Main{
         {
             for(int i=0; i<tstf_ntest; i++){
                 string test_name = "tstf"+to_string(i);
-                auto & f = bg.add(test_name+"_portfolio.txt", {"historical_wellvolumeadd_withxy.t"});
+                auto & f = mf.add(test_name+"_portfolio.txt", {"historical_wellvolumeadd_withxy.t"});
                 f<<"attsqltool tables=\"historical_wellvolumeadd_withxy.t\" sql=\""
                     "select "
                     "play, "
@@ -2373,7 +2373,7 @@ class Main{
         {
             for(int i=2005; i<current_year; i++){
                 string test_name = "tstg"+to_string(i);
-                auto & f = bg.add(test_name+"_portfolio.txt", {"historical_wellvolumeadd_withxy.t", "pvad_play_lookup.t"});
+                auto & f = mf.add(test_name+"_portfolio.txt", {"historical_wellvolumeadd_withxy.t", "pvad_play_lookup.t"});
                 f<<"attsqltool tables=\"historical_wellvolumeadd_withxy.t pvad_play_lookup.t\" sql=\""
                     "select "
                     "play, "
@@ -2405,7 +2405,7 @@ class Main{
         {
             for(auto play:seq_plays){
                 string test_name = "tstm_"+play;
-                auto & f = bg.add(test_name+"_portfolio.txt", {"historical_wellvolumeadd_withxy.t"});
+                auto & f = mf.add(test_name+"_portfolio.txt", {"historical_wellvolumeadd_withxy.t"});
                 f<<"attsqltool tables=\"historical_wellvolumeadd_withxy.t pvad_play_lookup.t\" sql=\""
                     "select "
                     "play, "
@@ -2437,7 +2437,7 @@ class Main{
         {
             for(int i=0; i<tstf_ntest; i++){
                 string test_name = "tsth"+to_string(i);
-                auto & f = bg.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t"});
+                auto & f = mf.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t"});
                 f<<"attsqltool tables=\"spot_pda_simple.t spot_play_lookup.t\" sql=\""
                     "select "
                     "@2.play as play, "
@@ -2469,7 +2469,7 @@ class Main{
         {
             for(int i=2013; i<current_year; i++){
                 string test_name = "tsti"+to_string(i);
-                auto & f = bg.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t"});
+                auto & f = mf.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t"});
                 f<<"attsqltool tables=\"spot_pda_simple.t spot_play_lookup.t\" sql=\""
                     "select "
                     "@2.play as play, "
@@ -2501,7 +2501,7 @@ class Main{
         {
             for(int i=2013; i<current_year; i++){
                 string test_name = "tstj"+to_string(i);
-                auto & f = bg.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t","historical_wellvolumeadd_withxy.t", "pvad_play_lookup.t"});
+                auto & f = mf.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t","historical_wellvolumeadd_withxy.t", "pvad_play_lookup.t"});
                 f<<"attsqltool tables=\"spot_pda_simple.t historical_wellvolumeadd_withxy.t\" sql=\""
                     "select "
                     "'' as old_names, "
@@ -2539,7 +2539,7 @@ class Main{
             for(auto wcdel: vector<string>({"Prospective", "Delineation"})){
                 for(auto play: seq_plays){
                     string test_name = "tstk_"+play+"_"+wcdel;
-                    auto & f = bg.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t", "historical_wellvolumeadd_withxy.t", "pvad_play_lookup.t"});
+                    auto & f = mf.add(test_name+"_portfolio.txt", {"spot_pda_simple.t", "spot_play_lookup.t", "historical_wellvolumeadd_withxy.t", "pvad_play_lookup.t"});
                     f<<"attsqltool tables=\"spot_pda_simple.t historical_wellvolumeadd_withxy.t\" sql=\""
                         "select "
                         "@1.play as play, "
@@ -2576,10 +2576,10 @@ class Main{
         }
     }
     void load_team_portfolios(){
-        bg.add("guwi")
+        mf.add("guwi")
             <<HELP("launch the Guwi application to edite the local copy of the portfolio")
             <<"ataedplan canvas=curr.canvas portfolio="+portfolio_path+" shared=true";
-        bg.on_softclean_retain("curr.canvas");
+        mf.on_softclean_retain("curr.canvas");
 
         if(generate_testing_report){
             create_testing_portfolios();
@@ -2587,7 +2587,7 @@ class Main{
 
         //load portfolio from portfolio database
         if(!false){
-            bg.add({"xxx_portfolio.txt", "seismic_projects.t"})
+            mf.add({"xxx_portfolio.txt", "seismic_projects.t"})
                 <<"cp "+portfolio_path+" ppd.portfolio 2>/dev/null || :"
                 <<"atdbdump db=ppd.portfolio qry=\""
                 "select drill_project.project as id, old_names, x, y,"
@@ -2625,10 +2625,10 @@ class Main{
                 " \" output=seismic_projects.t "
                 ;
 
-            bg.add("rm_db_exports")
+            mf.add("rm_db_exports")
                 <<"rm -f xxx_portfolio.txt seismic_projects.t";
 
-            bg.add("export_from_guwi", {"rm_db_exports", "xxx_portfolio.txt", "seismic_projects.t"})
+            mf.add("export_from_guwi", {"rm_db_exports", "xxx_portfolio.txt", "seismic_projects.t"})
                 <<HELP("export data from the Guwi application file (ppd.portfolio) for qc and simulation")
                 ;
             {
@@ -2646,15 +2646,15 @@ class Main{
             portfolios.push_back(p);
         }
         {
-            bg.add("pap_rrad_translation.t", "pap_rrad_translation.txt")
+            mf.add("pap_rrad_translation.t", "pap_rrad_translation.txt")
                 <<"atreadascii2tbl input=$< output=$@"
             ;
-            bg.add("rrad_portfolio_concepts_table.t", "rrad_portfolio_concepts.txt")
+            mf.add("rrad_portfolio_concepts_table.t", "rrad_portfolio_concepts.txt")
                 <<"atreadascii2tbl input=rrad_portfolio_concepts.txt output=$@"
                 //<<"attmath tmp.t ndel=0 int=true output=$@"
                 ;
 
-            bg.add("rrad_portfolio_concepts.t", {"rrad_portfolio_concepts_table.t", "pap_rrad_translation.t"})
+            mf.add("rrad_portfolio_concepts.t", {"rrad_portfolio_concepts_table.t", "pap_rrad_translation.t"})
                 <<"attsqltool tables=\"rrad_portfolio_concepts_table.t pap_rrad_translation.t\" sql=\"select @1.*, @2.pap_play_group as play from @1 inner join @2 on lower(@1.play_orig)=lower(@2.reservoir)\" output=$@"
                 ;
         }
@@ -2665,7 +2665,7 @@ class Main{
             dep.push_back("template_wf_bot.tsk");
             dep.push_back("rrad_portfolio_concepts.t");
             dep.push_back("papgis_sa.t");
-            auto &f = bg.add({"import_rrad_shapefiles", "rrad_concepts.it"}, dep);
+            auto &f = mf.add({"import_rrad_shapefiles", "rrad_concepts.it"}, dep);
             f<<HELP("Load RRAD shapefiles for play-concept polygons.");
             f<<"cat template_wf_top.tsk >interm_task_import_rrad_shapefiles.tsk";
             f<<"ls Play_Concepts/{0,1,2,3,4,5,6,7,8,9}*/*.shp 2>/dev/null | awk 'BEGIN{print \"file\"}{print \"\\\"\" $$0 \"\\\"\"}'>tmp.txt";
@@ -2678,10 +2678,10 @@ class Main{
             f<<"attinpolygon input=rrad_concepts.t xexpr=x yexpr=y newcol=inkingdom ply=papgis_sa.t plyx=x plyy=y";
             f<<"atutm2wgs84 input=rrad_concepts.t x=x y=y zone=39 newx=wgs84x newy=wgs84y";
             f<<"attforeach input_tbl=tmp2.t template=\"rm FILE;\" FILE=target | sh -v"; 
-            f<<BYPROD(itable("rrad_concepts.it"));
+            f<<BYPRODUCT(itable("rrad_concepts.it"));
             f<<TEMP("interm_task_import_rrad_shapefiles.tsk");
 
-            bg.add("rrad_concepts.shp", "rrad_concepts.it")
+            mf.add("rrad_concepts.shp", "rrad_concepts.it")
                 <<"atit2shpfile input=$< output=$@ x=wgs84x y=wgs84y"
                 ;
             gis_targets.push_back("rrad_concepts.shp");
@@ -2693,7 +2693,7 @@ class Main{
                 if(!(portfolio.team=="rrad"))
                     dep.push_back(portfolio.team+"_portfolio.t");
             }
-            auto & f = bg.add({"aed_portfolio_without_rrad.t"}, dep);
+            auto & f = mf.add({"aed_portfolio_without_rrad.t"}, dep);
             bool first=true;
             for(auto portfolio: portfolios){
                 if(!(portfolio.team=="rrad")){
@@ -2718,7 +2718,7 @@ class Main{
                             dep.push_back(portfolio.team+"_portfolio.t");
                     }
                     dep.push_back("rrad_concepts.it");
-                    auto & f = bg.add({"rrad_portfolio.t"}, dep);
+                    auto & f = mf.add({"rrad_portfolio.t"}, dep);
                     bool first=true;
                     for(auto portfolio: portfolios){
                         if(!(portfolio.team=="rrad")){
@@ -2738,11 +2738,11 @@ class Main{
                     f<<"attaddcol $@ old_names=\"''\""
                     ;
                 }
-                bg.add("rrad_portfolio.shp", "rrad_portfolio.t")
+                mf.add("rrad_portfolio.shp", "rrad_portfolio.t")
                     <<"att2shpfile input=$< output=$@ x=wgs84x y=wgs84y"
                     ;
             }else{
-                auto & f = bg.add(portfolio.team+"_portfolio.t", portfolio.file);
+                auto & f = mf.add(portfolio.team+"_portfolio.t", portfolio.file);
                     f<<"atreadascii2tbl input=$< output=tmp.t";
                     f<<"atunifyutm input=tmp.t zone=utm x=x y=y newx=u39x newy=u39y output=$@" ;
             }
@@ -2754,7 +2754,7 @@ class Main{
                 dep.push_back(portfolio.team+"_portfolio.t");
             }
             {
-                auto & f = bg.add("aed_portfolio_allteams.t",dep);
+                auto & f = mf.add("aed_portfolio_allteams.t",dep);
                 bool first=true;
                 for(auto portfolio: portfolios){
                     if(first){
@@ -2767,7 +2767,7 @@ class Main{
                 //extract hc phase attributes
                 f<<"attsqltool tmp.t sql=\"select * from @1\" output=$@";
 
-                bg.add("aed_portfolio.t", {"aed_portfolio_allteams.t", "hcphase_byplay.it", "rigaoi.it", "papgis_area_maturity.it"})
+                mf.add("aed_portfolio.t", {"aed_portfolio_allteams.t", "hcphase_byplay.it", "rigaoi.it", "papgis_area_maturity.it"})
                     <<"attsqltool tables=\"aed_portfolio_allteams.t\" sql=\"select * from @1\" output=tmp.t"
                     <<"attinpolygons input=tmp.t xexpr=u39x yexpr=u39y ply=hcphase_byplay.it plyx=x plyy=y newcol=hc_phase plyattribute=phase matchcol=play match_attrib=play"
                     <<"attinpolygons input=tmp.t xexpr=u39x yexpr=u39y ply=rigaoi.it plyx=x plyy=y plyattribute=rigaoi newcol=rigaoi output=tmp2.t"
@@ -2777,20 +2777,20 @@ class Main{
                     <<"attsqltool tables=\"tmp3.t \" sql=\"select *, case when account_as='AUTO-HC'  and well_has_gas=1 then 'GAS' when account_as='AUTO-HC' and well_has_gas=0 then 'OIL' else account_as end as project_phase from @1\" output=$@"
                     ;
 
-                bg.add("aed_portfolio.shp", "aed_portfolio.t")
+                mf.add("aed_portfolio.shp", "aed_portfolio.t")
                     <<"att2shpfile input=aed_portfolio.t output=aed_portfolio.shp x=u39x y=u39y"
                     ;
                 gis_targets.push_back("aed_portfolio.shp");
-                bg.add("aed_portfolio_overlaps.t", "aed_portfolio.t")
+                mf.add("aed_portfolio_overlaps.t", "aed_portfolio.t")
                     <<"attsqltool aed_portfolio.t sql=\"select a.play a, b.play b, count(*) as cnt from @1 a, @1 b where a.id=b.id and a.play<>b.play group by a.play, b.play\" output=$@";
             }
             //portfolio of all the considered plays; filtering out plays that PAP decide to ignore (due to lack of enough opr or for other reasons!).
-            bg.add("all_portfolio.t", {"aed_portfolio.t"})
+            mf.add("all_portfolio.t", {"aed_portfolio.t"})
                 <<"attsqltool $< headers=false sql=\"select * from @1 where lower(play) in ("+play_list+") and hashtags not like '\%#tst\%'"
                 //" and stage in ('Proposed', 'Scheduled', 'InProgress') "
                 "\" output=$@"
                 ;
-            bg.add("test_portfolio.t", "aed_portfolio.t")
+            mf.add("test_portfolio.t", "aed_portfolio.t")
                 <<"attsqltool $< headers=false sql=\"select * from @1 where lower(play) in ("+play_list+") and hashtags like '\%#TST\%'\" output=$@";
         }
     }
@@ -2856,7 +2856,7 @@ class Main{
             aois.push_back(aoi);
         }
         {
-            auto & f = bg.add("list_rigaois");
+            auto & f = mf.add("list_rigaois");
             f<<HELP("to list all the rig areas");
             for(auto item: aois){
                 std::stringstream ss;
@@ -3051,7 +3051,7 @@ class Main{
             ventures.push_back(v);
         }
         {
-            auto & f = bg.add("list_ventures");
+            auto & f = mf.add("list_ventures");
             f<<HELP("to list all the ventures");
             for(auto item: ventures){
                 std::stringstream ss;
@@ -3061,11 +3061,11 @@ class Main{
         }
     }
     void extract_point_gis_attributes(string tbl, Rule & f, bool with_plays){
-        bg.add_source(f, "papgis_sa_onshore.t");
-        bg.add_source(f, "input_rsed_area.t");
-        bg.add_source(f, "papgis_area_maturity.t");
-        bg.add_source(f, "papgis_rigdays_spatial_clusters.it");
-        bg.add_source(f, "drillzone_bop.it");
+        mf.add_source(f, "papgis_sa_onshore.t");
+        mf.add_source(f, "input_rsed_area.t");
+        mf.add_source(f, "papgis_area_maturity.t");
+        mf.add_source(f, "papgis_rigdays_spatial_clusters.it");
+        mf.add_source(f, "drillzone_bop.it");
         f<<"attinpolygon    input="+tbl+" xexpr=u39x yexpr=u39y ply=papgis_sa_onshore.t                   plyx=x plyy=y newcol=onshore_or_offshore inlabel=onshore outlabel=offshore";
         f<<"attinpolygons  input="+tbl+" xexpr=u39x yexpr=u39y ply=rigaoi.it                              plyx=x plyy=y plyattribute=rigaoi newcol=rigaoi";
         f<<"attinpolygon    input="+tbl+" xexpr=u39x yexpr=u39y ply=input_rsed_area.t                     plyx=x plyy=y newcol=aed_department inlabel=RSED outlabel=EAED";
@@ -3075,8 +3075,8 @@ class Main{
         if(with_plays){
             for(auto item: plays){
                 string play=item.first;
-                bg.add_source(f, "play_"+play+"_spot_active_portfolio.it");
-                bg.add_source(f, "play_"+play+"_booked.it");
+                mf.add_source(f, "play_"+play+"_spot_active_portfolio.it");
+                mf.add_source(f, "play_"+play+"_booked.it");
                 f<<"attinpolygons  input="+tbl+" xexpr=u39x yexpr=u39y ply=play_"+play+"_spot_active_portfolio.it plyx=u39x plyy=u39y plyattribute=seg_desc newcol="+play+"_segment overwrite=true";
                 f<<"attinpolygons  input="+tbl+" xexpr=u39x yexpr=u39y ply=play_"+play+"_booked.it         plyx=x plyy=y plyattribute=rsvr_name newcol="+play+"_booked_rsvr overwrite=true";
                 f<<"attinpolygons  input="+tbl+" xexpr=u39x yexpr=u39y ply=play_"+play+"_booked.it         plyx=x plyy=y plyattribute=type newcol="+play+"_booked_type overwrite=true";
@@ -3086,59 +3086,59 @@ class Main{
     void rigdays_analysis(){
         //areas
 
-        bg.add("historical_rigdays2.t", "eppr_spud_to_rigrelease.sql")
+        mf.add("historical_rigdays2.t", "eppr_spud_to_rigrelease.sql")
             <<"atoracle2tbl login=~/atlogin sqlfile=$< output=$@"
             <<"atunifyutm input=$@ zone=utm_zn newzone=39 x=sv_xutm_cord y=sv_yutm_cord newx=u39x newy=u39y"
             ;
-        bg.on_softclean_retain("historical_rigdays2.t");
+        mf.on_softclean_retain("historical_rigdays2.t");
 
-        bg.add("historical_rigdays2.shp", "historical_rigdays2.t")
+        mf.add("historical_rigdays2.shp", "historical_rigdays2.t")
             <<"att2shpfile input=$< x=u39x y=u39y output=$@"
             ;
 
-        bg.add("historical_rigdays.t", "eppr_bhlist.sql")
+        mf.add("historical_rigdays.t", "eppr_bhlist.sql")
             <<"atoracle2tbl login=~/atlogin sqlfile=$< output=$@"
             <<"atunifyutm input=$@ zone=utm_zn newzone=39 x=sv_xutm_cord y=sv_yutm_cord newx=u39x newy=u39y"
                 ;
-        bg.on_softclean_retain("historical_rigdays.t");
-        bg.add("tops_eppr.t")
+        mf.on_softclean_retain("historical_rigdays.t");
+        mf.add("tops_eppr.t")
                 <<"atoracle2tbl login=~/atlogin sql=\"select WB_EXPL_NAME, ST_LONG_CD, W_ST_SS_DPTH, W_ST_DMRK_DPTH from wellbore_stt_vw where W_ST_VER_CD='AAP' and st_long_cd not in ('TDPT', 'SRFD') and st_long_cd not like '\%0\%' and st_long_cd not like '\%1\%' and st_long_cd not like '\%2\%' and st_long_cd not like'\%3\%' and st_long_cd not like'\%4\%' and st_long_cd not like'\%5\%' and st_long_cd not like'\%6\%' and st_long_cd not like'\%7\%' and st_long_cd not like'\%8\%' and st_long_cd not like'\%9\%' and length(st_long_cd)=4\" output=$@"
                 <<"attsqltool $@ sql=\"select * from @1 where rowid in (select max(rowid) from @1 group by WB_EXPL_NAME, ST_LONG_CD) order by wb_expl_name, st_long_cd\" output=$@"
                 <<"attmath input=$@ expr=\"w_st_dmrk_dpth\" newcol=\"md\""
                 <<"attmath input=$@ expr='w_st_ss_dpth' newcol='z'"
                 ;
-        bg.on_softclean_retain("tops_eppr.t");
+        mf.on_softclean_retain("tops_eppr.t");
     }
     void wellcost_analysis(){
         //preparing the data for distributions
-        bg.add("well_xy.t", "eppr_well_xy.sql")
+        mf.add("well_xy.t", "eppr_well_xy.sql")
             <<"atoracle2tbl login=~/atlogin sqlfile=$< output=$@"
             <<"atunifyutm input=$@ zone=utm_zn newzone=39 x=sv_xutm_cord y=sv_yutm_cord newx=u39x newy=u39y"
                 ;
-        bg.on_softclean_retain("well_xy.t");
-        bg.add("well_utmxy.t", "eppr_well_utmxy.sql")
+        mf.on_softclean_retain("well_xy.t");
+        mf.add("well_utmxy.t", "eppr_well_utmxy.sql")
             <<"atoracle2tbl login=~/atlogin sqlfile=$< output=$@"
             <<"atunifyutm input=$@ zone=utm_zn newzone=39 x=sv_xutm_cord y=sv_yutm_cord newx=u39x newy=u39y"
                 ;
-        bg.on_softclean_retain("well_utmxy.t");
-        bg.add("pap_formation_ranker.t", "pap_formation_ranker.txt")
+        mf.on_softclean_retain("well_utmxy.t");
+        mf.add("pap_formation_ranker.t", "pap_formation_ranker.txt")
             <<"atreadascii2tbl input=$< output=tmp.t"
             <<"attsqltool tmp.t sql=\"select *, rowid as rankid from @1\" output=$@"
             ;
-        bg.add("well_xy_drillzone.t",{"well_xy.t", "pap_formation_ranker.t"})
+        mf.add("well_xy_drillzone.t",{"well_xy.t", "pap_formation_ranker.t"})
             <<"attsqltool \"well_xy.t pap_formation_ranker.t\" sql=\"select @1.*, @2.* from @1 inner join @2 on @1.cur_formation=@2.top\" output=tmp.t"
             <<"attsqltool tmp.t sql=\"select w_gnr_name, u39x, u39y, cast(max(rigdays) as float) as maxrigdays, cast(max(rankid) as int) as maxrankid, top, formation, drill_zone, area from @1 group by w_gnr_name\" output=well_xy_drillzone.t"
             ;
-        bg.add("well_xy_drillzone_bop.t", {"well_xy_drillzone.t","rig_bop.t"})
+        mf.add("well_xy_drillzone_bop.t", {"well_xy_drillzone.t","rig_bop.t"})
             <<"attsqltool tables=\"well_xy_drillzone.t rig_bop.t\" sql=\"" _cont
             " select @1.*, rig_shrt_name, max_bop_press as bop_press from @1 inner join @2 on @1.w_gnr_name like replace(@2.w_expl_name, '_', '-')\" output=$@"
             ;
-        bg.add("list_drill_zones", "pap_formation_ranker.t")
+        mf.add("list_drill_zones", "pap_formation_ranker.t")
             <<HELP("list drill zones to be used for cluster analysis and forecasting.")
             <<"@attsqltool $< sql=\"select drill_zone as rank from @1 group by drill_zone order by min(rankid)\"" ;
 
         {
-            auto & f = bg.add("historical_wellcost_with_attrib.t", {"well_xy_drillzone.t", "historical_wellcost.t"});
+            auto & f = mf.add("historical_wellcost_with_attrib.t", {"well_xy_drillzone.t", "historical_wellcost.t"});
                 f<<"attsqltool tables=\"historical_wellcost.t well_xy_drillzone.t\" sql=\"select @1.*, @2.* from @1 inner join @2 on @1.well=@2.w_gnr_name\" output=tmp.t";
                 f<<"attsqltool tmp.t sql=\"select *, cast(sap_cost/1000000 as float) as mcost from @1\" output=tmp.t";
                 extract_point_gis_attributes("tmp.t", f, false);
@@ -3146,19 +3146,19 @@ class Main{
                 f<<"attstrsort input=$@ key=cat";
         }
         {
-            auto & f = bg.add("drillcost_with_attrib.t", {"well_xy_drillzone.t", "drill_cost.t"});
+            auto & f = mf.add("drillcost_with_attrib.t", {"well_xy_drillzone.t", "drill_cost.t"});
                 f<<"attsqltool tables=\"drill_cost.t well_xy_drillzone.t\" sql=\"select @1.*, @2.* from @1 inner join @2 on @1.w_gnr_name=@2.w_gnr_name\" output=tmp.t";
                 f<<"attsqltool tmp.t sql=\"select *, cast(cost_mm as float) as mcost from @1\" output=tmp.t";
                 extract_point_gis_attributes("tmp.t", f, false);
                 f<<"attcategory2num input=tmp.t columns=\"wellcost_cluster drill_zone\" overwrite=true numcol=ncat catcol=cat output=$@" ;
                 f<<"attstrsort input=$@ key=cat";
         }
-        bg.add("historical_wellcost_with_attrib.shp", "historical_wellcost_with_attrib.t")
+        mf.add("historical_wellcost_with_attrib.shp", "historical_wellcost_with_attrib.t")
             <<"att2shpfile input=$< x=u39x y=u39y output=$@";
-        bg.add("drillcost_with_attrib.shp", "drillcost_with_attrib.t")
+        mf.add("drillcost_with_attrib.shp", "drillcost_with_attrib.t")
             <<"att2shpfile input=$< x=u39x y=u39y output=$@";
         {
-            auto & f = bg.add("historical_rigdays_with_attrib.t", {"well_xy_drillzone.t"});
+            auto & f = mf.add("historical_rigdays_with_attrib.t", {"well_xy_drillzone.t"});
                 f<<"attsqltool tables=\"well_xy_drillzone.t\" sql=\"select * from @1\" output=tmp.t";
                 extract_point_gis_attributes("tmp.t", f, false);
                 f<<"attcategory2num input=tmp.t columns=\"wellcost_cluster drill_zone\" overwrite=true numcol=ncat catcol=cat output=$@" ;
@@ -3195,19 +3195,19 @@ class Main{
             {"rsed_deepw_presalt", "wellcost_cluster in ('RSED_DEEP_WATER') and drill_zone in ('DZ-PRESALT')"},
         };
         {
-            auto &f = bg.add("list_well_clusters");
+            auto &f = mf.add("list_well_clusters");
             f<<HELP("list geo-spatial well clusters (with TD zonation) used for forecasting cost and rigdays.");
             for(auto &item: cluster_cond_list){
                 f<<"@echo '"+item.first+"   :   "+item.second+"'";
             }
 
         }
-        bg.add("analysis_wellcluster_{XXXX}_cost")<<HELP("model the drill-cost distributon for the {XXXX} well cluster.");
+        mf.add("analysis_wellcluster_{XXXX}_cost")<<HELP("model the drill-cost distributon for the {XXXX} well cluster.");
         for(auto c: cluster_cond_list){
             auto prefix = c.first;
             auto cond = c.second;
-            //bg.add("analysis_wellcluster_"+prefix+"_cost", {"historical_wellcost_with_attrib.t"})
-            bg.add("analysis_wellcluster_"+prefix+"_cost", {"drillcost_with_attrib.t"})
+            //mf.add("analysis_wellcluster_"+prefix+"_cost", {"historical_wellcost_with_attrib.t"})
+            mf.add("analysis_wellcluster_"+prefix+"_cost", {"drillcost_with_attrib.t"})
                 //<<HELP("model drill-cost distributon for the "+prefix+" geospatial cluster.")
                 <<"attsqltool $< sql=\"select * from @1 where "+cond+"\" output=tmp.t"
                 <<"atdrawdist data=tmp.t datacol=mcost maxval=200 proj=analysis_wellcluster_"+prefix+"_cost.proj"
@@ -3218,11 +3218,11 @@ class Main{
                 ;
         }
 
-        bg.add("analysis_wellcluster_{XXXX}_rigdays")<<HELP("model the rigdays distributon for the {XXXX} well cluster.");
+        mf.add("analysis_wellcluster_{XXXX}_rigdays")<<HELP("model the rigdays distributon for the {XXXX} well cluster.");
         for(auto c: cluster_cond_list){
             auto prefix = c.first;
             auto cond = c.second;
-            bg.add("analysis_wellcluster_"+prefix+"_rigdays", {"historical_rigdays_with_attrib.t"})
+            mf.add("analysis_wellcluster_"+prefix+"_rigdays", {"historical_rigdays_with_attrib.t"})
                 //<<HELP("model drill-rig-days distributon for the "+prefix+" geospatial cluster.")
                 <<"attsqltool $< sql=\"select * from @1 where "+cond+"\" output=tmp.t"
                 <<"atdrawdist data=tmp.t datacol=maxrigdays maxval=600 proj=analysis_wellcluster_"+prefix+"_rigdays.proj"
@@ -3236,7 +3236,7 @@ class Main{
 
     }
     void portfolio2program(string input_portfolio, string output_projects, string output_targets, string output_dep, bool nodel, string zero_filter="", strings carry_over_cols={}){
-            auto & f =bg.add(
+            auto & f =mf.add(
                     {output_projects, output_targets}, 
                     {input_portfolio, "seismic_projects.t", "forecast_rigdays.t", "forecast_cost.t", "aed_spot_rel.t",
                     "forecast_pos.t", "forecast_pcom.t",
@@ -3354,46 +3354,46 @@ class Main{
             f<<"atttee input=tmp_tgts.t output="+output_targets;
             f<<"atttee input=tmp_projs.t output="+output_projects;
             ;
-            bg.add(output_dep, output_targets)
+            mf.add(output_dep, output_targets)
                 <<"attsqltool $< sql=\"select project, dep, play from @1 where dep<>'NONE' group by project, dep, play\" output=$@";
     }
     void add_mcrun(string input_prefix, string output_prefix, int nitr, bool nodel, string runparams="", string zero_filter="", strings carry_over_columns={}){
             portfolio2program(input_prefix+"_portfolio.t", input_prefix+"_program_projects.t", input_prefix+"_program_targets.t", input_prefix+"_program_dep.t", nodel, zero_filter, carry_over_columns);
             //generating mcrun input distributions
-            bg.add(input_prefix+"_program_project_costs.g", input_prefix+"_program_projects.t")
+            mf.add(input_prefix+"_program_project_costs.g", input_prefix+"_program_projects.t")
                 //<<"atgendistarray input=$< jsoncol=cost_dist o1=0 d1=10 n1=1000 output=$@" ;
                 <<"atgendistarray input=$< jsoncol=cost_dist o1=0 d1=4 n1=100 output=tmp.g" 
                 <<"atrescaleaxis input=tmp.g s1="+cost_ff+" output=$@"
                 ;
-            bg.hidden_nodes.insert(input_prefix+"_program_project_costs.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_project_costs.g");
 
-            bg.add(input_prefix+"_program_project_rigyears.g", input_prefix+"_program_projects.t")
+            mf.add(input_prefix+"_program_project_rigyears.g", input_prefix+"_program_projects.t")
                     //<<"atgendistarray input=$< jsoncol=rigdays_dist o1=0 d1=14.6 n1=100 output=tmp.g" 
                     //<<"atgendistarray input=$< jsoncol=rigdays_dist o1=0 d1=7.3 n1=100 output=tmp.g" 
                     <<"atgendistarray input=$< jsoncol=rigdays_dist o1=0 d1=10 n1=100 output=tmp.g" 
                     <<"atrescaleaxis input=tmp.g s1=0.0027397260273973 output=$@"
                         ;
-            bg.hidden_nodes.insert(input_prefix+"_program_project_rigyears.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_project_rigyears.g");
             
-            bg.add(input_prefix+"_program_target_wellgasvol.g", input_prefix+"_program_targets.t")
+            mf.add(input_prefix+"_program_target_wellgasvol.g", input_prefix+"_program_targets.t")
                 <<"atgendistarray input=$< jsoncol=well_gas_bscf_dist o1=0 d1=20 n1=100 output=$@" ;
-            bg.hidden_nodes.insert(input_prefix+"_program_target_wellgasvol.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_target_wellgasvol.g");
 
-            bg.add(input_prefix+"_program_target_welloilvol.g", input_prefix+"_program_targets.t")
+            mf.add(input_prefix+"_program_target_welloilvol.g", input_prefix+"_program_targets.t")
                 <<"atgendistarray input=$< jsoncol=well_oil_mmbo_dist o1=0 d1=12 n1=100 output=$@" ;
-            bg.hidden_nodes.insert(input_prefix+"_program_target_welloilvol.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_target_welloilvol.g");
 
-            bg.add(input_prefix+"_program_target_upsidegasvol.g", input_prefix+"_program_targets.t")
+            mf.add(input_prefix+"_program_target_upsidegasvol.g", input_prefix+"_program_targets.t")
                 <<"atgendistarray input=$< jsoncol=upside_gas_bscf_dist o1=0 d1=30 n1=100 output=$@" ;
-            bg.hidden_nodes.insert(input_prefix+"_program_target_upsidegasvol.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_target_upsidegasvol.g");
 
-            bg.add(input_prefix+"_program_target_upsideoilvol.g", input_prefix+"_program_targets.t")
+            mf.add(input_prefix+"_program_target_upsideoilvol.g", input_prefix+"_program_targets.t")
                 <<"atgendistarray input=$< jsoncol=upside_oil_mmbo_dist o1=0 d1=15 n1=100 output=$@" ;
-            bg.hidden_nodes.insert(input_prefix+"_program_target_upsideoilvol.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_target_upsideoilvol.g");
 
-            bg.add(input_prefix+"_program_target_pos.g", input_prefix+"_program_targets.t")
+            mf.add(input_prefix+"_program_target_pos.g", input_prefix+"_program_targets.t")
                 <<"atgendistarray input=$< jsoncol=pos_dist o1=0 d1=0.005 n1=202 output=$@" ;
-            bg.hidden_nodes.insert(input_prefix+"_program_target_pos.g");
+            mf.hidden_nodes.insert(input_prefix+"_program_target_pos.g");
 
             precompute_list.push_back( input_prefix+"_program_projects.t"); 
             precompute_list.push_back( input_prefix+"_program_targets.t");
@@ -3409,7 +3409,7 @@ class Main{
             precompute_tables.push_back( input_prefix+"_program_targets.t");
             precompute_tables.push_back( input_prefix+"_program_dep.t");
 
-            slist tgts = {
+            StringList tgts = {
                     output_prefix+"_results.p",
                     output_prefix+"_nprospect_dist.g",
                     output_prefix+"_ncomp_dist.g",
@@ -3505,7 +3505,7 @@ class Main{
                     output_prefix+"_campaign_ncompletion.g",
                     output_prefix+"_rig_level.it",
             };
-            bg.add(tgts, {
+            mf.add(tgts, {
                     input_prefix+"_program_projects.t", 
                     input_prefix+"_program_targets.t", 
                     input_prefix+"_program_dep.t",
@@ -3630,13 +3630,13 @@ class Main{
                 " ns="+to_string(nitr)+
                 " trial="+(trial_run?"true":"false")+
                 ""+runparams+""
-                <<BYPROD(itable(output_prefix+"_rig_level.it"));
+                <<BYPRODUCT(itable(output_prefix+"_rig_level.it"));
                 ;
                 //hide targets from build graph plot
                 for(auto tgt:tgts){
-                    bg.hidden_nodes.insert(tgt);
+                    mf.hidden_nodes.insert(tgt);
                 }
-                bg.add(output_prefix+"_stat_sum.dat", { 
+                mf.add(output_prefix+"_stat_sum.dat", { 
                             output_prefix+"_nprospect_dist.g",
                             output_prefix+"_ncomp_dist.g",
                             output_prefix+"_nwellsuccess_dist.g",
@@ -3730,53 +3730,53 @@ class Main{
                     <<package_stats(output_prefix+"_rig_years_dist.g", "rig_years",  "$@")
                     ;
                 //number of completions figure
-                bg.add(output_prefix+"_nprospect_dist.pdf", output_prefix+"_nprospect_dist.g")
+                mf.add(output_prefix+"_nprospect_dist.pdf", output_prefix+"_nprospect_dist.g")
                     <<"atgraph "+output_prefix+"_nprospect_dist.g show_yaxis=false grid=false title='Prospect-Count Distribution' xlabel='Number of Prospects' ylabel='' max1=100 saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_nprospect_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_nprospect_dist.pdf");
 
                 //number of completions figure
-                bg.add(output_prefix+"_ncomp_dist.pdf", output_prefix+"_ncomp_dist.g")
+                mf.add(output_prefix+"_ncomp_dist.pdf", output_prefix+"_ncomp_dist.g")
                     <<"atgraph "+output_prefix+"_ncomp_dist.g show_yaxis=false grid=false min1=0 max1=50 autoexpand=true wheight=400 wwidth=1200 title='Well-Count Distribution' xlabel='Number of Completions' saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_ncomp_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_ncomp_dist.pdf");
 
                 //costs
-                bg.add(output_prefix+"_cost_dist.pdf", output_prefix+"_cost_dist.g")
+                mf.add(output_prefix+"_cost_dist.pdf", output_prefix+"_cost_dist.g")
                     <<"atgraph "+output_prefix+"_cost_dist.g show_yaxis=false grid=false max1=1000 autoexpand=true wheight=400 wwidth=1200 title='Cost Distribution' xlabel='Cost [$$MM]' saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_cost_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_cost_dist.pdf");
 
                 //rig years
-                bg.add(output_prefix+"_rig_years_dist.pdf", output_prefix+"_rig_years_dist.g")
+                mf.add(output_prefix+"_rig_years_dist.pdf", output_prefix+"_rig_years_dist.g")
                     <<"atgraph "+output_prefix+"_rig_years_dist.g show_yaxis=false max1=10 autoexpand=true grid=false wheight=400 wwidth=1200 title='Rig-Years Distribution' xlabel='Rig-Years' saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_rig_years_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_rig_years_dist.pdf");
 
                 //finding cost
-                bg.add(output_prefix+"_findingcost_dist.pdf", output_prefix+"_findingcost_dist.g")
+                mf.add(output_prefix+"_findingcost_dist.pdf", output_prefix+"_findingcost_dist.g")
                     <<"atgraph "+output_prefix+"_findingcost_dist.g show_yaxis=false grid=false min1=0 max1=2 autoexpand=true wheight=400 wwidth=1200 title='Baseline Finding-Cost Distribution' xlabel='Finding Cost [$$/BOE]' saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_findingcost_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_findingcost_dist.pdf");
 
                 //rig finding rate
-                bg.add(output_prefix+"_rig_gasfinding_rate_dist.pdf", output_prefix+"_rig_level.it")
+                mf.add(output_prefix+"_rig_gasfinding_rate_dist.pdf", output_prefix+"_rig_level.it")
                     <<"atgraph "+output_prefix+"_rig_gasfinding_rate_dist.g show_yaxis=false grid=false max1=200 autoexpand=true wheight=400 wwidth=1200 title='Baseline Gas-Finding Rate Distribution'  xlabel='Finding Rate [BSCF/Rig-Year]' saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_rig_gasfinding_rate_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_rig_gasfinding_rate_dist.pdf");
 
                 //rig finding rate
-                bg.add(output_prefix+"_rig_oilfinding_rate_dist.pdf", output_prefix+"_rig_level.it")
+                mf.add(output_prefix+"_rig_oilfinding_rate_dist.pdf", output_prefix+"_rig_level.it")
                     <<"atgraph "+output_prefix+"_rig_oilfinding_rate_dist.g show_yaxis=false grid=false max1=200 autoexpand=true wheight=400 wwidth=1200 title='Baseline Oil-Finding Rate Distribution'  xlabel='Finding Rate [MMBO/Rig-Year]' saveto=$@" ;
-                bg.hidden_nodes.insert(output_prefix+"_rig_oilfinding_rate_dist.pdf");
+                mf.hidden_nodes.insert(output_prefix+"_rig_oilfinding_rate_dist.pdf");
 
                 //ceating plots
                 std::map<string, string> unit_map={{"oil", "MMBO"}, {"gas", "BSCF"}, {"boe", "BOE"}};
                 std::map<string, string> title_map={{"oil", "OIP"}, {"gas", "GIP"}, {"boe", "Reserves"}, {"discovered", "Discovered"}, {"assessed", "Assessed"},{"identified","Identified"},{"unidentified","Unidentified"}, {"ytf","YTF"}};
                 for(auto maturity:std::vector<string>({"discovered", "assessed","identified","unidentified","ytf"})){
                     for(auto phase:std::vector<string>({"oil","gas","boe"})){
-                        bg.add(output_prefix+"_"+maturity+"_well"+phase+"_dist.pdf", output_prefix+"_"+maturity+"_well"+phase+"_dist.g")
+                        mf.add(output_prefix+"_"+maturity+"_well"+phase+"_dist.pdf", output_prefix+"_"+maturity+"_well"+phase+"_dist.g")
                             <<"atmath tmp.g=\"(i1()>0)*"+output_prefix+"_"+maturity+"_well"+phase+"_dist.g\""
                             <<"atgraph tmp.g show_yaxis=false grid=false max1=1000 autoexpand=true wheight=400 wwidth=1200 title='"+title_map[maturity]+" "+title_map[phase]+" Addition Distribution'  xlabel='Volume ["+unit_map[phase]+"]' saveto=$@" ;
-                        bg.hidden_nodes.insert(output_prefix+"_"+maturity+"_well"+phase+"_dist.pdf");
-                        bg.add(output_prefix+"_"+maturity+"_upside"+phase+"_dist.pdf", output_prefix+"_"+maturity+"_upside"+phase+"_dist.g")
+                        mf.hidden_nodes.insert(output_prefix+"_"+maturity+"_well"+phase+"_dist.pdf");
+                        mf.add(output_prefix+"_"+maturity+"_upside"+phase+"_dist.pdf", output_prefix+"_"+maturity+"_upside"+phase+"_dist.g")
                             <<"atmath tmp.g=\"(i1()>0)*"+output_prefix+"_"+maturity+"_upside"+phase+"_dist.g\""
                             <<"atgraph tmp.g show_yaxis=false grid=false max1=1000 autoexpand=true wheight=400 wwidth=1200 title='"+title_map[maturity]+" "+title_map[phase]+" Upside Distribution'  xlabel='Volume ["+unit_map[phase]+"]' saveto=$@" ;
-                        bg.hidden_nodes.insert(output_prefix+"_"+maturity+"_upside"+phase+"_dist.pdf");
+                        mf.hidden_nodes.insert(output_prefix+"_"+maturity+"_upside"+phase+"_dist.pdf");
                     }
                 }
 
@@ -3784,7 +3784,7 @@ class Main{
     void generate_pap_tables(){
         //prepare table to help in sql queries
         {
-            auto & f = bg.add({"update_ordered_plays", "ordered_plays.t"});
+            auto & f = mf.add({"update_ordered_plays", "ordered_plays.t"});
             f<<"@echo \"string:seq string:play string:title\" >tmp.txt";
             int seq=1;
             for(auto item: seq_plays){
@@ -3797,7 +3797,7 @@ class Main{
             f<<"atreadascii2tbl input=tmp.txt output=ordered_plays.t";
         }
         {
-            auto & f = bg.add({"pvad_play_lookup.t", "update_pvad_play_lookup"});
+            auto & f = mf.add({"pvad_play_lookup.t", "update_pvad_play_lookup"});
             f<<"@echo \"string:rescd string:play \" >tmp.txt";
             for(auto item: plays){
                 string play=item.first;
@@ -3809,7 +3809,7 @@ class Main{
             f<<"atreadascii2tbl input=tmp.txt output=pvad_play_lookup.t";
         }
         {
-            auto & f = bg.add({"spot_play_lookup.t", "update_spot_play_lookup"});
+            auto & f = mf.add({"spot_play_lookup.t", "update_spot_play_lookup"});
             f<<"@echo \"string:rescd string:play \" >tmp.txt";
             string all_spot_references;
             bool first=true;
@@ -3822,7 +3822,7 @@ class Main{
             f<<"atreadascii2tbl input=tmp.txt output=spot_play_lookup.t";
         }
         {
-            auto & f = bg.add({"play_drillzone_lookup.t", "update_play_drillzone_lookup"});
+            auto & f = mf.add({"play_drillzone_lookup.t", "update_play_drillzone_lookup"});
             f<<"@echo \"string:play string:drillzone \" >tmp.txt";
             bool first=true;
             for(auto item: plays){
@@ -3833,7 +3833,7 @@ class Main{
             f<<"atreadascii2tbl input=tmp.txt output=play_drillzone_lookup.t";
         }
         {
-            auto & f = bg.add({"update_ordered_stages", "ordered_stages.t"});
+            auto & f = mf.add({"update_ordered_stages", "ordered_stages.t"});
             f<<"@echo \"int:seq string:stage \" >tmp.txt";
             f<<"@echo \"1 Proposed\" >>tmp.txt";
             f<<"@echo \"2 Cancelled\" >>tmp.txt";
@@ -3844,7 +3844,7 @@ class Main{
             f<<"atreadascii2tbl input=tmp.txt output=ordered_stages.t";
         }
         {
-            auto & f = bg.add({"update_ordered_maturity", "ordered_maturity.t"});
+            auto & f = mf.add({"update_ordered_maturity", "ordered_maturity.t"});
             f<<"@echo \"int:seq string:maturity \" >tmp.txt";
             f<<"@echo \"1 Unidentified\" >>tmp.txt";
             f<<"@echo \"2 IdentifiedLowPOM\" >>tmp.txt";
@@ -3866,7 +3866,7 @@ class Main{
             f<<"atreadascii2tbl input=tmp.txt output=ordered_maturity.t";
         }
         {
-            auto & f = bg.add("stage_maturity_matrix.t",{"ordered_maturity.t", "ordered_stages.t"});
+            auto & f = mf.add("stage_maturity_matrix.t",{"ordered_maturity.t", "ordered_stages.t"});
             f<<"attsqltool tables=\"ordered_stages.t ordered_maturity.t\" sql=\"select @1.stage, @1.seq as stage_seq, @2.maturity, @2.seq as maturity_seq, 'INVALID' as validity from @1,@2\" output=tmp.t" ;
             f<<"attupdate tmp.t validity=\"'VALID'\" where=\"stage='Completed' and maturity_seq in (6, 8, 10, 11, 12, 13, 14, 15, 16, 17)\"";
             f<<"attupdate tmp.t validity=\"'VALID'\" where=\"stage='Concluded' and maturity_seq in (6, 8, 11, 12, 14, 15, 16, 17)\"";
@@ -3877,14 +3877,14 @@ class Main{
             f<<"atttee input=tmp.t output=$@";
         }
         {
-            auto & f = bg.add({"update_ordered_prmstypes", "ordered_prmstypes.t"});
+            auto & f = mf.add({"update_ordered_prmstypes", "ordered_prmstypes.t"});
             f<<"@echo \"string:seq string:prmstype\" >tmp.txt";
             f<<"@echo \"1 Prospective\" >>tmp.txt";
             f<<"@echo \"2 Delineation\" >>tmp.txt";
             f<<"@echo \"3 Contingent\" >>tmp.txt";
             f<<"atreadascii2tbl input=tmp.txt output=ordered_prmstypes.t";
         }
-        bg.add("update_framework", {"update_ordered_plays","update_ordered_maturity","update_ordered_stages", "update_ordered_prmstypes", "update_pvad_play_lookup", "update_spot_play_lookup", "update_play_drillzone_lookup"})
+        mf.add("update_framework", {"update_ordered_plays","update_ordered_maturity","update_ordered_stages", "update_ordered_prmstypes", "update_pvad_play_lookup", "update_spot_play_lookup", "update_play_drillzone_lookup"})
             <<HELP("update the workflows after editing plays, rig-aois, etc. in the file makefile.cpp");
             ;
     }
@@ -3895,7 +3895,7 @@ class Main{
             string play=item.first;
             auto ref_list = item.second.pvad_references;
             string bname = "play_"+play+"_booked"; // basename
-            auto &f = bg.add({bname+".it", bname+".t"}, "pvad_booked_with_far.it");
+            auto &f = mf.add({bname+".it", bname+".t"}, "pvad_booked_with_far.it");
             string where_clause;
             bool first=true;
             for(auto res: ref_list){
@@ -3910,10 +3910,10 @@ class Main{
                 where_clause="0";
             }
             f<<"atitselect input=$< where=\""+where_clause+"\" output="+bname+".it";
-            bg.add("play_"+play+"_booked.shp", "play_"+play+"_booked.it")
+            mf.add("play_"+play+"_booked.shp", "play_"+play+"_booked.it")
                  <<"atit2shpfile input=$< output=$@ x=x y=y poly=true";
             gis_targets.push_back("play_"+play+"_booked.shp");
-            bg.add("play_"+play+"_booked_table.pdf", "play_"+play+"_booked.it")
+            mf.add("play_"+play+"_booked_table.pdf", "play_"+play+"_booked.it")
                 <<"attsqltool play_"+play+"_booked.lt sql=\"select w_prim_hid, rsvr_cd from @1 group by w_prim_hid, rsvr_cd order by w_prim_hid\" output=tmp.t "
                     <<"att2latex input=tmp.t output=tmp2.tex headers=\"Field, Reservoir\" super=false caption=\"Booked Reservoirs:\" isdoc=true"
                 <<"pdflatex tmp2.tex"
@@ -3924,7 +3924,7 @@ class Main{
             string play=item.first;
             auto ref_list = item.second.pvad_references;
             string bname = "play_"+play+"_booked_oil"; // basename
-            auto &f = bg.add({bname+".it", bname+".t"}, "pvad_booked_with_far.it");
+            auto &f = mf.add({bname+".it", bname+".t"}, "pvad_booked_with_far.it");
             string where_clause="(";
             bool first=true;
             for(auto res: ref_list){
@@ -3946,7 +3946,7 @@ class Main{
             string play=item.first;
             auto ref_list = item.second.pvad_references;
             string bname = "play_"+play+"_booked_gas"; // basename
-            auto &f = bg.add({bname+".it", bname+".t"}, "pvad_booked_with_far.it");
+            auto &f = mf.add({bname+".it", bname+".t"}, "pvad_booked_with_far.it");
             string where_clause="(";
             bool first=true;
             for(auto res: ref_list){
@@ -3980,13 +3980,13 @@ class Main{
             if(where_clause==""){
                 where_clause="0";
             }
-            bg.add("play_"+play+"_historical_gaswad.t", "historical_wellvolumeadd_withxy.t")
+            mf.add("play_"+play+"_historical_gaswad.t", "historical_wellvolumeadd_withxy.t")
                 <<"attsqltool historical_wellvolumeadd_withxy.t sql=\"select year, well, reservoir, cast(oil as float) as oil_wad_mmbo, cast(gas as float) as gas_wad_bscf, u39x, u39y from @1 where is_simple like 'yes'  and use_for_fsd='yes' and gas>0 and ("+where_clause+") order by year desc\" output=$@"
                 ;
-            bg.add("play_"+play+"_historical_oilwad.t", "historical_wellvolumeadd_withxy.t")
+            mf.add("play_"+play+"_historical_oilwad.t", "historical_wellvolumeadd_withxy.t")
                 <<"attsqltool historical_wellvolumeadd_withxy.t sql=\"select year, well, reservoir, cast(oil as float) as oil_wad_mmbo, cast(gas as float) as gas_wad_bscf, u39x, u39y from @1 where is_simple like 'yes' and use_for_fsd='yes'  and oil>0 and ("+where_clause+") order by year desc\" output=$@"
                 ;
-            bg.add("play_"+play+"_booked_wad_table.pdf", "play_"+play+"_historical_gaswad.t")
+            mf.add("play_"+play+"_booked_wad_table.pdf", "play_"+play+"_historical_gaswad.t")
                 <<"attsqltool $< sql=\"select year, well, reservoir, oil_wad_mmbo, gas_wad_bscf from @1\" output=tmp.t"
                 <<"att2latex input=tmp.t output=tmp2.tex isdoc=true headers=\"Year,Well,Reservoir, OIP Booked, GIP Booked\" headers2=\",,,[MMBO],[BSCF]\" super=false caption=\"Historical Well Booking since 2005:\""
                 <<"pdflatex tmp2.tex"
@@ -3999,7 +3999,7 @@ class Main{
                 string play=item.first;
                 auto ref_list = item.second.spot_references;
                 {
-                    auto &f = bg.add("play_"+play+"_pal.t", "pal_eppr_dump.t");
+                    auto &f = mf.add("play_"+play+"_pal.t", "pal_eppr_dump.t");
                     string where_clause;
                     bool first=true;
                     for(auto res: ref_list){ if(!first){
@@ -4023,7 +4023,7 @@ class Main{
             auto ref_list = item.second.spot_references;
             {
                 string bname = "play_"+play+"_spot_all_portfolio";
-                auto &f = bg.add({bname+".it", bname+".t"}, "spot_all_portfolio.it");
+                auto &f = mf.add({bname+".it", bname+".t"}, "spot_all_portfolio.it");
                 string where_clause;
                 bool first=true;
                 for(auto res: ref_list){
@@ -4044,7 +4044,7 @@ class Main{
             }
             {
                 string bname = "play_"+play+"_spot_active_portfolio";
-                auto &f = bg.add({bname+".it", bname+".t"}, "spot_active_portfolio.it");
+                auto &f = mf.add({bname+".it", bname+".t"}, "spot_active_portfolio.it");
                 string where_clause;
                 bool first=true;
                 for(auto res: ref_list){
@@ -4064,36 +4064,36 @@ class Main{
                 f<<"atitselect input=$< where=\""+where_clause+"\" output="+bname+".it";
             }
 
-            bg.add("play_"+play+"_spot_all_portfolio.shp", "play_"+play+"_spot_all_portfolio.it")
+            mf.add("play_"+play+"_spot_all_portfolio.shp", "play_"+play+"_spot_all_portfolio.it")
                 <<"atit2shpfile input=$< output=$@ x=u39x y=u39y poly=true";
 
-            bg.add("play_"+play+"_spot_all_gas_portfolio.it", "play_"+play+"_spot_all_portfolio.it")
+            mf.add("play_"+play+"_spot_all_gas_portfolio.it", "play_"+play+"_spot_all_portfolio.it")
                 <<"atitselect input=$< where=\"bscf_mean>0\" output=$@"
-                <<BYPROD(itable("play_"+play+"_spot_all_gas_portfolio.it"))
+                <<BYPRODUCT(itable("play_"+play+"_spot_all_gas_portfolio.it"))
                 ;
 
-            bg.add("play_"+play+"_spot_all_oil_portfolio.it", "play_"+play+"_spot_all_portfolio.it")
+            mf.add("play_"+play+"_spot_all_oil_portfolio.it", "play_"+play+"_spot_all_portfolio.it")
                 <<"atitselect input=$< where=\"bscf_mean=0\" output=$@"
-                <<BYPROD(itable("play_"+play+"_spot_all_oil_portfolio.it"))
+                <<BYPRODUCT(itable("play_"+play+"_spot_all_oil_portfolio.it"))
                 ;
 
-            bg.add("play_"+play+"_spot_active_gas_portfolio.it", "play_"+play+"_spot_active_portfolio.it")
+            mf.add("play_"+play+"_spot_active_gas_portfolio.it", "play_"+play+"_spot_active_portfolio.it")
                 <<"atitselect input=$< where=\"bscf_mean>0\" output=$@"
-                <<BYPROD(itable("play_"+play+"_spot_active_gas_portfolio.it"))
+                <<BYPRODUCT(itable("play_"+play+"_spot_active_gas_portfolio.it"))
                 ;
 
-            bg.add("play_"+play+"_spot_active_oil_portfolio.it", "play_"+play+"_spot_active_portfolio.it")
+            mf.add("play_"+play+"_spot_active_oil_portfolio.it", "play_"+play+"_spot_active_portfolio.it")
                 <<"atitselect input=$< where=\"bscf_mean=0\" output=$@"
-                <<BYPROD(itable("play_"+play+"_spot_active_oil_portfolio.it"))
+                <<BYPRODUCT(itable("play_"+play+"_spot_active_oil_portfolio.it"))
                 ;
 
-            bg.add("play_"+play+"_spot_active_portfolio_gas.shp", "play_"+play+"_spot_active_portfolio.it")
+            mf.add("play_"+play+"_spot_active_portfolio_gas.shp", "play_"+play+"_spot_active_portfolio.it")
                 <<"atitselect input=$< where=\"bscf_mean>0\" output=tmp.it"
                 <<"atit2shpfile input=tmp.it output=$@ x=u39x y=u39y poly=true";
             gis_targets.push_back("play_"+play+"_spot_active_portfolio_gas.shp");
 
 
-            bg.add("play_"+play+"_spot_active_portfolio_oil.shp", "play_"+play+"_spot_active_portfolio.it")
+            mf.add("play_"+play+"_spot_active_portfolio_oil.shp", "play_"+play+"_spot_active_portfolio.it")
                 <<"atitselect input=$< where=\"bscf_mean=0\" output=tmp.it"
                 <<"atit2shpfile input=tmp.it output=$@ x=u39x y=u39y poly=true";
             gis_targets.push_back("play_"+play+"_spot_active_portfolio_oil.shp");
@@ -4103,7 +4103,7 @@ class Main{
             for(auto item: plays){
                 string play=item.first;
                 string bname = "play_"+play+"_rrad_concepts";
-                auto &f = bg.add({bname+".it", bname+".t"}, "rrad_concepts.it");
+                auto &f = mf.add({bname+".it", bname+".t"}, "rrad_concepts.it");
                 f<<"atitselect input=$< where=\"play='"+play+"'\" output="+bname+".it";
             }
         }
@@ -4113,7 +4113,7 @@ class Main{
             for(auto item: plays){
                 string play = item.first;
                 {
-                    bg.add("play_"+play+"_portfolio.t", "all_portfolio.t")
+                    mf.add("play_"+play+"_portfolio.t", "all_portfolio.t")
                     <<"attsqltool all_portfolio.t sql=\"select id, old_names, stage, play, account_as, minbop, is_nonhc, maturity, dep, prmstype, hc_phase, project_phase, u39x, u39y, hashtags, variables, comments from @1 where upper(play)=upper('"+play+"')\" output=$@"
                     ;
                 }
@@ -4121,7 +4121,7 @@ class Main{
                 {
                     string tgt="play_"+play+"_graph.pdf";
                     graphs_dep.push_back(tgt);
-                    bg.add( tgt , {"play_"+play+"_program_targets.t", "play_"+play+"_program_projects.t"})
+                    mf.add( tgt , {"play_"+play+"_program_targets.t", "play_"+play+"_program_projects.t"})
                         <<"attsqltool tables=\"play_"+play+"_program_targets.t play_"+play+"_program_projects.t\" "
                             " sql=\"select * from @1 where maturity not in ('Unidentified', 'Dropped', 'Failed', 'BookedResource', 'UnbookedResource', 'UncapturedResource') and project in (select project from @2 where stage in ('InProgress', 'Proposed', 'Scheduled', 'Completed'))\" output=tmp.t"
                         <<"attsqltool tables=\"play_"+play+"_program_targets.t tmp.t\" "
@@ -4134,7 +4134,7 @@ class Main{
                 {
                     string tgt="play_"+play+"_rrad_graph.pdf";
                     graphs_dep.push_back(tgt);
-                    bg.add( tgt , {"play_"+play+"_program_targets.t"})
+                    mf.add( tgt , {"play_"+play+"_program_targets.t"})
                         <<"attsqltool $< sql=\"select * from @1 where maturity like 'Unidentified'\" output=tmp.t"
                         <<"atcontingency_graph input=tmp.t output=tmp.txt title='Dependency Graph for "+item.second.title+"'"
                         <<"dot -Tpdf tmp.txt -o play_"+play+"_rrad_graph.pdf"
@@ -4143,24 +4143,24 @@ class Main{
                 {
                     string tgt="play_"+play+"_unidentified_graph.pdf";
                     graphs_dep.push_back(tgt);
-                    bg.add( tgt , {"play_"+play+"_program_targets.t"})
+                    mf.add( tgt , {"play_"+play+"_program_targets.t"})
                         <<"attsqltool $< sql=\"select * from @1 where maturity like 'Unidentified'\" output=tmp.t"
                         <<"atcontingency_graph input=tmp.t output=tmp.txt title='Dependency Graph for Unideinifed "+item.second.title+" Locations'"
                         <<"dot -Tpdf tmp.txt -o play_"+play+"_unidentified_graph.pdf"
                         ;
                 }
                 {
-                    bg.add("play_"+play+"_locations.shp", "play_"+play+"_portfolio.t")
+                    mf.add("play_"+play+"_locations.shp", "play_"+play+"_portfolio.t")
                         <<"attsqltool $< sql=\"select * from @1 where maturity<>'Unidentified'\" output=tmp.t"
                         <<"att2shpfile input=tmp.t x=u39x y=u39y output=$@";
                         ;
                     gis_targets.push_back("play_"+play+"_locations.shp");
-                    bg.add("play_"+play+"_rrad_locations.shp", "play_"+play+"_portfolio.t")
+                    mf.add("play_"+play+"_rrad_locations.shp", "play_"+play+"_portfolio.t")
                         <<"attsqltool $< sql=\"select * from @1 where maturity like 'Unidentified'\" output=tmp.t"
                         <<"att2shpfile input=tmp.t x=u39x y=u39y output=$@";
                         ;
                     gis_targets.push_back("play_"+play+"_rrad_locations.shp");
-                    bg.add("play_"+play+"_arrows.shp", "play_"+play+"_portfolio.t")
+                    mf.add("play_"+play+"_arrows.shp", "play_"+play+"_portfolio.t")
                         <<"attsqltool $< sql=\"select id, u39x, u39y, id as arrow_to, dep, (select u39x from @1 as t2 where trim(t2.id)=trim(t1.dep)) as u39xx, (select u39y from @1 as t2 where trim(t2.id)=trim(t1.dep)) as u39yy, (select id from @1 as t2 where trim(t2.id)=trim(t1.dep)) as arrow_from, exists(select id from @1 as t2 where trim(t2.id)=trim(t1.dep)) as from_location from @1 as t1 where dep<>'NONE' and maturity<>'Unidentified'\" output=tmp.t"
                         <<"attsqltool tmp.t sql=\"select * from @1 where from_location>0\" output=tmp2.t"
                         <<"atdrawline input=tmp2.t xmin=u39xx ymin=u39yy xmax=u39x ymax=u39y output=tmp3.it arrow=true asize=7000"
@@ -4169,7 +4169,7 @@ class Main{
                     gis_targets.push_back("play_"+play+"_arrows.shp");
                 }
             }
-            //bg.add("graphs", graphs_dep);
+            //mf.add("graphs", graphs_dep);
         }
         //checking if dependencies for each play all present in the portfolio
         {
@@ -4181,7 +4181,7 @@ class Main{
             }
             //play level checks
             {
-                auto & f = bg.add("seis_qc1", dep);
+                auto & f = mf.add("seis_qc1", dep);
                 f<<HELP("QC dependencies with non-drilling/seimsic projects");
                 f<<"@echo '##########################################################################################'";
                 f<<"@echo '## the following are dependencies not present in the plan or non-drilling project list! ##'";
@@ -4197,7 +4197,7 @@ class Main{
         //check that all plays in the input files are considers
         int nqc=1;
         {
-            auto &f = bg.add("pap_qc"+to_string(nqc++), {"aed_portfolio.t"});
+            auto &f = mf.add("pap_qc"+to_string(nqc++), {"aed_portfolio.t"});
             //f<<HELP("check for plays with new prospects with no workflow to handle them");
             f<<"@echo '###########################################################################################'";
             f<<"@echo '!!Those are plays with new prospects with no workflow to handle them!'";
@@ -4207,7 +4207,7 @@ class Main{
         }
         //check that no hardwired play is left without any target
         {
-            auto &f = bg.add("pap_qc"+to_string(nqc++), {"aed_portfolio.t"});
+            auto &f = mf.add("pap_qc"+to_string(nqc++), {"aed_portfolio.t"});
             //f<<HELP("check for plays with no features attached to them");
             f<<"@echo \"string:play\">tmp_plays.txt";
             for(auto item: plays){
@@ -4233,7 +4233,7 @@ class Main{
                     all_pvad_references+="'"+ref+"'";
                 }
             }
-            auto &f = bg.add("pap_qc"+to_string(nqc++), {"pvad_booked.it"});
+            auto &f = mf.add("pap_qc"+to_string(nqc++), {"pvad_booked.it"});
             //f<<HELP("check for plays not considered although they had booked reservoirs");
             f<<"@echo '###########################################################################################'";
             f<<"@echo '!!Those are plays not considered although they had booked reservoirs!'";
@@ -4255,7 +4255,7 @@ class Main{
                     all_spot_references+="'"+ref+"'";
                 }
             }
-            auto &f = bg.add("pap_qc"+to_string(nqc++), {"aed_portfolio.t", "spot_all_portfolio.it"});
+            auto &f = mf.add("pap_qc"+to_string(nqc++), {"aed_portfolio.t", "spot_all_portfolio.it"});
             //f<<HELP("check for plays not considered although they had gas prospects in SPOT portfolio");
             f<<"@echo '###########################################################################################'";
             f<<"@echo '!!Those are plays not considered although they had gas prospects in SPOT portfolio!'";
@@ -4267,7 +4267,7 @@ class Main{
             f<<"@attsqltool tables=\"aed_portfolio.t spot_all_portfolio.lt\" headers=false sql=\"select count(*) as cc, rsvr_cd, division, seg_name from @2 where upper(rsvr_cd) not in ("+all_spot_references+") and hc_type='OIL' group by rsvr_cd, division order by division, cc desc\"";
         }
         {
-            auto &f = bg.add("pap_qc"+to_string(nqc++), {"fsd_oil.t", "fsd_gas.t", "pos.t", "wellgasvol.t", "welloilvol.t"});
+            auto &f = mf.add("pap_qc"+to_string(nqc++), {"fsd_oil.t", "fsd_gas.t", "pos.t", "wellgasvol.t", "welloilvol.t"});
             //f<<HELP("check for plays without POS dist, oil and gas FSD, or oil and gas WAD");
             f<<"@echo '##########################'";
             f<<"@echo '!!plays without POS Dist!!'";
@@ -4292,7 +4292,7 @@ class Main{
             f<<"@echo '##########################'";
         }
         {
-            auto &f = bg.add("pap_qc"+to_string(nqc++), {"all_program_projects.t"});
+            auto &f = mf.add("pap_qc"+to_string(nqc++), {"all_program_projects.t"});
             //f<<HELP("check for wells without a cost or a rig-days distributions");
             f<<"@echo '######################################'";
             f<<"@echo '## Proposed wells without Cost Dist ##'";
@@ -4311,7 +4311,7 @@ class Main{
                 dep.push_back("papgis_play_"+play+"_phasemap.it");
             }
             {
-                auto & f=bg.add("pap_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("pap_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for HC-phase consistency between overlapping PVAD polygons and RRAD Concepts extent polygons");
                 f<<"@echo '######################################################'";
                 f<<"@echo '## PAP phasemap mismatch with booked limits!        ##'";
@@ -4331,7 +4331,7 @@ class Main{
                 dep.push_back("papgis_play_"+play+"_phasemap.it");
             }
             {
-                auto & f=bg.add("pap_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("pap_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for HC-phase consistency between overlapping PVAD polygons and RRAD Concepts extent polygons");
                 f<<"@echo '######################################################'";
                 f<<"@echo '## PAP phasemap mismatch with SPOT prospect phase!  ##'";
@@ -4348,13 +4348,13 @@ class Main{
             for(int i=1; i<nqc; i++){
                 dep.push_back("pap_qc"+to_string(i));
             }
-            bg.add("pap_qc{1-"+to_string(nqc-1)+"}", dep) <<HELP("QC Portfolio Anaytics and Planning framework");
+            mf.add("pap_qc{1-"+to_string(nqc-1)+"}", dep) <<HELP("QC Portfolio Anaytics and Planning framework");
         }
     }
     void qc_aed_inputs_stage1(){
         //check AED inputs
         int nqc=1;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "ordered_maturity.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "ordered_maturity.t"})
                 //<<HELP("Check for non-complient maturity values")
                 <<"@echo '###################################################'"
                 <<"@echo '## Checking for non-complient maturity values !! ##'"
@@ -4362,7 +4362,7 @@ class Main{
                 <<"attsqltool tables=\"aed_portfolio_without_rrad.t ordered_maturity.t\" headers=false sql=\"select id, play, maturity from @1 where maturity not in (select maturity from @2) order by id\""
                 <<"@echo '###################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "ordered_stages.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "ordered_stages.t"})
                 //<<HELP("Check for non-complient stage values")
                 <<"@echo '###################################################'"
                 <<"@echo '## Checking for non-complient stage values !!    ##'"
@@ -4370,7 +4370,7 @@ class Main{
                 <<"attsqltool tables=\"aed_portfolio_without_rrad.t ordered_stages.t\" headers=false sql=\"select id, play, stage from @1 where stage not in (select stage from @2) order by id\""
                 <<"@echo '###################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "stage_maturity_matrix.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "stage_maturity_matrix.t"})
                 //<<HELP("Check for non-complient stage-maturity pair values")
                 <<"@echo '###################################################'"
                 <<"@echo '## Checking for non-complient stage values !!    ##'"
@@ -4378,7 +4378,7 @@ class Main{
                 <<"attsqltool tables=\"aed_portfolio_without_rrad.t stage_maturity_matrix.t\" headers=false sql=\"select id, play, @1.stage, @1.maturity, @2.validity from @1 inner join @2 on @1.stage=@2.stage and @1.maturity=@2.maturity where validity like 'INVALID'\""
                 <<"@echo '###################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "ordered_prmstypes.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "ordered_prmstypes.t"})
                 //<<HELP("Check for non-complient PRMS class values")
                 <<"@echo '######################################################'"
                 <<"@echo '## Checking for non-complient PRMS classs values !! ##'"
@@ -4388,7 +4388,7 @@ class Main{
                 ;
             //check if the coordinates are close to kingdom
             //TODO: use gispap_sa.t polygon
-            bg.add("aed_qc"+to_string(nqc++), "aed_portfolio_without_rrad.t")
+            mf.add("aed_qc"+to_string(nqc++), "aed_portfolio_without_rrad.t")
                 //<<HELP("Check for AED locations outside the Kingdom")
                 <<"@echo '##############################################################'"
                 <<"@echo '## Those are locations that are too far to be in Kingdom !! ##'"
@@ -4397,7 +4397,7 @@ class Main{
                 <<"@echo '##############################################################'"
                 ;
             //check there are references that are not in the aed portfolios are in the seismic projects
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "seismic_projects.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "seismic_projects.t"})
                 //<<HELP("Check dependencies that are not in the project list")
                 <<"@echo '#####################################################################################'"
                 <<"@echo '## Those are projectes referenced as dependecies but are not in the project list!! ##'"
@@ -4405,7 +4405,7 @@ class Main{
                 <<"@attsqltool \"aed_portfolio_without_rrad.t seismic_projects.t\" headers=false sql=\"select dep, count(*) from @1 where dep not in (select id from @1 union select project from @2 union select 'NONE') group by dep \""
                 <<"@echo '#####################################################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "eppr_well_status.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t", "eppr_well_status.t"})
                 //<<HELP("Check for drilling and completed wells status in the portfolio matches the status in EPPR")
                 <<"@echo '################################################################################################'"
                 <<"@echo '## Those are wells that are completed in D&WO database but have different status in portfolio ##'"
@@ -4417,14 +4417,14 @@ class Main{
                 <<"@attsqltool \"aed_portfolio_without_rrad.t eppr_well_status.t\" headers=false sql=\"select id, stage, project_comments, project_editedon from @1 where stage not in ('InProgress', 'Completed', 'Concluded') and lower(id) in (select lower(w_gnr_name) from @2 where status like 'Drilling') group by id order by id, stage\""
                 <<"@echo '#############################################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t"})
                 //<<HELP("Check for locations targeting the same play with different well names, but within less than 1 km from each other")
                 <<"@echo '#################################################################################'"
                 <<"@echo '## The following are locations targeting the same play with different well names, but within less than 1 km from each other! ##'"
                 <<"@attsqltool \"aed_portfolio_without_rrad.t\" headers=false sql=\"select r1.id id1, r1.comments comments1,  r2.id id2, r2.comments comments2 from @1 r1, @1 r2 where r1.stage in ('Proposed', 'InPrgoress') and r2.stage in ('Proposed', 'InProgress') and r1.hashtags not like '\%#tst\%' and r2.hashtags not like '\%#tst\%' and r1.id<>r2.id and r1.play=r2.play and 1000*1000>((r1.u39x-r2.u39x)*(r1.u39x-r2.u39x)+(r1.u39y-r2.u39y)*(r1.u39y-r2.u39y)) and r1.id<r2.id group by r1.id, r2.id\""
                 <<"@echo '#################################################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t"})
                 //<<HELP("Check for locations targeting different plays with different well names, but within less than 1 km from each other")
                 <<"@echo '#################################################################################################################################'"
                 <<"@echo '## The following are locations targeting different plays with different well names, but within less than 1 km from each other! ##'"
@@ -4432,7 +4432,7 @@ class Main{
                 <<"@attsqltool \"aed_portfolio_without_rrad.t\" headers=false sql=\"select r1.id, r2.id, r1.comments, r2.comments from @1 r1, @1 r2 where r1.stage in ('Proposed', 'InProgress') and r2.stage in ('Proposed', 'InProgress') and r1.id<>r2.id and r1.play<>r2.play and 1000*1000>((r1.u39x-r2.u39x)*(r1.u39x-r2.u39x)+(r1.u39y-r2.u39y)*(r1.u39y-r2.u39y)) and r1.hashtags not like '\%#tst\%' and r2.hashtags not like '\%#tst\%' and r1.id<r2.id group by r1.id, r2.id \""
                 <<"@echo '#################################################################################################################################'"
                 ;
-            bg.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t"})
+            mf.add("aed_qc"+to_string(nqc++), {"aed_portfolio_without_rrad.t"})
                 //<<HELP("Check for locations with the same names, but in different locations")
                 <<"@echo '##################################################################################'"
                 <<"@echo '## The following are locations with the same names, but in different locations! ##'"
@@ -4445,13 +4445,13 @@ class Main{
             for(int i=1; i<nqc; i++){
                 dep.push_back("aed_qc"+to_string(i));
             }
-            bg.add("aed_qc{1-"+to_string(nqc-1)+"}", dep)<<HELP("QC AED Portfolio/Data");
+            mf.add("aed_qc{1-"+to_string(nqc-1)+"}", dep)<<HELP("QC AED Portfolio/Data");
         }
     }
     void qc_rrad_inputs_stage1(){
         int nqc=0;
         {
-            auto &f = bg.add("rrad_qc"+to_string(++nqc), {"pap_rrad_translation.t","rrad_portfolio_concepts.t"});
+            auto &f = mf.add("rrad_qc"+to_string(++nqc), {"pap_rrad_translation.t","rrad_portfolio_concepts.t"});
             //f<<HELP("Check for plays in RRAD tables that are not in the PAP RRAD Translation tables");
             f<<"@echo '###########################################################################################'";
             f<<"@echo '!!Those are plays in RRAD tables that are not in the PAP RRAD Translation Table!'";
@@ -4472,7 +4472,7 @@ class Main{
                 dep.push_back("well_xy.t");
             }
             {
-                auto &f = bg.add("rrad_qc"+to_string(++nqc), dep);
+                auto &f = mf.add("rrad_qc"+to_string(++nqc), dep);
                 //f<<HELP("Check for RRAD gas-concepts that tested oil and vice-versa");
                 f<<"@echo '###########################################################################################'";
                 f<<"@echo '!!RRAD Gas Concepts that tested oil!'";
@@ -4494,7 +4494,7 @@ class Main{
                 }
             }
             {
-                auto &f = bg.add("rrad_qc"+to_string(++nqc), dep);
+                auto &f = mf.add("rrad_qc"+to_string(++nqc), dep);
                 //f<<HELP("Check for RRAD gas-concepts that overlap with oil booking and vice-versa");
                 f<<"@echo '###########################################################################################'";
                 f<<"@echo '!!RRAD Oil Concepts that overlap gas booking!'";
@@ -4522,7 +4522,7 @@ class Main{
                 for(int i=0; i<nqc; i++){
                     dep.push_back("rrad_qc"+to_string(i+1));
                 }
-                bg.add("rrad_qc{1-"+to_string(nqc)+"}", dep)<<HELP("QC RRAD Portfolio/Data");
+                mf.add("rrad_qc{1-"+to_string(nqc)+"}", dep)<<HELP("QC RRAD Portfolio/Data");
             }
         }
         {
@@ -4549,7 +4549,7 @@ class Main{
                 //dep.push_back("well_xy.t");
             }
             //generating javed's plots
-            bg.add("javeds_plots.pdf", dep)
+            mf.add("javeds_plots.pdf", dep)
                 <<HELP("generate Javed's plots for RRAD's play concepts")
                 <<"attforeach input_tbl=rrad_portfolio_concepts.t template=\""
                     "attsqltool all_program_targets.t sql=\\\"select * from @1 where project like '\%XCONCEPTX\%'\\\" output=tmp.t; "
@@ -4621,7 +4621,7 @@ class Main{
     void join_spot_tables_with_aed_portfolio(){
         //matching realized P&L from area explration to seg id from SPOT. 
         //create mapping table if not already
-        bg.add("reset_realized_segids")
+        mf.add("reset_realized_segids")
             //<<HELP("reset the links between portfolio and SPOT P&L Portfolios")
             <<"echo \"string:play string:id int:seg_id\">tmp.txt"
             <<"atreadascii2tbl input=tmp.txt output=realized_segids.t"
@@ -4637,7 +4637,7 @@ class Main{
                 dep.push_back("play_"+play+"_spot_active_portfolio.it");
                 dep.push_back("play_"+play+"_spot_all_portfolio.it");
             }
-            auto & f = bg.add({"assign_segid", "prop_match.t"}, dep);
+            auto & f = mf.add({"assign_segid", "prop_match.t"}, dep);
             f<<HELP("link AED plans to SPOT portfolio");
             bool isfirst=true;
             for(auto item: plays){
@@ -4659,12 +4659,12 @@ class Main{
         }
 
         //sum multiple targets in the same play
-        bg.add({"assigned_pal_gas.t", "assigned_pal_gas.g"}, {"realized_segids.t", "pal_geox_all_gas.t", "pal_geox_all_gas.g"})
+        mf.add({"assigned_pal_gas.t", "assigned_pal_gas.g"}, {"realized_segids.t", "pal_geox_all_gas.t", "pal_geox_all_gas.g"})
             <<"atspot_segment_stack realized_segids=realized_segids.t pal_table=pal_geox_all_gas.t pal_dist=pal_geox_all_gas.g output_dist=assigned_pal_gas.g output_table=assigned_pal_gas.t";
-        bg.add({"assigned_pal_oil.t", "assigned_pal_oil.g"}, {"realized_segids.t", "pal_geox_all_oil.t", "pal_geox_all_oil.g"})
+        mf.add({"assigned_pal_oil.t", "assigned_pal_oil.g"}, {"realized_segids.t", "pal_geox_all_oil.t", "pal_geox_all_oil.g"})
             <<"atspot_segment_stack realized_segids=realized_segids.t pal_table=pal_geox_all_oil.t pal_dist=pal_geox_all_oil.g output_dist=assigned_pal_oil.g output_table=assigned_pal_oil.t";
         //related assessed P&Ls to SPOT tables
-        bg.add("aed_spot_rel.t", {"aed_portfolio.t", "realized_segids.t", "spot_all_portfolio.it", "assigned_pal_gas.t", "assigned_pal_oil.t"})
+        mf.add("aed_spot_rel.t", {"aed_portfolio.t", "realized_segids.t", "spot_all_portfolio.it", "assigned_pal_gas.t", "assigned_pal_oil.t"})
             <<"attsqltool tables=\"aed_portfolio.t realized_segids.t assigned_pal_gas.t spot_all_portfolio.lt assigned_pal_oil.t\" sql=\"" _cont
             "select @1.id, @1.account_as, @1.minbop,  @1.is_nonhc, @1.stage, @1.play, @1.maturity, @1.prmstype, @1.hashtags" _cont
             ", (case " _cont 
@@ -4689,7 +4689,7 @@ class Main{
             ;
     }
     void join_pvad_tables_with_aed_portfolio(){
-        bg.add("reset_rel_delineation_booking")
+        mf.add("reset_rel_delineation_booking")
             //<<HELP("reset the links between portfolio and SPOT P&L Portfolios")
             <<"echo \"string:play string:id int:objectid\">tmp.txt"
             <<"atreadascii2tbl input=tmp.txt output=rel_delineation_booking.t"
@@ -4701,7 +4701,7 @@ class Main{
                 string play = item.first;
                 dep.push_back("play_"+play+"_booked.it");
             }
-            auto & f = bg.add({"assign_bookedid", "del_match.t"}, dep);
+            auto & f = mf.add({"assign_bookedid", "del_match.t"}, dep);
             f<<HELP("link AED delineation wells to PVAD booking");
             bool isfirst=true;
             for(auto item: plays){
@@ -4734,7 +4734,7 @@ class Main{
                 dep.push_back("play_"+play+"_spot_active_portfolio.it");
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for zero-volume propsects used in planning");
                 f<<"@echo '####################################################################################################'";
                 f<<"@echo '## Check locations in AED Portfolio against x,y-locations in SPOT portfolio for linked prospects! ##'";
@@ -4755,7 +4755,7 @@ class Main{
                 f<<"attedit tmp2.t title=\"Check locations in Guwi Portfolio against x,y-locations in SPOT EPPR records for linked prospects!\"";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("Check for un-realized targets in a play that fall within a SPOT polygon within the same play");
                 f<<"@echo '####################################################################################################'";
                 f<<"@echo '## un-realized/unassessed targets in a play that fall within a SPOT polygon within the same play! ##'";
@@ -4776,7 +4776,7 @@ class Main{
                 f<<"@attsqltool tmp2.t sql=\"select * from @1 where maturity like '\%identified\%' order by id\" headers=false";
             }
             if(0){
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("Check for un-realized targets in a play that fall within a SPOT polygon within the same play");
                 f<<"@echo '#########################################################################################'";
                 f<<"@echo '## un-realized targets in a play that fall within a SPOT polygon from another play! ##'";
@@ -4802,7 +4802,7 @@ class Main{
                 f<<"@attsqltool tmp2.t sql=\"select * from @1 where maturity like '\%identified\%' order by id\" headers=false";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("Check for realized targets in a play that do not fall in any SPOT polygon within the same play");
                 f<<"@echo '###########################################################################################'";
                 f<<"@echo '## Realized targets in a play that do not fall in any SPOT polygon within the same play! ##'";
@@ -4824,7 +4824,7 @@ class Main{
                 f<<"@attsqltool tmp2.t sql=\"select * from @1 order by match_distance desc\" headers=false";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("Check for potential target additions to existing P&L in SPOT Portfolio");
                 f<<"@echo '###################################################################'";
                 //f<<"@echo '## Unused SPOT targets, that are below/above used targets! ##'";
@@ -4848,7 +4848,7 @@ class Main{
             }
             // check if there are realized targets that do not have segment ID from spot table
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), {"aed_portfolio.t", "realized_segids.t"});
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), {"aed_portfolio.t", "realized_segids.t"});
                 //f<<HELP("cross-check realized targets in the plans with the SPOT portfolio");
                 f<<"@echo '##########################################################'";
                 f<<"@echo '## assessed targets that are not assigned a segment id! ##'";
@@ -4860,7 +4860,7 @@ class Main{
                 f<<"attsqltool tables=\"aed_portfolio.t realized_segids.t\" sql=\"select seg_id from @2 where id||play not in (select id|| play from @1)\" aders=false";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), {"realized_segids.t", "pal_geox_all_gas.t", "pal_geox_all_oil.t"});
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), {"realized_segids.t", "pal_geox_all_gas.t", "pal_geox_all_oil.t"});
                 //f<<HELP("check for seg_ids in relaized_segids table that are no longer in GOEX portfolio");
                 f<<"@echo '#############################################################################'";
                 f<<"@echo '## seg_ids in relaized_segids table that are no longer in GOEX portfolio! ##'";
@@ -4868,7 +4868,7 @@ class Main{
                 f<<"attsqltool tables=\"realized_segids.t pal_geox_all_gas.t pal_geox_all_oil.t\" sql=\"select * from @1 where @1.seg_id not in (select seg_id from @2) and @1.seg_id not in (select seg_id from @3)\" ";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for unused SPOT targets, that are below/above used targets");
                 f<<"@echo '###################################################################'";
                 f<<"@echo '## Unused SPOT targets, that are below/above used targets!       ##'";
@@ -4891,7 +4891,7 @@ class Main{
                 f<<"@attsqltool tmp2.t sql=\"select * from @1 where not "+hashtag_find("RRAD")+" and not "+hashtag_find("tst")+" group by id, play order by id, play\" headers=false";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), {"aed_portfolio.t", "spot_active_portfolio.t", "realized_segids.t"});
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), {"aed_portfolio.t", "spot_active_portfolio.t", "realized_segids.t"});
                 //f<<HELP("check for gas in SPOT portfolio is not used in planning");
                 f<<"@echo '##############################################################'";
                 f<<"@echo '## volume check on how much of risked mean gas is not used! ##'";
@@ -4912,7 +4912,7 @@ class Main{
                 //f<<"@attsqltool tables=\"spot_active_portfolio.lt tmp.t\" sql=\"select pg_bscf, seg_desc, division, geox_anal_id from @1 where pg_bscf>50 and geox_anal_id=0 and seg_id not in (select seg_id from @2) order by pg_bscf desc\" headersX=false";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), {"aed_portfolio.t", "spot_active_portfolio.t", "realized_segids.t"});
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), {"aed_portfolio.t", "spot_active_portfolio.t", "realized_segids.t"});
                 //f<<HELP("check for oil in SPOT portfolio is not used in planning");
                 f<<"@echo '##############################################################'";
                 f<<"@echo '## volume check on how much of risked mean oil is not used! ##'";
@@ -4933,7 +4933,7 @@ class Main{
                 //f<<"@attsqltool tables=\"spot_active_portfolio.lt tmp.t\" sql=\"select pg_mmbo, seg_desc, division, geox_anal_id from @1 where pg_mmbo>50 and geox_anal_id=0 and seg_id not in (select seg_id from @2) order by pg_mmbo desc\" headersX=false";
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), {"aed_spot_rel.t", "spot_active_portfolio.it"});
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), {"aed_spot_rel.t", "spot_active_portfolio.it"});
                 //f<<HELP("check for zero-volume propsects used in planning");
                 f<<"@echo '############################'";
                 f<<"@echo '## zero volume prospects! ##'";
@@ -4941,7 +4941,7 @@ class Main{
                 f<<"attsqltool tables=\"aed_spot_rel.t spot_active_portfolio.lt\" sql=\"select play, id, bscf_mean, mmbo_mean, @2.seg_desc from @1 inner join @2 on @1.seg_id=@2.seg_id where maturity='Assessed' and bscf_mean=0  and mmbo_mean=0\"";
             }
             //check for cyclic dependencies
-            bg.add("ppd_qc"+to_string(nqc++), "all_program_dep.t")
+            mf.add("ppd_qc"+to_string(nqc++), "all_program_dep.t")
                 //<<HELP("check for cyclic dependencies (graphical)")
                 <<"@echo '##############################################################################################'"
                 <<"@echo '##look at the plot and make sure it is ADG (Acyclic directional graph; no loops)           ##'"
@@ -4965,7 +4965,7 @@ class Main{
                 dep.push_back("play_"+play+"_booked.it");
                 dep.push_back("play_"+play+"_portfolio.t");
             }
-            auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+            auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
             //f<<HELP("check for SPOT polygons overalping with PVAD booked limits");
             f<<"@echo '################################################################'";
             f<<"@echo '## Check if proposed delineations have booking next to them!  ##'";
@@ -4988,7 +4988,7 @@ class Main{
         }
         //spot & pvad
         {
-            auto & f=bg.add("ppd_qc"+to_string(nqc++), {"spot_pda_simple.t"});
+            auto & f=mf.add("ppd_qc"+to_string(nqc++), {"spot_pda_simple.t"});
                 f<<"@echo '########################################################################'";
                 f<<"@echo '## Commercial successes (PVAD) that are not technical success (SPOT)! ##'";
                 f<<"@echo '########################################################################'";
@@ -5004,7 +5004,7 @@ class Main{
                 dep.push_back("play_"+play+"_spot_active_portfolio.it");
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for SPOT polygons overalping with PVAD booked limits");
                 f<<"@echo '##############################################################'";
                 f<<"@echo '## SPOT polygons overalping with PVAD booked limits!        ##'";
@@ -5025,7 +5025,7 @@ class Main{
                 dep.push_back("play_"+play+"_rrad_concepts.it");
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for HC-phase consistency between overlapping PVAD polygons and RRAD Concepts extent polygons");
                 f<<"@echo '##############################################################'";
                 f<<"@echo '## RRAD Concepts overalping with PVAD booked limits!        ##'";
@@ -5046,7 +5046,7 @@ class Main{
                 dep.push_back("play_"+play+"_spot_active_portfolio.it");
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for HC-phase consistency between overlapping SPOT polygons and RRAD Concepts extent polygons");
                 f<<"@echo '##############################################################'";
                 f<<"@echo '## SPOT polygons overalping with RRAD Concepts limits!      ##'";
@@ -5066,7 +5066,7 @@ class Main{
                 dep.push_back("play_"+play+"_spot_active_portfolio.it");
             }
             {
-                auto & f=bg.add("ppd_qc"+to_string(nqc++), dep);
+                auto & f=mf.add("ppd_qc"+to_string(nqc++), dep);
                 //f<<HELP("check for HC-phase consistency between overlapping SPOT polygons and RRAD Concepts extent polygons with more details");
                 f<<"@echo '##############################################################'";
                 f<<"@echo '## SPOT polygons overalping with RRAD Concepts limits!      ##'";
@@ -5083,12 +5083,12 @@ class Main{
             for(int i=1; i<nqc; i++){
                 dep.push_back("ppd_qc"+to_string(i));
             }
-            bg.add("ppd_qc{1-"+to_string(nqc-1)+"}", dep)<<HELP("Check consistancy between inputs from PPD departments");
+            mf.add("ppd_qc{1-"+to_string(nqc-1)+"}", dep)<<HELP("Check consistancy between inputs from PPD departments");
         }
     }
     void assign_fsd_and_wad_to_targets(){
         //assign field size for targets
-        bg.add("fsd_gas.t", {"aed_spot_rel.t", "forecast_gas_fsd.t"})
+        mf.add("fsd_gas.t", {"aed_spot_rel.t", "forecast_gas_fsd.t"})
             <<"attsetwhere cond=forecast_gas_fsd.t condcol=cond valuecol=title newcol='fsd_gas_cond' input=aed_spot_rel.t output=tmp.t"
             <<"attsetwhere cond=forecast_gas_fsd.t condcol=cond valuecol=upside_gas_bscf_dist newcol='fsd_gas' input=tmp.t output=tmp.t"
             <<"attupdate input=tmp.t fsd_gas=\"'{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"assigned_pal_gas.g\\\", \\\"i2\\\":'||gas_distid||'}'\" where=\"geox_assessed>0\""
@@ -5096,25 +5096,25 @@ class Main{
             <<"atttee input=tmp.t output=$@"
             ;
         //
-        bg.add("fsd_oil.t", {"aed_spot_rel.t", "forecast_oil_fsd.t"})
+        mf.add("fsd_oil.t", {"aed_spot_rel.t", "forecast_oil_fsd.t"})
             <<"attsetwhere cond=forecast_oil_fsd.t condcol=cond valuecol=title newcol='fsd_oil_cond' input=aed_spot_rel.t output=tmp.t"
             <<"attsetwhere cond=forecast_oil_fsd.t condcol=cond valuecol=upside_oil_mmbo_dist newcol='fsd_oil' input=tmp.t output=tmp.t"
             <<"attupdate input=tmp.t fsd_oil=\"'{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"assigned_pal_oil.g\\\", \\\"i2\\\":'||oil_distid||'}'\" where=\"geox_assessed>0\""
             <<"attupdate input=tmp.t fsd_oil_cond=\"'SPOT Assigned'\" where=\"geox_assessed>0\""
             <<"atttee input=tmp.t output=$@"
             ;
-        bg.add("wellgasvol.t", {"aed_spot_rel.t", "forecast_gas_wad.t"})
+        mf.add("wellgasvol.t", {"aed_spot_rel.t", "forecast_gas_wad.t"})
             <<"attsetwhere cond=forecast_gas_wad.t condcol=cond valuecol=title newcol='wellvol_gas_cond' input=aed_spot_rel.t output=tmp.t"
             <<"attsetwhere cond=forecast_gas_wad.t condcol=cond valuecol=well_gas_bscf_dist newcol='wellvol_gas' input=tmp.t output=tmp.t"
             <<"atttee input=tmp.t output=$@"
             ;
-        bg.add("welloilvol.t", {"aed_spot_rel.t", "forecast_oil_wad.t"})
+        mf.add("welloilvol.t", {"aed_spot_rel.t", "forecast_oil_wad.t"})
             <<"attsetwhere cond=forecast_oil_wad.t condcol=cond valuecol=title newcol='wellvol_oil_cond' input=aed_spot_rel.t output=tmp.t"
             <<"attsetwhere cond=forecast_oil_wad.t condcol=cond valuecol=well_oil_mmbo_dist newcol='wellvol_oil' input=tmp.t output=tmp.t"
             <<"atttee input=tmp.t output=$@"
             ;
 
-        bg.add("pos.t", {"aed_spot_rel.t", "forecast_pos.t"})
+        mf.add("pos.t", {"aed_spot_rel.t", "forecast_pos.t"})
             <<"attsetwhere cond=forecast_pos.t condcol=cond valuecol=title newcol='pos_cond' input=aed_spot_rel.t output=tmp.t"
             <<"attsetwhere cond=forecast_pos.t condcol=cond valuecol=pos_dist input=tmp.t output=tmp.t"
             <<"attaddcol input=tmp.t p1p=\"cast(pg as float)\""
@@ -5124,31 +5124,31 @@ class Main{
             ;
 
         string array_params = "o1=0 d1=10 n1=350";
-        bg.add("fsd_gas.g", {"fsd_gas.t", "assigned_pal_gas.g"})
+        mf.add("fsd_gas.g", {"fsd_gas.t", "assigned_pal_gas.g"})
             <<"atgendistarray input=$< jsoncol=fsd_gas "+array_params+" output=$@" ;
             ;
-        bg.add("fsd_oil.g", {"fsd_oil.t", "assigned_pal_oil.g"})
+        mf.add("fsd_oil.g", {"fsd_oil.t", "assigned_pal_oil.g"})
             <<"atgendistarray input=$< jsoncol=fsd_oil "+array_params+" output=$@" ;
             ;
-        bg.add("wad_prior_gas.g", "wellgasvol.t")
+        mf.add("wad_prior_gas.g", "wellgasvol.t")
             <<"atgendistarray input=$< jsoncol=wellvol_gas "+array_params+" output=$@" ;
             ;
-        bg.add("wad_prior_oil.g", "welloilvol.t")
+        mf.add("wad_prior_oil.g", "welloilvol.t")
             <<"atgendistarray input=$< jsoncol=wellvol_oil "+array_params+" output=$@" ;
             ;
         //clip WAD to honor FSD.
-        bg.add("wad_posterior_gas.g", {"wad_prior_gas.g", "fsd_gas.g"})
+        mf.add("wad_posterior_gas.g", {"wad_prior_gas.g", "fsd_gas.g"})
             <<"atposteriorwellvolumes fsd=fsd_gas.g wad=wad_prior_gas.g output=$@"
             ;
-        bg.add("wad_posterior_oil.g", {"wad_prior_oil.g", "fsd_oil.g"})
+        mf.add("wad_posterior_oil.g", {"wad_prior_oil.g", "fsd_oil.g"})
             <<"atposteriorwellvolumes fsd=fsd_oil.g wad=wad_prior_oil.g output=$@"
             ;
-        bg.add("nwell_gas.t", {"fsd_gas.g", "wad_posterior_gas.g"})
+        mf.add("nwell_gas.t", {"fsd_gas.g", "wad_posterior_gas.g"})
             <<"atnwell fsd=fsd_gas.g wad=wad_posterior_gas.g output=$@";
-        bg.add("nwell_oil.t", {"fsd_oil.g", "wad_posterior_oil.g"})
+        mf.add("nwell_oil.t", {"fsd_oil.g", "wad_posterior_oil.g"})
             <<"atnwell fsd=fsd_oil.g wad=wad_posterior_oil.g output=$@";
 
-        bg.add("nwell.t", {"nwell_gas.t", "nwell_oil.t", "aed_spot_rel.t"})
+        mf.add("nwell.t", {"nwell_gas.t", "nwell_oil.t", "aed_spot_rel.t"})
 #ifdef MATCHSPOT
             <<"attsqltool tables=\"nwell_gas.t nwell_oil.t aed_spot_rel.t\" sql=\"select @3.*, @1.nwell as gas_nwell, @2.nwell as oil_nwell, cast(min(3, max(1, @1.nwell, @2.nwell)) as int) as nwell_1, cast(1 as int) as nwell from @1, @2, @3 where @1.rowid=@2.rowid and @1.rowid=@3.rowid\" output=$@"
 #else
@@ -5160,16 +5160,16 @@ class Main{
             <<"attupdate input=$@ nwell=1 where=\"maturity like 'UncapturedResource'\""
             ;
 
-        bg.add("fsd_gas_factorized.g", {"nwell.t", "fsd_gas.t", "fsd_gas.g"})
+        mf.add("fsd_gas_factorized.g", {"nwell.t", "fsd_gas.t", "fsd_gas.g"})
             <<"attsqltool tables=\"nwell.t fsd_gas.t\" sql=\"select @2.*, @1.nwell from @1, @2 where @1.rowid=@2.rowid \" output=tmp.t"
             <<"atsplitdistributions input=fsd_gas.g nfacttbl=tmp.t distid=fsd_gas nfactcol=nwell output=$@"
             ;
-        bg.add("fsd_oil_factorized.g", {"nwell.t", "fsd_oil.t", "fsd_oil.g"})
+        mf.add("fsd_oil_factorized.g", {"nwell.t", "fsd_oil.t", "fsd_oil.g"})
             <<"attsqltool tables=\"nwell.t fsd_oil.t\" sql=\"select @2.*, @1.nwell from @1, @2 where @1.rowid=@2.rowid \" output=tmp.t"
             <<"atsplitdistributions input=fsd_oil.g nfacttbl=tmp.t distid=fsd_oil  nfactcol=nwell output=$@"
             ;
 
-        bg.add("pos.g", "pos.t")
+        mf.add("pos.g", "pos.t")
             <<"atgendistarray input=$< jsoncol=pos_dist o1=0 d1=0.01 n1=102 output=$@" ;
             ;
     }
@@ -5183,7 +5183,7 @@ class Main{
         for(auto item: plays){
             string play = item.first;
             string target= "map_play_"+play+".dbm";
-            bg.add(target, {"template_teamreview.dbm", 
+            mf.add(target, {"template_teamreview.dbm", 
                     "play_"+play+"_arrows.shp", 
                     "play_"+play+"_locations.shp", 
                     "play_"+play+"_rrad_locations.shp", 
@@ -5206,7 +5206,7 @@ class Main{
         }
         for(auto aoi: aois){
             string target= "map_rigaoi_"+aoi.prefix+".dbm";
-            bg.add(target, {"template_rigaoi_view.dbm", 
+            mf.add(target, {"template_rigaoi_view.dbm", 
                     "rigaoi_"+aoi.prefix+"_area.shp", 
                     "sa_boundary_onshore_offshore_aat.shp",
                     "sa_boundary_onshore_offshore_negative_aat.shp",
@@ -5225,7 +5225,7 @@ class Main{
         //disable when the maps do not need to be updated or in test mode
         if(generate_maps){
             //TODO: fix the path
-            auto &f = bg.add(maps_tgt, maps_dep);
+            auto &f = mf.add(maps_tgt, maps_dep);
             //f<<FINAL;
             f<<"cat template_wf_top.tsk >interm_task_plot_play_maps.tsk";
             for(auto item: plays){
@@ -5242,25 +5242,25 @@ class Main{
     }
     void play_level_analysis(){
         //play level analysis
-        bg.add("analysis_play_{XXXX}_wc_pos")<<HELP( "model wildcat POS distributon for the XXXX play.");
-        bg.add("analysis_play_{XXXX}_del_pos")<<HELP("model delineation POS distributon for the XXXX play.");
-        bg.add("analysis_play_{XXXX}_{oil|gas}_wad")<<HELP("model (prior) well-add distributon for the XXXX play.");
-        bg.add("analysis_play_{XXXX}_{oil|gas}_fsd")<<HELP("model FSD for the {XXXX} play. This is updated by FSD and well count later.");
+        mf.add("analysis_play_{XXXX}_wc_pos")<<HELP( "model wildcat POS distributon for the XXXX play.");
+        mf.add("analysis_play_{XXXX}_del_pos")<<HELP("model delineation POS distributon for the XXXX play.");
+        mf.add("analysis_play_{XXXX}_{oil|gas}_wad")<<HELP("model (prior) well-add distributon for the XXXX play.");
+        mf.add("analysis_play_{XXXX}_{oil|gas}_fsd")<<HELP("model FSD for the {XXXX} play. This is updated by FSD and well count later.");
         for(auto & item : plays){
             string play=item.first;
             {
-                bg.add( "play_"+play+"_geox_gas_historical.t", {"play_"+play+"_pal.t", "pal_geox_all_gas.t"})
+                mf.add( "play_"+play+"_geox_gas_historical.t", {"play_"+play+"_pal.t", "pal_geox_all_gas.t"})
                     <<"attsqltool tables=\"pal_geox_all_gas.t play_"+play+"_pal.t\" sql=\"select * from @1 inner join @2 on @1.geox_anal_id=@2.geox_anal_id and seg_pre_drill_clsf_grp like 'wildcat'\" output=$@" ;
-                bg.add( "play_"+play+"_geox_oil_historical.t", {"play_"+play+"_pal.t", "pal_geox_all_oil.t"})
+                mf.add( "play_"+play+"_geox_oil_historical.t", {"play_"+play+"_pal.t", "pal_geox_all_oil.t"})
                     <<"attsqltool tables=\"pal_geox_all_oil.t play_"+play+"_pal.t\" sql=\"select * from @1 inner join @2 on @1.geox_anal_id=@2.geox_anal_id and seg_pre_drill_clsf_grp like 'wildcat'\" output=$@" ;
-                bg.add( "play_"+play+"_geox_gas_historical.g", "play_"+play+"_geox_gas_historical.t")
+                mf.add( "play_"+play+"_geox_gas_historical.g", "play_"+play+"_geox_gas_historical.t")
                     <<"atgeox2array input=$< o1=0 d1=5 n1=1701 output=$@" ;
-                bg.add( "play_"+play+"_geox_oil_historical.g", "play_"+play+"_geox_oil_historical.t")
+                mf.add( "play_"+play+"_geox_oil_historical.g", "play_"+play+"_geox_oil_historical.t")
                     <<"atgeox2array input=$< o1=0 d1=5 n1=1701 output=$@" ;
             }
 
             //play-level portfolio analytics
-            bg.add("play_"+play+"_geox_gas_fsd_stack.g", {"play_"+play+"_geox_gas_historical.g", "play_"+play+"_geox_gas_historical.t" })
+            mf.add("play_"+play+"_geox_gas_fsd_stack.g", {"play_"+play+"_geox_gas_historical.g", "play_"+play+"_geox_gas_historical.t" })
                 <<"attwind din=play_"+play+"_geox_gas_historical.g tin=play_"+play+"_geox_gas_historical.t tout=tmp1.t dout=tmp1.g expr=\"gas_unrsk_rsvrs_mean>10\""
                 <<"atmath tmp2.g=\"(i1()>0)*tmp1.g\""
                 <<"atspot_prospect_stack pal_table=tmp1.t pal_dist=tmp2.g output_dist=tmp3.g output_table=tmp3.t"
@@ -5272,7 +5272,7 @@ class Main{
                 //<<"atspot_prospect_stack pal_table=play_"+play+"_geox_gas_historical.t pal_dist=play_"+play+"_geox_gas_historical.g output_dist=tmp.g output_table=tmp.t"
                 //<<"atstack2 input=tmp.g output=$@"
                 ;
-            bg.add("play_"+play+"_geox_oil_fsd_stack.g", {"play_"+play+"_geox_oil_historical.g", "play_"+play+"_geox_oil_historical.t" })
+            mf.add("play_"+play+"_geox_oil_fsd_stack.g", {"play_"+play+"_geox_oil_historical.g", "play_"+play+"_geox_oil_historical.t" })
                 <<"attwind din=play_"+play+"_geox_oil_historical.g tin=play_"+play+"_geox_oil_historical.t tout=tmp1.t dout=tmp1.g expr=\"oil_unrsk_rsvrs_mean>10\""
                 <<"atmath tmp2.g=\"(i1()>0)*tmp1.g\""
                 <<"atspot_prospect_stack pal_table=tmp1.t pal_dist=tmp2.g output_dist=tmp3.g output_table=tmp3.t"
@@ -5284,46 +5284,46 @@ class Main{
                 //<<"atsplitdistributions input=tmp4.g nfacttbl=tmp4.t nfactcol=nwell drvw=100 nitr=1000 output=$@"
                 //<<"atstack2 input=tmp.g output=$@"
                 ;
-            bg.add("analysis_play_"+play+"_geox_gas_fsd", 
+            mf.add("analysis_play_"+play+"_geox_gas_fsd", 
                     {"play_"+play+"_geox_gas_historical.g", "play_"+play+"_geox_gas_historical.t" })
                 <<"atspot_prospect_stack pal_table=play_"+play+"_geox_gas_historical.t pal_dist=play_"+play+"_geox_gas_historical.g output_dist=tmp.g output_table=tmp.t"
                 //<<"attsort input=tmp.t key1=gas_unrsk_rsvrs_mean output=tmp1.t keep_index=true"
                 //<<"attracesort din=tmp.g tin=tmp1.t skey=new_index dout=tmp2.g tout=tmp2.t"
                 <<"atwigplot tmp.g attrib=tmp.t plotcol=pos label1=\"Volume [bscf]\" tbt_scale=true"
                     ;
-            bg.add("analysis_play_"+play+"_geox_oil_fsd", 
+            mf.add("analysis_play_"+play+"_geox_oil_fsd", 
                     {"play_"+play+"_geox_oil_historical.g", "play_"+play+"_geox_oil_historical.t" })
                 <<"atspot_prospect_stack pal_table=play_"+play+"_geox_oil_historical.t pal_dist=play_"+play+"_geox_oil_historical.g output_dist=tmp.g output_table=tmp.t"
                 //<<"attsort input=tmp.t key1=oil_unrsk_rsvrs_mean output=tmp1.t keep_index=true"
                 //<<"attracesort din=tmp.g tin=tmp1.t skey=new_index dout=tmp2.g tout=tmp2.t"
                 <<"atwigplot tmp.g attrib=tmp.t plotcol=pos label1=\"Volume [bscf]\" tbt_scale=true"
                     ;
-            bg.add("analysis_play_"+play+"_gas_cdf", "play_"+play+"_pal.t")
+            mf.add("analysis_play_"+play+"_gas_cdf", "play_"+play+"_pal.t")
                 <<"atthistogram input=$< expr='gas_unrsk_rsvrs_p90' output=tmp.t"
                 <<"attcategory2num input=tmp.t columns=\"seg_pre_drill_clsf_grp\" overwrite=true numcol=ncat catcol=cat"
                 <<"attxycplot tmp.t x=gas_unrsk_rsvrs_p90 y=cdf psize=20  minx=0 miny=0 maxy=1.1 z=ncat"
                 ;
 
-            bg.add("analysis_play_"+play+"_oil_cdf", "play_"+play+"_pal.t")
+            mf.add("analysis_play_"+play+"_oil_cdf", "play_"+play+"_pal.t")
                 <<"atthistogram input=$< expr='oil_unrsk_rsvrs_p90' output=tmp.t"
                 <<"attcategory2num input=tmp.t columns=\"seg_pre_drill_clsf_grp\" overwrite=true numcol=ncat catcol=cat"
                 <<"attxycplot tmp.t x=oil_unrsk_rsvrs_p90 y=cdf psize=20 minx=0 miny=0 maxx=100 maxy=1.1 z=ncat"
                 ;
 
-            bg.add("analysis_play_"+play+"_pos_cdf", "play_"+play+"_pal.t")
+            mf.add("analysis_play_"+play+"_pos_cdf", "play_"+play+"_pal.t")
                 <<"atthistogram input=$< expr=pos_segment output=tmp.t"
                 <<"attcategory2num input=tmp.t columns=\"seg_pre_drill_clsf_grp\" overwrite=true numcol=ncat catcol=cat"
                 <<"attxycplot tmp.t x=pos_segment y=cdf psize=20  minx=0 miny=0 maxx=1.1 maxy=1.1 z=ncat"
                 ;
 
-            bg.add("analysis_play_"+play+"_wc_pos", "play_"+play+"_pal.t")
+            mf.add("analysis_play_"+play+"_wc_pos", "play_"+play+"_pal.t")
                 //<<HELP("model POS for wildcat targets in the "+play+" play.")
                 <<"attsqltool $< sql=\"select * from @1 where seg_pre_drill_clsf_grp like 'WILDCAT'\" output=tmp.t"
                 <<"atdrawdist data=tmp.t datacol=pos_segment maxval=1 proj=analysis_play_"+play+"_wc_pos.proj"
                 <<TARGET({"analysis_play_"+play+"_wc_pos.proj", "analysis_play_"+play+"_wc_pos.t"})
                 ;
             
-            bg.add("analysis_play_"+play+"_del_pos", "play_"+play+"_pal.t")
+            mf.add("analysis_play_"+play+"_del_pos", "play_"+play+"_pal.t")
                 //<<HELP("model POS for delineation targets in the "+play+" play.")
                 <<"attsqltool $< sql=\"select * from @1 where seg_pre_drill_clsf_grp like 'DELINEATION'\" output=tmp.t"
                 <<"atdrawdist data=tmp.t datacol=pos_segment maxval=1 proj=analysis_play_"+play+"_del_pos.proj"
@@ -5331,23 +5331,23 @@ class Main{
                 ;
 
 
-            bg.add("analysis_play_"+play+"_gas_fsd", {"play_"+play+"_historical_gaswad.t", "play_"+play+"_geox_gas_fsd_stack.g"})
+            mf.add("analysis_play_"+play+"_gas_fsd", {"play_"+play+"_historical_gaswad.t", "play_"+play+"_geox_gas_fsd_stack.g"})
                 //<<HELP("model gas field-size distribution (FSD) for the "+play+" play.")
                 <<"atdrawdist data=$< datacol=gas_wad_bscf maxval=1000 proj=analysis_play_"+play+"_gas_fsd.proj pdf_overlay=play_"+play+"_geox_gas_fsd_stack.g"
                 //<<"atdrawdist data=$< datacol=gas_wad_bscf maxval=1000 proj=analysis_play_"+play+"_gas_fsd.proj pdf_overlay=analysis_play_"+play+"_gas_wad.g"
                 <<TARGET({"analysis_play_"+play+"_gas_fsd.proj", "analysis_play_"+play+"_gas_fsd.t"})
                 ;
-            bg.add("analysis_play_"+play+"_oil_fsd", {"play_"+play+"_historical_oilwad.t", "play_"+play+"_geox_oil_fsd_stack.g"})
+            mf.add("analysis_play_"+play+"_oil_fsd", {"play_"+play+"_historical_oilwad.t", "play_"+play+"_geox_oil_fsd_stack.g"})
                 //<<HELP("model oil field-size distribution (FSD) for the "+play+" play.")
                 <<"atdrawdist data=$< datacol=oil_wad_mmbo maxval=1000 proj=analysis_play_"+play+"_oil_fsd.proj pdf_overlay=play_"+play+"_geox_oil_fsd_stack.g"
                 <<TARGET({"analysis_play_"+play+"_oil_fsd.proj", "analysis_play_"+play+"_oil_fsd.t"})
                 ;
-            bg.add("analysis_play_"+play+"_gas_wad", {"play_"+play+"_historical_gaswad.t", "play_"+play+"_geox_gas_fsd_stack.g"})
+            mf.add("analysis_play_"+play+"_gas_wad", {"play_"+play+"_historical_gaswad.t", "play_"+play+"_geox_gas_fsd_stack.g"})
                 //<<HELP("model gas well-add distribution (WAD) for the "+play+" play.")
                 <<"atdrawdist data=$< datacol=gas_wad_bscf maxval=1000 proj=analysis_play_"+play+"_gas_wad.proj pdf_overlay=analysis_play_"+play+"_gas_fsd.g"
                 <<TARGET({"analysis_play_"+play+"_gas_wad.proj", "analysis_play_"+play+"_gas_wad.t"})
                 ;
-            bg.add("analysis_play_"+play+"_oil_wad", {"play_"+play+"_historical_oilwad.t", "play_"+play+"_geox_oil_fsd_stack.g"})
+            mf.add("analysis_play_"+play+"_oil_wad", {"play_"+play+"_historical_oilwad.t", "play_"+play+"_geox_oil_fsd_stack.g"})
                 //<<HELP("model oil well-add distribution (WAD) for the "+play+" play.")
                 <<"atdrawdist data=$< datacol=oil_wad_mmbo maxval=1000 proj=analysis_play_"+play+"_oil_wad.proj pdf_overlay=analysis_play_"+play+"_oil_fsd.g"
                 <<TARGET({"analysis_play_"+play+"_oil_wad.proj", "analysis_play_"+play+"_oil_wad.t"})
@@ -5371,7 +5371,7 @@ class Main{
             landscape_portfolios.push_back("all");
             { 
                 string input_prefix="all";
-                bg.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
+                mf.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
                         <<"attsqltool tables=\"all_program_targets.t all_program_projects.t\" "
                             " sql=\"select * from @1 where maturity not in ('Unidentified', 'Dropped', 'Failed', 'BookedResource', 'UnbookedResource', 'UncapturedResource') and project in (select project from @2 where stage in ('InProgress', 'Proposed', 'Scheduled', 'Completed'))\" output=tmp.t"
                         <<"attsqltool tables=\"all_program_targets.t tmp.t\" "
@@ -5451,7 +5451,7 @@ class Main{
             */
 
             report_dep.push_back("map_"+input_prefix+".pdf");
-            bg.add(input_prefix+"_spot_table.pdf", input_prefix+"_pal.t")
+            mf.add(input_prefix+"_spot_table.pdf", input_prefix+"_pal.t")
                 //<<"attsqltool $< sql=\"select upper(name) as Name, rsvr_form_cd, pos_segment as POS, cast(gas_unrsk_rsvrs_p90 as int) as Gas_P90, cast(oil_unrsk_rsvrs_p90 as int), seg_pre_drill_clsf_grp as Class from @1 where geox_anal_id>0 and seg_hc_type='Gas' order by class desc \" output=tmp.t"
                 <<"attsqltool $< sql=\"select upper(name) as Name, rsvr_form_cd, pos_segment as POS, cast(gas_unrsk_rsvrs_p90 as int) as Gas_P90, cast(oil_unrsk_rsvrs_p90 as int) as Oil_P90, seg_pre_drill_clsf_grp as Class from @1 where geox_anal_id>0 order by class desc \" output=tmp.t"
                 //<<"attsqltool $< sql=\"select upper(name) as name, pos_segment as POS, status  from @1 where pros_lead_type!='PLANNING'\" output=tmp.t"
@@ -5464,7 +5464,7 @@ class Main{
             report_dep.push_back(input_prefix+"_booked_table.pdf");
             report_dep.push_back(input_prefix+"_booked_wad_table.pdf");
 
-            bg.add({input_prefix+"_cost_forecast_table.tex", input_prefix+"_cost_forecast_plots.pdf"}, {"forecast_cost.t", input_prefix+"_program_projects.t"})
+            mf.add({input_prefix+"_cost_forecast_table.tex", input_prefix+"_cost_forecast_plots.pdf"}, {"forecast_cost.t", input_prefix+"_program_projects.t"})
                 <<"attsqltool "+input_prefix+"_program_projects.t sql=\"select cost_cond, cost_dist from @1 where cost_cond not like '\%No\%Assigned\%' and type not like 'Seismic' group by cost_cond\" output=tmp.t"
                 <<"atgendistarray input=tmp.t jsoncol=cost_dist o1=0 d1=0.1 n1=2500 output=tmp_cost_dist.g" 
                 <<"atgraph tmp_cost_dist.g single=true title="" grid=false max1=50 autoexpand=true xlabel=\"Cost [\\$$MM]\" wheight=350 show_yaxis=false saveto="+input_prefix+"_cost_forecast_plots.pdf"
@@ -5474,7 +5474,7 @@ class Main{
             report_dep.push_back(input_prefix+"_cost_forecast_table.tex");
             report_dep.push_back(input_prefix+"_cost_forecast_plots.pdf");
 
-            bg.add({input_prefix+"_rigdays_forecast_table.tex", input_prefix+"_rigdays_forecast_plots.pdf"}, {"forecast_rigdays.t", input_prefix+"_program_projects.t"})
+            mf.add({input_prefix+"_rigdays_forecast_table.tex", input_prefix+"_rigdays_forecast_plots.pdf"}, {"forecast_rigdays.t", input_prefix+"_program_projects.t"})
                 <<"attsqltool "+input_prefix+"_program_projects.t sql=\"select rigdays_cond, rigdays_dist from @1 where type like '\%Drilling\%' group by rigdays_cond\" output=tmp.t"
                 <<"atgendistarray input=tmp.t jsoncol=rigdays_dist o1=0 d1=2 n1=1000 output=tmp_rigdays_dist.g" 
                 <<"atgraph tmp_rigdays_dist.g single=true title="" grid=false max1=120 autoexpand=true xlabel=\"Rig Days\" wheight=350 show_yaxis=false saveto="+input_prefix+"_rigdays_forecast_plots.pdf"
@@ -5484,7 +5484,7 @@ class Main{
             report_dep.push_back(input_prefix+"_rigdays_forecast_table.tex");
             report_dep.push_back(input_prefix+"_rigdays_forecast_plots.pdf");
 
-            bg.add({input_prefix+"_wellgasvol_forecast_table.tex", input_prefix+"_wellgasvol_forecast_plots.pdf"}, {"forecast_gas_wad.t", input_prefix+"_program_targets.t"})
+            mf.add({input_prefix+"_wellgasvol_forecast_table.tex", input_prefix+"_wellgasvol_forecast_plots.pdf"}, {"forecast_gas_wad.t", input_prefix+"_program_targets.t"})
                 <<"attsetwhere cond=forecast_gas_wad.t condcol=cond valuecol=well_gas_bscf_dist newcol=tmp_wellgas_bscf_dist input="+input_prefix+"_program_targets.t output=tmp.t"
                 <<"attsqltool tmp.t sql=\"select well_gasvolume_cond, tmp_wellgas_bscf_dist from @1 where is_nonhc='No' and well_gasvolume_cond not like '\%seismic\%' and (maturity like 'Identified\%' or maturity like 'Unidentified') and well_gasvolume_cond not like 'Oil Targets' group by well_gasvolume_cond\" output=tmp.t"
                 <<"atgendistarray input=tmp.t jsoncol=tmp_wellgas_bscf_dist o1=0 d1=1 n1=1000 output=tmp.g" 
@@ -5495,7 +5495,7 @@ class Main{
             report_dep.push_back(input_prefix+"_wellgasvol_forecast_table.tex");
             report_dep.push_back(input_prefix+"_wellgasvol_forecast_plots.pdf");
 
-            bg.add({input_prefix+"_welloilvol_forecast_table.tex", input_prefix+"_welloilvol_forecast_plots.pdf"}, {"forecast_oil_wad.t", input_prefix+"_program_targets.t"})
+            mf.add({input_prefix+"_welloilvol_forecast_table.tex", input_prefix+"_welloilvol_forecast_plots.pdf"}, {"forecast_oil_wad.t", input_prefix+"_program_targets.t"})
                 <<"attsetwhere cond=forecast_oil_wad.t condcol=cond valuecol=well_oil_mmbo_dist newcol=tmp_welloil_mmbo_dist input="+input_prefix+"_program_targets.t output=tmp.t"
                 <<"attsqltool tmp.t sql=\"select well_oilvolume_cond, tmp_welloil_mmbo_dist from @1 where is_nonhc='No' and well_oilvolume_cond not like '\%seismic\%' and (maturity like 'Identified\%' or maturity like 'Unidentified') and well_oilvolume_cond not like 'Gas Targets' group by well_oilvolume_cond\" output=tmp.t"
                 <<"atgendistarray input=tmp.t jsoncol=tmp_welloil_mmbo_dist o1=0 d1=1 n1=1000 output=tmp.g" 
@@ -5506,7 +5506,7 @@ class Main{
             report_dep.push_back(input_prefix+"_welloilvol_forecast_table.tex");
             report_dep.push_back(input_prefix+"_welloilvol_forecast_plots.pdf");
 
-            bg.add({input_prefix+"_upsidegasvol_forecast_table.tex", input_prefix+"_upsidegasvol_forecast_plots.pdf"}, {"forecast_gas_fsd.t", input_prefix+"_program_targets.t"})
+            mf.add({input_prefix+"_upsidegasvol_forecast_table.tex", input_prefix+"_upsidegasvol_forecast_plots.pdf"}, {"forecast_gas_fsd.t", input_prefix+"_program_targets.t"})
                 <<"attsetwhere cond=forecast_gas_fsd.t condcol=cond valuecol=upside_gas_bscf_dist newcol=tmp_upsidegas_bscf_dist input="+input_prefix+"_program_targets.t output=tmp.t"
                 <<"attsetwhere cond=forecast_gas_fsd.t condcol=cond valuecol=title newcol=upside_gasvolume_cond input=tmp.t output=tmp.t"
                 <<"attsqltool tmp.t sql=\"select upside_gasvolume_cond, tmp_upsidegas_bscf_dist from @1 where is_nonhc='No' and upside_gasvolume_cond not like '\%seismic\%' and (maturity like 'Identified\%' or maturity like 'Unidentified') and upside_gasvolume_cond not like 'Oil Targets' group by upside_gasvolume_cond\" output=tmp.t"
@@ -5518,7 +5518,7 @@ class Main{
             report_dep.push_back(input_prefix+"_upsidegasvol_forecast_table.tex");
             report_dep.push_back(input_prefix+"_upsidegasvol_forecast_plots.pdf");
 
-            bg.add({input_prefix+"_upsideoilvol_forecast_table.tex", input_prefix+"_upsideoilvol_forecast_plots.pdf"}, {"forecast_oil_fsd.t", input_prefix+"_program_targets.t"})
+            mf.add({input_prefix+"_upsideoilvol_forecast_table.tex", input_prefix+"_upsideoilvol_forecast_plots.pdf"}, {"forecast_oil_fsd.t", input_prefix+"_program_targets.t"})
                 <<"attsetwhere cond=forecast_oil_fsd.t condcol=cond valuecol=upside_oil_mmbo_dist newcol=tmp_upsideoil_mmbo_dist input="+input_prefix+"_program_targets.t output=tmp.t"
                 <<"attsetwhere cond=forecast_oil_fsd.t condcol=cond valuecol=title newcol=upside_oilvolume_cond input=tmp.t output=tmp.t"
                 <<"attsqltool tmp.t sql=\"select upside_oilvolume_cond, tmp_upsideoil_mmbo_dist from @1 where is_nonhc='No' and upside_oilvolume_cond not like '\%seismic\%' and (maturity like 'Identified\%' or maturity like 'Unidentified') and upside_oilvolume_cond not like 'Gas Targets'  group by upside_oilvolume_cond\" output=tmp.t"
@@ -5531,7 +5531,7 @@ class Main{
             report_dep.push_back(input_prefix+"_upsideoilvol_forecast_plots.pdf");
 
 
-            bg.add({input_prefix+"_pos_forecast_table.tex", input_prefix+"_pos_forecast_plots.pdf"}, {"forecast_pos.t", input_prefix+"_program_targets.t"})
+            mf.add({input_prefix+"_pos_forecast_table.tex", input_prefix+"_pos_forecast_plots.pdf"}, {"forecast_pos.t", input_prefix+"_program_targets.t"})
                 <<"attsqltool "+input_prefix+"_program_targets.t sql=\"select pos_cond, pos_dist from @1 where pos_cond not like '\%No\%Assigned\%' and (maturity like 'Identified\%' or maturity like 'Unidentified') group by pos_cond\" output=tmp.t"
                 <<"atgendistarray input=tmp.t jsoncol=pos_dist o1=0 d1=0.005 n1=202 output=tmp.g" 
                 <<"atgraph tmp.g single=true title="" grid=false xlabel=\"POS\" wheight=350 show_yaxis=false max1=1.0 saveto="+input_prefix+"_pos_forecast_plots.pdf"
@@ -5541,7 +5541,7 @@ class Main{
             report_dep.push_back(input_prefix+"_pos_forecast_table.tex");
             report_dep.push_back(input_prefix+"_pos_forecast_plots.pdf");
 
-            bg.add(input_prefix+"_sumfigures_table.tex", {input_prefix+"_portfolio.t", input_prefix+"_spot_active_portfolio.it"})
+            mf.add(input_prefix+"_sumfigures_table.tex", {input_prefix+"_portfolio.t", input_prefix+"_spot_active_portfolio.it"})
                 <<"attsqltool tables=\""+input_prefix+"_portfolio.t "+input_prefix+"_spot_active_portfolio.lt\" sql=\""
                 //"select 1 as ord, 'P&L' as title, (select count(*) from @2 where hc_type='GAS') as c"
                 "select 1 as ord, 'P&L' as title, (select count(*) from @2 ) as c"
@@ -5553,7 +5553,7 @@ class Main{
                 ;
             report_dep.push_back(input_prefix+"_sumfigures_table.tex");
 
-            bg.add(input_prefix+"_sumfeatures_pom_table.tex", {input_prefix+"_portfolio.t"})
+            mf.add(input_prefix+"_sumfeatures_pom_table.tex", {input_prefix+"_portfolio.t"})
                 <<"attsqltool tables=\""+input_prefix+"_portfolio.t\" sql=\""
                 "select 1 as ord, 'High' as POM, count(*) as c from @1 where maturity like 'IdentifiedHighPOM' "
                 " union "
@@ -5566,7 +5566,7 @@ class Main{
                 ;
             report_dep.push_back(input_prefix+"_sumfeatures_pom_table.tex");
 
-            bg.add(input_prefix+"_overlap_table.tex", {"aed_portfolio_overlaps.t", "ordered_plays.t"})
+            mf.add(input_prefix+"_overlap_table.tex", {"aed_portfolio_overlaps.t", "ordered_plays.t"})
                 <<"attsqltool tables=\"aed_portfolio_overlaps.t ordered_plays.t\" sql=\"select @2.title, @1.cnt from @1 inner join @2 on lower(@1.b)=lower(@2.play) where lower(a)=lower('"+item.first+"') order by seq\" output=tmp.t"
                 <<"att2latex input=tmp.t headers=\"Play,Count\" output=$@"
                 ;
@@ -5574,7 +5574,7 @@ class Main{
             report_dep.push_back(p.basin.strat_col+".pdf");
 
             //compiling the report
-            auto & f = bg.add(input_prefix+"_interm_report.tex", report_dep);
+            auto & f = mf.add(input_prefix+"_interm_report.tex", report_dep);
                 f<<"sed <template_play_report.tex 's/TEMPLATE_TITLE/"+p.title+"/g' | \\";
                 f<<"sed 's/TEMPLATE_PLAYPREFIX/"+input_prefix+"/g' | \\";
                 f<< "sed 's/TEMPLATE_STRATCOL_PDF/"+p.basin.strat_col+"/g' | \\";
@@ -5798,7 +5798,7 @@ class Main{
 
                 f<<"cat >$@";
                 /*
-            bg.add(input_prefix+"_report.pdf", {input_prefix+"_interm_report.tex", "template_latexdoc_top.tex", "template_latexdoc_bot.tex"})
+            mf.add(input_prefix+"_report.pdf", {input_prefix+"_interm_report.tex", "template_latexdoc_top.tex", "template_latexdoc_bot.tex"})
                 <<"cat template_latexdoc_top.tex "+input_prefix+"_interm_report.tex template_latexdoc_bot.tex>"+input_prefix+"_report.tex"
                 <<"pdflatex "+input_prefix+"_report.tex"
                 ;
@@ -5815,7 +5815,7 @@ class Main{
                 string input_norrad_prefix="rigaoi_norrad_"+aoi.prefix;
                 string output_prefix="mcrun_rigaoi_"+aoi.prefix;
                 string output_norrad_prefix="mcrun_rigaoi_norrad_"+aoi.prefix;
-                bg.add(input_prefix+"_portfolio.t", {"rigaoi.it", "all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"rigaoi.it", "all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     //first window targets within the area
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where rigaoi='"+aoi.prefix+"'\" output=tmp_short_tgt_list.t"
@@ -5827,7 +5827,7 @@ class Main{
                     <<"attsqltool tables=\"tmp_long_tgt_list.t tmp_shortlist.t\" sql=\"select @1.* from @1 inner join @2 on @1.id=@2.id and @1.play=@2.play\" output=$@"
                     <<TEMP({"tmp_long_tgt_list.t", "tmp_short_tgt_list.t"})
                     ;
-                bg.add(input_norrad_prefix+"_portfolio.t", {"rigaoi.it", "all_portfolio.t"})
+                mf.add(input_norrad_prefix+"_portfolio.t", {"rigaoi.it", "all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     //first window targets within the area and execlude unidentified/RRAD concepts for a more representative assessment of required resources
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where rigaoi='"+aoi.prefix+"' and maturity <> 'Unidentified'\" output=tmp_short_tgt_list.t"
@@ -5839,7 +5839,7 @@ class Main{
                     <<"attsqltool tables=\"tmp_long_tgt_list.t tmp_shortlist.t\" sql=\"select @1.* from @1 inner join @2 on @1.id=@2.id and @1.play=@2.play\" output=$@"
                     <<TEMP({"tmp_long_tgt_list.t", "tmp_short_tgt_list.t"})
                     ;
-                bg.add(input_prefix+"_area.shp", "rigaoi.it")
+                mf.add(input_prefix+"_area.shp", "rigaoi.it")
                     <<"atitselect input=$< where=\"rigaoi='"+aoi.prefix+"'\" output=tmp.it"
                     <<"atit2shpfile input=tmp.it x=x y=y poly=true output=$@";
                 //covert portfolio to program
@@ -5863,7 +5863,7 @@ class Main{
                 compute_dep.push_back(output_prefix+"_rig_level.it");
                 compute_dep.push_back(output_norrad_prefix+"_rig_level.it");
                 //creating a plot
-                bg.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
+                mf.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
                     <<"attsqltool $< sql=\"select * from @1 where maturity not like 'Unidentified'\" output=tmp.t"
                     <<"atcontingency_graph input=tmp.t output=tmp.txt title='Dependency Graph for "+aoi.title+"'"
                     <<"dot -Tpdf tmp.txt -o $@"
@@ -5903,7 +5903,7 @@ class Main{
                 report_dep.push_back(output_norrad_prefix+"_rig_years_dist.pdf");
 
                 //compiling the report
-                auto & f = bg.add(input_prefix+"_interm_report.tex", report_dep);
+                auto & f = mf.add(input_prefix+"_interm_report.tex", report_dep);
                 f<<"sed <template_area_report.tex 's/TEMPLATE_TITLE/"+aoi.title+"/g' | \\"
                     "sed 's/TEMPLATE_MAP/map_"+input_prefix+"/g' | \\\n"
                     "sed 's/TEMPLATE_PLAN/"+input_prefix+"_graph/g' | \\"
@@ -5997,7 +5997,7 @@ class Main{
                 string prefix="2p3p";
                 string input_prefix="prms_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(prmstype) like 'DELINEATION'\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6012,7 +6012,7 @@ class Main{
                 string prefix="pros";
                 string input_prefix="prms_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(prmstype) like 'PROSPECTIVE'\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6027,7 +6027,7 @@ class Main{
                 string prefix="ctgt";
                 string input_prefix="prms_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(prmstype) like upper('CONTINGENT')\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6054,7 +6054,7 @@ class Main{
                     , "zero_flag=1", {"zero_flag"});
                 compute_dep.push_back(output_prefix+"_stat_sum.dat");
                 //creating a plot
-                bg.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
+                mf.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
                     <<"atcontingency_graph input=$< output=tmp.txt title='Dependency Graph for 2P/3P PRMS Class'"
                     <<"dot -Tpdf tmp.txt -o $@"
                     ;
@@ -6066,7 +6066,7 @@ class Main{
                 string prefix="mature";
                 string input_prefix="area_maturity_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(area_maturity) like 'MATURE'\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6081,7 +6081,7 @@ class Main{
                 string prefix="emerging";
                 string input_prefix="area_maturity_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(area_maturity) like 'EMERGING'\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6096,7 +6096,7 @@ class Main{
                 string prefix="frontier";
                 string input_prefix="area_maturity_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(area_maturity) like upper('FRONTIER')\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6111,7 +6111,7 @@ class Main{
                 string prefix="frontier_n_emerging";
                 string input_prefix="area_maturity_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(area_maturity) in ('FRONTIER', 'EMERGING')\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6145,7 +6145,7 @@ class Main{
                 string prefix="concluded";
                 string input_prefix="maturity_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where upper(stage) in ('CONCLUDED') \" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6173,7 +6173,7 @@ class Main{
                 string prefix="assessed";
                 string input_prefix="maturity_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t", "assigned_pal_gas.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t", "assigned_pal_gas.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tables=\"tmp_long_tgt_list.t assigned_pal_gas.t\" sql=\"select * from @1 inner join @2 on @1.id=@2.id and @1.play=@2.play where @2.pros_status_type like 'active'\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6201,7 +6201,7 @@ class Main{
                 string prefix= venture.prefix;
                 string input_prefix="venture_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t", "plan_vplan_baseline.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t", "plan_vplan_baseline.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where "+venture.filter+"\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6233,7 +6233,7 @@ class Main{
                 string prefix="all";
                 string input_prefix="synergy_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t"})
                     <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where hashtags like '\%synergy\%'\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -6271,7 +6271,7 @@ class Main{
             for(auto prefix:tests){
                 string input_prefix="test_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
                     <<"attsqltool test_portfolio.t sql=\"select * from @1 where "+hashtag_find(prefix)+"\" output=$@"
                     ;
                 //Note: Number of iterations is 1 ONE
@@ -6303,7 +6303,7 @@ class Main{
             for(auto prefix:tests){
                 string input_prefix="test_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
                     <<"attsqltool test_portfolio.t sql=\"select * from @1 where "+hashtag_find(prefix)+"\" output=$@"
                     ;
                 add_mcrun(input_prefix, output_prefix, nitr, false,
@@ -6326,7 +6326,7 @@ class Main{
             for(auto prefix:tests){
                 string input_prefix="test_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
                     <<"attsqltool test_portfolio.t sql=\"select * from @1 where "+hashtag_find(prefix)+"\" output=$@"
                     ;
                 add_mcrun(input_prefix, output_prefix, nitr, false,
@@ -6352,7 +6352,7 @@ class Main{
             for(auto prefix:tests){
                 string input_prefix="test_"+prefix;
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"test_portfolio.t"})
                     <<"attsqltool test_portfolio.t sql=\"select * from @1 where "+hashtag_find(prefix)+"\" output=$@"
                     ;
                 add_mcrun(input_prefix, output_prefix, nitr, false,
@@ -6368,7 +6368,7 @@ class Main{
         ///////////////////////////////////////////
         // Fixing extents
         {
-            bg.add("test_mcrun_all_axes_extent", "mcrun_all_assessed_upsidegas_dist.g")
+            mf.add("test_mcrun_all_axes_extent", "mcrun_all_assessed_upsidegas_dist.g")
                 <<HELP("Check the number of samples is enough to capture the high case; run with trial option set to true in the makefile.cpp")
                 <<"atcat2 list=\"mcrun_all_assessed_upsidegas_dist.g mcrun_all_identified_upsidegas_dist.g mcrun_all_unidentified_upsidegas_dist.g\" output=tmp.g && atmath tmp2.g=\"(i1()>0)*tmp.g\" && atgraph tmp2.g title=upsidegas"
                 <<"atcat2 list=\"mcrun_all_assessed_upsideoil_dist.g mcrun_all_identified_upsideoil_dist.g mcrun_all_unidentified_upsideoil_dist.g\" output=tmp.g && atmath tmp2.g=\"(i1()>0)*tmp.g\" && atgraph tmp2.g title=upsideoil"
@@ -6387,7 +6387,7 @@ class Main{
                 // preparing the report
                 dep.push_back(output_prefix+"_rig_level.it");
             }
-            auto & f = bg.add("test_mcrun_play_axes_extent", dep);
+            auto & f = mf.add("test_mcrun_play_axes_extent", dep);
             f<<HELP("Check the number of samples is enough to capture the high case used for play simulations");
             bool first = true;
             for(auto & play: seq_plays){
@@ -6442,7 +6442,7 @@ class Main{
                 // preparing the report
                 dep.push_back(output_prefix+"_rig_level.it");
             }
-            auto & f = bg.add("test_mcrun_rigaoi_axes_extent", dep);
+            auto & f = mf.add("test_mcrun_rigaoi_axes_extent", dep);
             f<<HELP("Check the number of samples is enough to capture the high case used for rig-aoi simulations");
             bool first = true;
             for(auto aoi:aois){
@@ -6489,7 +6489,7 @@ class Main{
                 string output_prefix="mcrun_"+input_prefix;
                 dep.push_back(output_prefix+"_rig_level.it");
             }
-            auto & f = bg.add("test_mcrun_prms_axes_extent", dep);
+            auto & f = mf.add("test_mcrun_prms_axes_extent", dep);
             f<<HELP("Check the number of samples is enough to capture the high case used for PRMS-Class simulations");
             bool first = true;
             for(auto prms_type:prms_types){
@@ -6528,11 +6528,11 @@ class Main{
             f<<"atgraph tmp_rigyears2.g title=rigyears max2=0.01";
             f<<"atgraph tmp_cost2.g title=cost max2=0.01";
         }
-        bg.add("precompute_tables", precompute_tables)
+        mf.add("precompute_tables", precompute_tables)
             <<HELP("prepare the input tables for all of the forecasts and Monte-Carlo simulations");
-        bg.add("precompute", precompute_list)
+        mf.add("precompute", precompute_list)
             <<HELP("prepare the input forecast data for all of the Monte-Carlo simulations needed for the report.");
-        bg.add("compute_all", compute_dep)
+        mf.add("compute_all", compute_dep)
             <<HELP("run all Monte-Carlo simulations needed for the report.");
     }
     void compile_testing_report(){
@@ -6546,7 +6546,7 @@ class Main{
             dep.push_back("mcrun_test_tsta_findingcost_dist.pdf");
             dep.push_back("mcrun_test_tsta_stat_sum.dat");
             //test b
-            bg.add("mcrun_test_tstb_compare_upsidegas_dist.pdf", {"forecast_gas_fsd.t", "mcrun_test_tstb_ytf_upsidegas_dist.g"})
+            mf.add("mcrun_test_tstb_compare_upsidegas_dist.pdf", {"forecast_gas_fsd.t", "mcrun_test_tstb_ytf_upsidegas_dist.g"})
                 <<"attsqltool forecast_gas_fsd.t sql=\"select upside_gas_bscf_dist as dist from @1 where cond like '\%tstb\%'"
                 " union select '{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"mcrun_test_tstb_ytf_upsidegas_dist.g\\\"}'\""
                 " output=tmp.t"
@@ -6555,7 +6555,7 @@ class Main{
                 ;
             dep.push_back("mcrun_test_tstb_compare_upsidegas_dist.pdf");
 
-            bg.add("mcrun_test_tstb_compare_wellgas_dist.pdf", {"forecast_gas_wad.t", "mcrun_test_tstb_ytf_wellgas_dist.g"})
+            mf.add("mcrun_test_tstb_compare_wellgas_dist.pdf", {"forecast_gas_wad.t", "mcrun_test_tstb_ytf_wellgas_dist.g"})
                 <<"attsqltool forecast_gas_wad.t sql=\"select well_gas_bscf_dist as dist from @1 where cond like '\%tstb\%'"
                 " union select '{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"mcrun_test_tstb_ytf_wellgas_dist.g\\\"}'\""
                 " output=tmp.t"
@@ -6564,7 +6564,7 @@ class Main{
                 ;
             dep.push_back("mcrun_test_tstb_compare_wellgas_dist.pdf");
             //test c
-            bg.add("mcrun_test_tstc_compare_upsidegas_dist.pdf", {"forecast_gas_fsd.t", "mcrun_test_tstc_ytf_upsidegas_dist.g"})
+            mf.add("mcrun_test_tstc_compare_upsidegas_dist.pdf", {"forecast_gas_fsd.t", "mcrun_test_tstc_ytf_upsidegas_dist.g"})
                 <<"attsqltool forecast_gas_fsd.t sql=\""
                 "select        '{\\\"distribution\\\":\\\"Triangular\\\", \\\"min\\\":200, \\\"mid\\\":400,\\\"max\\\":600}' dist from @1 where cond like '\%tstc\%'"
                 " union select '{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"mcrun_test_tstc_ytf_upsidegas_dist.g\\\"}'\""
@@ -6574,7 +6574,7 @@ class Main{
                 ;
             dep.push_back("mcrun_test_tstc_compare_upsidegas_dist.pdf");
             //test d
-            bg.add("mcrun_test_tstd_compare_upsidegas_dist.pdf", {"mcrun_test_tstd_ytf_upsidegas_dist.g", "tstd_ideal_agr.g"})
+            mf.add("mcrun_test_tstd_compare_upsidegas_dist.pdf", {"mcrun_test_tstd_ytf_upsidegas_dist.g", "tstd_ideal_agr.g"})
                 <<"attsqltool forecast_gas_fsd.t sql=\""
                 " select '{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"tstd_ideal_agr.g\\\"}' as dist"
                 " union"
@@ -6586,7 +6586,7 @@ class Main{
                 ;
             dep.push_back("mcrun_test_tstd_compare_upsidegas_dist.pdf");
             //test e
-            bg.add("mcrun_test_tste_compare_wellgas_dist.pdf", {"mcrun_test_tste_ytf_wellgas_dist.g", "tste_ideal_agr.g"})
+            mf.add("mcrun_test_tste_compare_wellgas_dist.pdf", {"mcrun_test_tste_ytf_wellgas_dist.g", "tste_ideal_agr.g"})
                 <<"attsqltool forecast_gas_wad.t sql=\""
                 " select '{\\\"distribution\\\":\\\"RegularlySampled\\\", \\\"load\\\":\\\"tste_ideal_agr.g\\\"}' as dist"
                 " union"
@@ -6603,7 +6603,7 @@ class Main{
                 for(int i=0; i<tstf_ntest; i++){
                     dep.push_back("mcrun_test_tstf"+to_string(i)+"_ytf_wellgas_dist.g");
                 }
-                auto & f = bg.add("tstf_gas_results.pdf", dep);
+                auto & f = mf.add("tstf_gas_results.pdf", dep);
                 bool first = true;
                 for(int i=0; i<tstf_ntest; i++){
                     if(first){
@@ -6627,7 +6627,7 @@ class Main{
                 for(int i=0; i<tstf_ntest; i++){
                     dep.push_back("mcrun_test_tstf"+to_string(i)+"_ytf_welloil_dist.g");
                 }
-                auto & f = bg.add("tstf_oil_results.pdf", dep);
+                auto & f = mf.add("tstf_oil_results.pdf", dep);
                 bool first = true;
                 for(int i=0; i<tstf_ntest; i++){
                     if(first){
@@ -6653,7 +6653,7 @@ class Main{
                 for(int i=2005; i<current_year; i++){
                     dep.push_back("mcrun_test_tstg"+to_string(i)+"_ytf_wellgas_dist.g");
                 }
-                auto & f = bg.add("tstg_gas_results.pdf", dep);
+                auto & f = mf.add("tstg_gas_results.pdf", dep);
                 bool first = true;
                 for(int i=2005; i<current_year; i++){
                     if(first){
@@ -6675,7 +6675,7 @@ class Main{
                 for(int i=2005; i<current_year; i++){
                     dep.push_back("mcrun_test_tstg"+to_string(i)+"_ytf_welloil_dist.g");
                 }
-                auto & f = bg.add("tstg_oil_results.pdf", dep);
+                auto & f = mf.add("tstg_oil_results.pdf", dep);
                 bool first = true;
                 for(int i=2005; i<current_year; i++){
                     if(first){
@@ -6699,7 +6699,7 @@ class Main{
                 for(auto play: seq_plays){
                     dep.push_back("mcrun_test_tstm_"+play+"_ytf_wellgas_dist.g");
                 }
-                auto & f = bg.add("tstm_gas_results.pdf", dep);
+                auto & f = mf.add("tstm_gas_results.pdf", dep);
                 bool first = true;
                 int i=0;
                 for(auto play: seq_plays){
@@ -6723,7 +6723,7 @@ class Main{
                 for(auto play: seq_plays){
                     dep.push_back("mcrun_test_tstm_"+play+"_ytf_welloil_dist.g");
                 }
-                auto & f = bg.add("tstm_oil_results.pdf", dep);
+                auto & f = mf.add("tstm_oil_results.pdf", dep);
                 bool first = true;
                 int i=0;
                 for(auto play: seq_plays){
@@ -6749,7 +6749,7 @@ class Main{
                 for(int i=0; i<tstf_ntest; i++){
                     dep.push_back("mcrun_test_tsth"+to_string(i)+"_targetsuccessrate_dist.g");
                 }
-                auto & f = bg.add({
+                auto & f = mf.add({
                         "tsth_pos_commercial_results.pdf",
                         "tsth_pos_technical_results.pdf",
                         "tsth_pos_commercial_results_with_stretch.pdf",
@@ -6793,7 +6793,7 @@ class Main{
                 for(int i=2013; i<current_year; i++){
                     dep.push_back("mcrun_test_tsti"+to_string(i)+"_targetsuccessrate_dist.g");
                 }
-                auto & f = bg.add({"tsti_pos_results.pdf", 
+                auto & f = mf.add({"tsti_pos_results.pdf", 
                         "tsti_pos_commercial_results.pdf",
                         "tsti_pos_technical_results.pdf",
                         "tsti_pos_commercial_results_with_stretch.pdf"
@@ -6838,7 +6838,7 @@ class Main{
                 for(int i=2013; i<current_year; i++){
                     dep.push_back("tstj"+to_string(i)+"_portfolio.t");
                 }
-                auto & f = bg.add("tstj_results.t", dep);
+                auto & f = mf.add("tstj_results.t", dep);
                 bool first = true;
                 for(int i=2013; i<current_year; i++){
                     if(first){
@@ -6864,7 +6864,7 @@ class Main{
                 for(int i=2013; i<current_year; i++){
                     dep.push_back("mcrun_test_tstj"+to_string(i)+"_ytf_wellgas_dist.g");
                 }
-                auto & f = bg.add("tstj_gas_results.pdf", dep);
+                auto & f = mf.add("tstj_gas_results.pdf", dep);
                 bool first = true;
                 for(int i=2013; i<current_year; i++){
                     if(first){
@@ -6887,7 +6887,7 @@ class Main{
                 for(int i=2013; i<current_year; i++){
                     dep.push_back("mcrun_test_tstj"+to_string(i)+"_ytf_welloil_dist.g");
                 }
-                auto & f = bg.add("tstj_oil_results.pdf", dep);
+                auto & f = mf.add("tstj_oil_results.pdf", dep);
                 bool first = true;
                 for(int i=2013; i<current_year; i++){
                     if(first){
@@ -6910,7 +6910,7 @@ class Main{
                 for(int i=2013; i<current_year; i++){
                     dep.push_back("mcrun_test_tstj"+to_string(i)+"_targetsuccessrate_dist.g");
                 }
-                auto & f = bg.add({"tstj_pos_results.pdf", 
+                auto & f = mf.add({"tstj_pos_results.pdf", 
                         "tstj_pos_commercial_results.pdf",
                         "tstj_pos_technical_results.pdf",
                         "tstj_pos_commercial_results_with_stretch.pdf"
@@ -6951,7 +6951,7 @@ class Main{
                 }
                 int i=0;
                 for(auto wcdel: vector<string>({"Prospective", "Delineation"})){
-                    auto & f = bg.add("tstk_"+wcdel+"_results.t", dep);
+                    auto & f = mf.add("tstk_"+wcdel+"_results.t", dep);
                     bool first = true;
                     for(auto play: seq_plays){
                         string test_name = "tstk_"+play+"_"+wcdel;
@@ -6985,7 +6985,7 @@ class Main{
                     }
                 }
                 for(auto wcdel: vector<string>({"Prospective", "Delineation"})){
-                    auto & f = bg.add("tstk_oil_"+wcdel+"_results.pdf", dep0);
+                    auto & f = mf.add("tstk_oil_"+wcdel+"_results.pdf", dep0);
                     bool first = true;
                     for(auto play: seq_plays){
                         string test_name = "tstk_"+play+"_"+wcdel;
@@ -7017,7 +7017,7 @@ class Main{
                     }
                 }
                 for(auto wcdel: vector<string>({"Prospective", "Delineation"})){
-                    auto & f = bg.add("tstk_gas_"+wcdel+"_results.pdf", dep0);
+                    auto & f = mf.add("tstk_gas_"+wcdel+"_results.pdf", dep0);
                     bool first = true;
                     for(auto play: seq_plays){
                         string test_name = "tstk_"+play+"_"+wcdel;
@@ -7049,7 +7049,7 @@ class Main{
                     }
                 }
                 for(auto wcdel: vector<string>({"Prospective", "Delineation"})){
-                    auto & f = bg.add({
+                    auto & f = mf.add({
                             "tstk_"+wcdel+"_pos_commercial_results.pdf",
                             "tstk_"+wcdel+"_pos_technical_results.pdf"
                             }, dep0);
@@ -7076,7 +7076,7 @@ class Main{
             }
 
 
-            auto & f = bg.add("testing_interm_report.tex", dep);
+            auto & f = mf.add("testing_interm_report.tex", dep);
             f<<"cat <template_testing_report.tex | \\";
             f<<"sed \"s/TEMPLATE_TSTA_UPSIDEGAS_MODE/`atgetval input=mcrun_test_tsta_stat_sum.dat var=ytf_upsidegas_sc_mode`/g\" | \\";
             f<<"sed \"s/TEMPLATE_TSTA_UPSIDEOIL_MODE/`atgetval input=mcrun_test_tsta_stat_sum.dat var=ytf_upsideoil_sc_mode`/g\" | \\";
@@ -7086,7 +7086,7 @@ class Main{
             f<<"sed \"s/TEMPLATE_TSTA_FINDINGCOST_IDEAL/"+to_string(100.0/(std::stof(plays["abdr"].oil_rf)*200.0+std::stof(plays["abdr"].gas_rf)*100.0/5.4))+"/g\" | \\";
             f<<"cat >$@";
         }
-        bg.add( "testing_report.pdf", {"template_latexdoc_top.tex", "template_latexdoc_bot.tex", "testing_interm_report.tex"})
+        mf.add( "testing_report.pdf", {"template_latexdoc_top.tex", "template_latexdoc_bot.tex", "testing_interm_report.tex"})
             <<HELP("buid a testing report to validate codes, models, and assumptions.")
             <<"cat template_latexdoc_top.tex testing_interm_report.tex template_latexdoc_bot.tex>testing_report.tex"
             <<"pdflatex testing_report.tex"
@@ -7118,7 +7118,7 @@ class Main{
             }
             dep.push_back("mcrun_prms_2p3p_rig_level.it");
             dep.push_back("mcrun_prms_pros_rig_level.it");
-            bg.add("aed_target_sumfigures_table.tex", {"all_portfolio.t", "spot_active_portfolio.it", "realized_segids.t"})
+            mf.add("aed_target_sumfigures_table.tex", {"all_portfolio.t", "spot_active_portfolio.it", "realized_segids.t"})
                 <<"@attsqltool tables=\"aed_portfolio.t realized_segids.t\" sql=\"select seg_id from @2 where id||play in (select id|| play from @1)\" output=tmp_segids.t headers=false"
                 <<"attsqltool tables=\"all_portfolio.t spot_active_portfolio.lt tmp_segids.t\" sql=\""
                 "select 1 as seq, 'GEOX-Assessed Targets' as title, (select count(*) from @2 where pg_bscf>0 and geox_anal_id>0) as available, (select count(*) from @2 where seg_id in (select seg_id from @3) and pg_bscf>0 and geox_anal_id>0) as utilized"
@@ -7132,7 +7132,7 @@ class Main{
                 ;
             dep.push_back("aed_target_sumfigures_table.tex");
 
-            bg.add("aed_pal_sumfigures_table.tex", {"all_portfolio.t", "spot_active_portfolio.it", "ordered_maturity.t"})
+            mf.add("aed_pal_sumfigures_table.tex", {"all_portfolio.t", "spot_active_portfolio.it", "ordered_maturity.t"})
                 <<"attsqltool spot_active_portfolio.lt sql=\"select name from @1 where hc_type='GAS' group by name\" output=tmp1.t"
                 <<"attsqltool tables=\"all_portfolio.t ordered_maturity.t\" sql=\"select id, min(@2.seq) as seq, @1.maturity as maturity, count(*) as c  from @1 inner join @2 on @1.maturity=@2.maturity group by id\" output=tmp2.t"
                 <<"attsqltool tables=\"tmp1.t tmp2.t\" sql=\""
@@ -7145,7 +7145,7 @@ class Main{
                 ;
             dep.push_back("aed_pal_sumfigures_table.tex");
 
-            bg.add("aed_sumfeatures_maturity_table.tex", {"aed_portfolio.t"})
+            mf.add("aed_sumfeatures_maturity_table.tex", {"aed_portfolio.t"})
                 <<"attsqltool tables=\"aed_portfolio.t\" sql=\""
                 "select 1 as ord, 'High' as POM, count(*) as c from @1 where maturity like 'IdentifiedHighPOM'"
                 " union "
@@ -7159,7 +7159,7 @@ class Main{
 
             dep.push_back("aed_sumfeatures_maturity_table.tex");
             //
-            bg.add("aed_portfolio_gas_util_table.tex", {"aed_portfolio.t", "realized_segids.t"})
+            mf.add("aed_portfolio_gas_util_table.tex", {"aed_portfolio.t", "realized_segids.t"})
                 <<"@attsqltool tables=\"aed_portfolio.t realized_segids.t\" sql=\"select seg_id from @2 where id||play in (select id|| play from @1)\" output=tmp.t headers=false"
                 <<"@attsqltool tables=\"spot_active_portfolio.lt tmp.t\" sql=\""
                     "select 1 as ord, 'GEOX-Assessed Targets' as title, "
@@ -7177,7 +7177,7 @@ class Main{
                 ;
             dep.push_back("aed_portfolio_gas_util_table.tex");
             //
-            bg.add("aed_portfolio_oil_util_table.tex", {"aed_portfolio.t", "realized_segids.t"})
+            mf.add("aed_portfolio_oil_util_table.tex", {"aed_portfolio.t", "realized_segids.t"})
                 <<"@attsqltool tables=\"aed_portfolio.t realized_segids.t\" sql=\"select seg_id from @2 where id||play in (select id|| play from @1)\" output=tmp.t headers=false"
                 <<"@attsqltool tables=\"spot_active_portfolio.lt tmp.t\" sql=\""
                     "select 1 as ord, 'GEOX-Assessed Targets' as title, "
@@ -7195,7 +7195,7 @@ class Main{
                 ;
             dep.push_back("aed_portfolio_oil_util_table.tex");
             //
-            auto & f = bg.add("execsum_interm_report.tex", dep);
+            auto & f = mf.add("execsum_interm_report.tex", dep);
             f<<"cat <template_execsum_report.tex | \\";
             f<<"sed \"s/TEMPLATE_DISCOVERED//g\" | \\";
             f<<"sed \"s/TEMPLATE_IDENTIFIED_WELLGAS_P10/\\\\\\textcolor{darkred}{`atgetval input=mcrun_all_stat_sum.dat number=true roundto=2 format=\"\%.0f\" var=identified_wellgas_sc_p90`}/g\" | \\";
@@ -7565,7 +7565,7 @@ class Main{
             {
                 for(auto amaturity: vector<string>{"Frontier", "Emerging", "Mature"}){
                     string title=amaturity;
-                    string prefix="mcrun_area_maturity_"+tolower(title);
+                    string prefix="mcrun_area_maturity_"+to_lower(title);
                     f<<"sed 's/\\& AREAMATURITYCOUNTTABLE_TEMPLATE_COLUMN/\\\\hyperlink{"+title+"}{"+title+"} \\& AREAMATURITYCOUNTTABLE_TEMPLATE_COLUMN/g' | \\";
                     f<<"sed 's/\\& AREAMATURITYGASVOLTABLE_TEMPLATE_COLUMN/\\\\hyperlink{"+title+"}{"+title+"} \\& AREAMATURITYGASVOLTABLE_TEMPLATE_COLUMN/g' | \\";
                     f<<"sed 's/\\& AREAMATURITYOILVOLTABLE_TEMPLATE_COLUMN/\\\\hyperlink{"+title+"}{"+title+"} \\& AREAMATURITYOILVOLTABLE_TEMPLATE_COLUMN/g' | \\";
@@ -7633,7 +7633,7 @@ class Main{
                 f<<"echo '\\chapter{Portfolio by Modified-PRMS Class}\\newpage'>>$@";
                 f<<"echo '\\chapter{Portfolio by BP Requirements}\\newpage'>>$@";
             }
-            bg.add( "execsum_report.pdf", {"template_latexdoc_top.tex", "template_latexdoc_bot.tex", "execsum_interm_report.tex", "multirow.sty"})
+            mf.add( "execsum_report.pdf", {"template_latexdoc_top.tex", "template_latexdoc_bot.tex", "execsum_interm_report.tex", "multirow.sty"})
                 <<HELP("buid Exploration Landscape PDF report.")
                 <<"cat template_latexdoc_top.tex execsum_interm_report.tex template_latexdoc_bot.tex>execsum_report.tex"
                 <<"pdflatex execsum_report.tex"
@@ -7642,7 +7642,7 @@ class Main{
                 <<TEMP("execsum_report.tex")
                 ;
             {
-                auto & f = bg.add("report_by_aoi_gas", "execsum_report.pdf");
+                auto & f = mf.add("report_by_aoi_gas", "execsum_report.pdf");
                 for(auto  aoi: aois){
                     string prefix="mcrun_rigaoi_"+aoi.prefix;
                     f<<"@echo \""+aoi.title+","
@@ -7657,7 +7657,7 @@ class Main{
                 }
             }
             {
-                auto & f = bg.add("report_by_aoi_oil", "execsum_report.pdf");
+                auto & f = mf.add("report_by_aoi_oil", "execsum_report.pdf");
                 for(auto  aoi: aois){
                     string prefix="mcrun_rigaoi_"+aoi.prefix;
                     f<<"@echo \""+aoi.title+","
@@ -7671,7 +7671,7 @@ class Main{
                 }
             }
             {
-                auto & f = bg.add("report_by_play_gas", "execsum_report.pdf");
+                auto & f = mf.add("report_by_play_gas", "execsum_report.pdf");
                 for(auto play: seq_plays){
                     auto & params=plays[play];
                     string prefix="mcrun_play_"+play;
@@ -7687,7 +7687,7 @@ class Main{
                 }
             }
             {
-                auto & f = bg.add("report_by_play_oil", "execsum_report.pdf");
+                auto & f = mf.add("report_by_play_oil", "execsum_report.pdf");
                 for(auto play: seq_plays){
                     auto & params=plays[play];
                     string prefix="mcrun_play_"+play;
@@ -7703,7 +7703,7 @@ class Main{
                 }
             }
             {
-                auto & f = bg.add("report_by_play_concepts", "execsum_report.pdf");
+                auto & f = mf.add("report_by_play_concepts", "execsum_report.pdf");
                 for(auto play: seq_plays){
                     auto & params=plays[play];
                     string prefix="mcrun_play_"+play;
@@ -7735,7 +7735,7 @@ class Main{
         dep.push_back( "rigaoi.it");
         dep.push_back( "pal_opr.t");
         dep.push_back( "papgis_sa.t");
-        auto & f = bg.add({"new_canvas"},dep) ;
+        auto & f = mf.add({"new_canvas"},dep) ;
         f<<HELP("Update the planning canvas");
         f<<"rm -f canvas.sql3"
         <<"att2sqlite tables=papgis_sa_onshore.t names=sa_onshore_shape output=canvas.sql3"
@@ -7817,16 +7817,16 @@ class Main{
     void evaluate_plan(){
         //proposed plan
 
-        bg.add("rm_plan")
+        mf.add("rm_plan")
             <<"rm -f plan_selected.t";
 
-        bg.add({"export_selected_plan", "plan_selected.t"})
+        mf.add({"export_selected_plan", "plan_selected.t"})
             <<HELP("Export the selected plan (in the Guwi Application) and produce PPT report")
             <<"cp "+portfolio_path+" ppd.portfolio 2>/dev/null || :"
             <<"atdbdump db=ppd.portfolio qry=\"select drill_plan.plan, case when rig.sequence1 not null then rig.sequence1 else '' end ||' ' || drill_plan.rig ||' ['|| bop ||']' as rig, drill_plan.project as id, drill_project.stage, drill_plan.sequence, drill_plan.maint, drill_plan.spud_date, drill_plan.completion_date, drill_plan.duration,  drill_plan.is_fixed, drill_plan.comments from drill_plan inner join drill_project on drill_plan.project=drill_project.project inner join plan on plan.id=drill_plan.plan inner join rig on rig.id=drill_plan.rig where plan.selected like 'Yes' order by rig, sequence" 
             "\" output=plan_selected.t"
             ;
-        bg.add({"export_vplan_baseline", "plan_vplan_baseline.t"})
+        mf.add({"export_vplan_baseline", "plan_vplan_baseline.t"})
             <<HELP("Export the selected plan in Guwi as vplan baseline")
             <<"cp "+portfolio_path+" ppd.portfolio 2>/dev/null || :"
             <<"atdbdump db=ppd.portfolio qry=\"select drill_plan.plan, drill_plan.rig ||' ['|| bop ||']' as rig, drill_plan.project as id, drill_project.stage, drill_plan.sequence, drill_plan.maint, drill_plan.spud_date, drill_plan.completion_date, drill_plan.duration,  drill_plan.is_fixed, drill_plan.comments from drill_plan inner join drill_project on drill_plan.project=drill_project.project inner join plan on plan.id=drill_plan.plan inner join rig on rig.id=drill_plan.rig where plan.selected like 'Yes' order by rig, sequence" 
@@ -7838,7 +7838,7 @@ class Main{
             //this is for volume calculations assuming all dep are satisfied; i.e. we assume in case of failure well-slot will be filled with something better
             string input_prefix="plan_"+prefix;
             landscape_portfolios.push_back(input_prefix);
-            bg.add(input_prefix+"_portfolio.t", {"all_portfolio.t", input_prefix+".t"})
+            mf.add(input_prefix+"_portfolio.t", {"all_portfolio.t", input_prefix+".t"})
                 <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                 <<"attsqltool tables=\"tmp_long_tgt_list.t "+input_prefix+".t\" sql=\"select @1.* from @1 inner join @2 on @1.id=@2.id \" output=tmp.t"
                 <<"attupdate input=tmp.t dep=\"'NONE'\" where=\"dep not in (select id from input)\" output=tmp.t"
@@ -7862,7 +7862,7 @@ class Main{
                     " max_upsideoil=020000 mmbo"
                 );
             //creating a plot
-            bg.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
+            mf.add( input_prefix+"_graph.pdf" , {input_prefix+"_program_targets.t"})
                 <<"atcontingency_graph input=$< output=tmp.txt title='Dependency Graph for "+prefix+" Plan'"
                 <<"dot -Tpdf tmp.txt -o $@"
                 ;
@@ -7875,7 +7875,7 @@ class Main{
                 string input_prefix="plan_trimmed_rigaoi_"+aoi.prefix;
                 landscape_portfolios.push_back(input_prefix);
                 string output_prefix="mcrun_plan_trimmed_rigaoi_"+aoi.prefix;
-                bg.add(input_prefix+"_portfolio.t", {"rigaoi.it", "plan_trimmed_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"rigaoi.it", "plan_trimmed_portfolio.t"})
                     <<"atttee input=plan_trimmed_portfolio.t output=tmp_long_tgt_list.t"
                     //first window targets within the area
                     <<"attsqltool tmp_long_tgt_list.t sql=\"select * from @1 where rigaoi='"+aoi.prefix+"'\" output=tmp_short_tgt_list.t"
@@ -7906,7 +7906,7 @@ class Main{
                 string input_prefix="plan_trimmed_play_"+play;
                 landscape_portfolios.push_back(input_prefix);
                 string output_prefix="mcrun_"+input_prefix;
-                bg.add(input_prefix+"_portfolio.t", {"play_"+play+"_portfolio.t", "plan_trimmed_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"play_"+play+"_portfolio.t", "plan_trimmed_portfolio.t"})
                     <<"atttee input=play_"+play+"_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attsqltool tables=\"play_"+play+"_portfolio.t plan_trimmed_portfolio.t\" sql=\"select * from @1 where @1.id in (select id from @2)\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -7934,7 +7934,7 @@ class Main{
                 landscape_portfolios.push_back(input_prefix);
                 string output_prefix="mcrun_"+input_prefix;
                 string portfolio="area_maturity_"+amaturity+"_portfolio.t";
-                bg.add(input_prefix+"_portfolio.t", {portfolio, "plan_trimmed_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {portfolio, "plan_trimmed_portfolio.t"})
                     <<"atttee input="+portfolio+" output=tmp_long_tgt_list.t"
                     <<"attsqltool tables=\""+portfolio+" plan_trimmed_portfolio.t\" sql=\"select * from @1 where @1.id in (select id from @2)\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -7964,7 +7964,7 @@ class Main{
                 landscape_portfolios.push_back(input_prefix);
                 string output_prefix="mcrun_"+input_prefix;
                 string portfolio="prms_"+prms_type+"_portfolio.t";
-                bg.add(input_prefix+"_portfolio.t", {portfolio, "plan_trimmed_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {portfolio, "plan_trimmed_portfolio.t"})
                     <<"atttee input="+portfolio+" output=tmp_long_tgt_list.t"
                     <<"attsqltool tables=\""+portfolio+" plan_trimmed_portfolio.t\" sql=\"select * from @1 where @1.id in (select id from @2)\" output=tmp_short_tgt_list.t"
                     <<"rm -f tmp.db"
@@ -7987,7 +7987,7 @@ class Main{
             }
         }
         {
-            auto & f = bg.add("report_plan_by_aoi_gas", dep);
+            auto & f = mf.add("report_plan_by_aoi_gas", dep);
             for(auto  aoi: aois){
                 string prefix="mcrun_plan_trimmed_gas_rigaoi_"+aoi.prefix;
                 f<<"@echo \""+aoi.title+","
@@ -8002,7 +8002,7 @@ class Main{
             }
         }
         {
-            auto & f = bg.add("report_plan_by_aoi_oil", dep);
+            auto & f = mf.add("report_plan_by_aoi_oil", dep);
             for(auto  aoi: aois){
                 string prefix="mcrun_plan_trimmed_oil_rigaoi_"+aoi.prefix;
                 f<<"@echo \""+aoi.title+","
@@ -8017,7 +8017,7 @@ class Main{
         }
         //reporting how much of the portfolio is being consumed by the selected plan
         {
-            bg.add("consumption_report", {
+            mf.add("consumption_report", {
                 "mcrun_all_stat_sum.dat",
                 "mcrun_plan_trimmed_stat_sum.dat",
                     })
@@ -8044,21 +8044,21 @@ class Main{
         }
 
         //split portfolio by Conventional 3D Coverage
-        bg.add("conv3d.it","papgis_conv3d_coverage.shp")
+        mf.add("conv3d.it","papgis_conv3d_coverage.shp")
             <<"atshp2itbl input=$< output=conv3d.it"
             <<"atwgs84toutm input=conv3d.t lon=x lat=y x=u39x y=u39y"
-            <<BYPROD(itable("conv3d.it"))
+            <<BYPRODUCT(itable("conv3d.it"))
             ;
-        bg.add("proposed3d.it","seismic_proposal.shp")
+        mf.add("proposed3d.it","seismic_proposal.shp")
             <<"atshp2itbl input=$< output=$@"
             //<<"atwgs84toutm input=conv3d.t lon=x lat=y x=u39x y=u39y"
-            <<BYPROD(itable("proposed3d.it"))
+            <<BYPRODUCT(itable("proposed3d.it"))
             ;
         {
             string plan="in3d";
             string input_prefix="seisplan_"+plan;
             string output_prefix="mcrun_seisplan_"+plan;
-            bg.add(input_prefix+"_portfolio.t", {"conv3d.it", "all_portfolio.t"})
+            mf.add(input_prefix+"_portfolio.t", {"conv3d.it", "all_portfolio.t"})
                 <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                 //first window targets within the area
                 <<"attinpolygons input=tmp_long_tgt_list.t xexpr=u39x yexpr=u39y ply=conv3d.it plyx=u39x plyy=u39y newcol=survey"
@@ -8081,7 +8081,7 @@ class Main{
             string plan="no3d";
             string input_prefix="seisplan_"+plan;
             string output_prefix="mcrun_seisplan_"+plan;
-            bg.add(input_prefix+"_portfolio.t", {"conv3d.it", "all_portfolio.t"})
+            mf.add(input_prefix+"_portfolio.t", {"conv3d.it", "all_portfolio.t"})
                 <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                 //first window targets within the area
                 <<"attinpolygons input=tmp_long_tgt_list.t xexpr=u39x yexpr=u39y ply=conv3d.it plyx=u39x plyy=u39y newcol=survey"
@@ -8102,20 +8102,20 @@ class Main{
         }
 
         //split seismic scenarios
-        bg.add("proposed3da.it", "proposed3d.it")
+        mf.add("proposed3da.it", "proposed3d.it")
             <<"atitselect input=proposed3d.it where=\"inBP2426A='Yes'\" output=$@" 
-            <<BYPROD(itable("proposed3da.it"))
+            <<BYPRODUCT(itable("proposed3da.it"))
             ;
-        bg.add("proposed3db.it", "proposed3d.it")
+        mf.add("proposed3db.it", "proposed3d.it")
             <<"atitselect input=proposed3d.it where=\"inBP2426B='Yes'\" output=$@" 
-            <<BYPROD(itable("proposed3db.it"))
+            <<BYPRODUCT(itable("proposed3db.it"))
             ;
         vector<string> seis_plans = {"a", "b"};
         for(auto plan:seis_plans){
             // recursive windowing to include dependenices from outside the AOI and assign them zero volume
             string input_prefix="seisplan_"+plan;
             string output_prefix="mcrun_seisplan_"+plan;
-            bg.add(input_prefix+"_portfolio.t", {"proposed3d"+plan+".it", "all_portfolio.t"})
+            mf.add(input_prefix+"_portfolio.t", {"proposed3d"+plan+".it", "all_portfolio.t"})
                 <<"atttee input=all_portfolio.t output=tmp_long_tgt_list.t"
                 //first window targets within the area
                 <<"attinpolygons input=tmp_long_tgt_list.t xexpr=u39x yexpr=u39y ply=proposed3d"+plan+".it plyx=u39x plyy=u39y newcol=survey"
@@ -8146,7 +8146,7 @@ class Main{
             for(auto plan:seis_plans){
                 string input_prefix="seisplan_"+plan+"_"+portfolio;
                 string output_prefix="mcrun_seisplan_"+plan+"_"+portfolio;
-                bg.add(input_prefix+"_portfolio.t", {"proposed3d"+plan+".it", "seisplan_"+portfolio+"_portfolio.t"})
+                mf.add(input_prefix+"_portfolio.t", {"proposed3d"+plan+".it", "seisplan_"+portfolio+"_portfolio.t"})
                     <<"atttee input=seisplan_"+portfolio+"_portfolio.t output=tmp_long_tgt_list.t"
                     <<"attrmcol tmp_long_tgt_list.t list=\"survey\""
                     //first window targets within the area
@@ -8175,7 +8175,7 @@ class Main{
             }
         }
 
-        bg.add({"hcpv_from_db", 
+        mf.add({"hcpv_from_db", 
                 "plan_selected_program_targets_postdrill.t", 
                 "plan_selected_program_target_postdrill_wellgasvol.g", 
                 "plan_selected_program_target_postdrill_welloilvol.g", 
@@ -8225,7 +8225,7 @@ class Main{
             <<"atgendistarray input=plan_selected_program_targets_postdrill.t jsoncol=postdrill_upside_oil_mmbo_dist geom=plan_selected_program_target_upsideoilvol.g output=plan_selected_program_target_postdrill_upsideoilvol.g"
             ;
         //new workflow
-        bg.add({
+        mf.add({
                 "all_stack.t",
                 "all_stack_oil_wad.g",
                 "all_stack_gas_wad.g",
@@ -8259,27 +8259,27 @@ class Main{
             "          predrill=true" _cont
             "          success=commercial"
             ;
-        bg.add("all_stack_wstats.t", {"all_stack.t", "all_stack_gas_wad.g", "all_stack_oil_wad.g"})
+        mf.add("all_stack_wstats.t", {"all_stack.t", "all_stack_gas_wad.g", "all_stack_oil_wad.g"})
             <<"atdistribution_summary2d input=all_stack_gas_wad.g input_tbl=all_stack.t  prefix=\"gas_wad\" output=tmp.t"
             <<"atdistribution_summary2d input=all_stack_oil_wad.g input_tbl=tmp.t        prefix=\"oil_wad\" output=tmp.t"
             <<"atdistribution_summary2d input=all_stack_gas_upside.g input_tbl=tmp.t        prefix=\"gas_upside\" output=tmp.t"
             <<"atdistribution_summary2d input=all_stack_oil_upside.g input_tbl=tmp.t        prefix=\"oil_upside\" output=tmp.t"
             <<"atttee input=tmp.t output=$@"
             ;
-        bg.add("all_program_durations.t", {"all_program_projects.t", "all_program_project_rigyears.g"})
+        mf.add("all_program_durations.t", {"all_program_projects.t", "all_program_project_rigyears.g"})
             <<"atdistribution_summary2d input=all_program_project_rigyears.g input_tbl=all_program_projects.t prefix=\"duration\" output=$@"
             ;
-        bg.add("all_program_costs.t", {"all_program_projects.t", "all_program_project_costs.g"})
+        mf.add("all_program_costs.t", {"all_program_projects.t", "all_program_project_costs.g"})
             <<"atdistribution_summary2d input=all_program_project_costs.g input_tbl=all_program_projects.t prefix=\"cost\" output=$@"
             ;
 
-        bg.add("show_unselected", {"all_stack_wstats.t", "all_program_projects.t", "plan_trimmed.t"})
+        mf.add("show_unselected", {"all_stack_wstats.t", "all_program_projects.t", "plan_trimmed.t"})
             <<HELP("Show active wells not selected in the plan")
             <<"attsqltool tables=\"all_stack_wstats.t plan_trimmed.t all_program_projects.t\" sql=\"select @3.rigaoi, @1.* from @1 inner join @3 on @1.project=@3.project where not @1.project in (select id from @2) and stage in ('Proposed', 'Scheduled') and not @1.project GLOB '*AUTO-Del*' \" output=tmp.t"
             <<"attsqltool tmp.t sql=\"select * from @1 order by rigaoi, gas_upside_mean desc\" output=tmp_by_upsidegas.t && attedit tmp_by_upsidegas.t &"
             ;
 
-        bg.add({
+        mf.add({
                 "plan_selected_stack.t",
                 "plan_selected_stack_predrill_oil.g",
                 "plan_selected_stack_predrill_gas.g",
@@ -8301,7 +8301,7 @@ class Main{
             "          predrill=true" _cont
             "          success=commercial"
             ;
-        bg.add({
+        mf.add({
                 "plan_selected_stack_postdrill.t",
                 "plan_selected_stack_postdrill_oil.g",
                 "plan_selected_stack_postdrill_gas.g",
@@ -8314,7 +8314,7 @@ class Main{
               )
             <<"atpap_prospect_stack targets=plan_selected_program_targets.t targets_gaswad=plan_selected_program_target_postdrill_wellgasvol.g targets_oilwad=plan_selected_program_target_postdrill_welloilvol.g target_pos=plan_selected_program_target_pos.g output_gas_dist=plan_selected_stack_postdrill_gas.g output_oil_dist=plan_selected_stack_postdrill_oil.g output_table=plan_selected_stack_postdrill.t predrill=false success=commercial"
             ;
-        bg.add({
+        mf.add({
                 "plan_selected_stack_predrill_upsideoil.g",
                 "plan_selected_stack_predrill_upsidegas.g",
                 },{
@@ -8326,7 +8326,7 @@ class Main{
               )
             <<"atpap_prospect_stack targets=plan_selected_program_targets.t targets_gaswad=plan_selected_program_target_upsidegasvol.g           targets_oilwad=plan_selected_program_target_upsideoilvol.g           target_pos=plan_selected_program_target_pos.g output_gas_dist=plan_selected_stack_predrill_upsidegas.g  output_oil_dist=plan_selected_stack_predrill_upsideoil.g output_table=tmp3.t predrill=true success=geological"
             ;
-        bg.add({
+        mf.add({
                 "plan_selected_stack_postdrill_upsideoil.g",
                 "plan_selected_stack_postdrill_upsidegas.g",
                 },{
@@ -8338,7 +8338,7 @@ class Main{
               )
             <<"atpap_prospect_stack targets=plan_selected_program_targets.t targets_gaswad=plan_selected_program_target_postdrill_upsidegasvol.g           targets_oilwad=plan_selected_program_target_postdrill_upsideoilvol.g           target_pos=plan_selected_program_target_pos.g output_gas_dist=plan_selected_stack_postdrill_upsidegas.g  output_oil_dist=plan_selected_stack_postdrill_upsideoil.g output_table=tmp3.t predrill=false success=geological"
             ;
-        bg.add("plan_plot", {
+        mf.add("plan_plot", {
                 "plan_selected.t",
                 "plan_selected_program_projects.t",
                 "plan_selected_program_project_rigyears.g",
@@ -8356,7 +8356,7 @@ class Main{
                 "                    output_ppt=tmp5.pptx &&" _cont
                 "wslview tmp5.pptx"
             ;
-        bg.add({
+        mf.add({
                 "plan_compare_to_ed_timing",
                 }, {
                 "match_ds_portfolio.t",
@@ -8378,7 +8378,7 @@ class Main{
                     " gain=-1 tick_min=0.1 tick_max=0.5"
                     " tbt_scale=true label1=\"Rig Years\"";
             ;
-        bg.add("plan_selected_with_forecasted_timing.t", {
+        mf.add("plan_selected_with_forecasted_timing.t", {
                 "plan_selected.t",
                 "plan_selected_program_projects.t",
                 "plan_selected_program_project_rigyears.g",
@@ -8393,17 +8393,17 @@ class Main{
                 "                         rigmove_min="+rigmove_min+" rigmove_max="+rigmove_max+" " _cont
                 "                    output=$@ "
             ;
-        bg.add("plan_selected_program_project_cost_factorized.g", {
+        mf.add("plan_selected_program_project_cost_factorized.g", {
                 "plan_selected_program_projects.t",
                 "plan_selected_program_project_rigyears.g",
                 "plan_selected_program_project_costs.g",
                 })
             <<"atdistributionfractions input=plan_selected_program_project_costs.g maxnfact=4 attrib=plan_selected_program_projects.t distid=cost_dist output=$@"
         ;
-        bg.add("plan_trimmed.t", "plan_selected_with_forecasted_timing.t")
+        mf.add("plan_trimmed.t", "plan_selected_with_forecasted_timing.t")
             <<"attsqltool $< sql=\"select * from @1 where spud_p10<"+to_string(year1+nyear)+" and compl_p90>="+to_string(year1)+"\" output=$@"
             ;
-        bg.add("plan_eval", {
+        mf.add("plan_eval", {
                 "plan_selected.t",
                 "plan_selected_program_projects.t",
                 "plan_selected_program_targets.t",
@@ -8447,7 +8447,7 @@ class Main{
                 "                    output_oil=tmp_oil.g output_gas=tmp_gas.g &&" _cont
                 "wslview tmp_$@.pptx"
             ;
-        bg.add("plan_rigcut", {
+        mf.add("plan_rigcut", {
                 "plan_selected.t",
                 "plan_selected_program_projects.t",
                 "plan_selected_program_targets.t",
@@ -8491,7 +8491,7 @@ class Main{
             ;
 
 
-        bg.add("plan_eval_upside", {
+        mf.add("plan_eval_upside", {
                 "plan_selected.t",
                 "plan_selected_program_projects.t",
                 "plan_selected_program_targets.t",
@@ -8534,11 +8534,11 @@ class Main{
                 "wslview tmp_$@.pptx"
             ;
 
-        bg.add({ "match_ds_plan", "match_ds_plan.t"}, {"drill_schedule.t", "plan_selected.t"})
+        mf.add({ "match_ds_plan", "match_ds_plan.t"}, {"drill_schedule.t", "plan_selected.t"})
             <<"attsqltool tables=\"drill_schedule.t plan_selected.t\" sql=\"select @1.slot_id, @2.id from @1 inner join @2 on trim(replace(replace(replace(upper(@1.slot_id),' ',''),'.',''),'-',''))=trim(replace(replace(replace(upper(@2.id),' ',''),'.',''),'-','')) and upper(@1.rig)=upper(@2.rig)\" output=tmp_sugg.t"
             <<"atmatchwhich from=plan_selected.t from_ids=\"id\" to=drill_schedule.t to_ids=\"slot_id\" sugg=tmp_sugg.t load=match_ds_plan.t"
             ;
-        bg.add({ "match_ds_portfolio", "match_ds_portfolio.t"}, {"drill_schedule.t"})
+        mf.add({ "match_ds_portfolio", "match_ds_portfolio.t"}, {"drill_schedule.t"})
             <<HELP("match drilling schedule to the portfolio")
             <<"cp "+portfolio_path+" ppd.portfolio 2>/dev/null || :"
             <<"atdbdump db=ppd.portfolio qry=\"select *, (select group_concat(play_group, ', ') as plays from drill_target where project=drill_project.project group by project) as reservoirs from drill_project\" output=tmp.t"
@@ -8563,7 +8563,7 @@ class Main{
             dep.push_back("pap_ip_targets.t");
             dep.push_back("rigaoi.it");
             dep.push_back("ordered_plays.t");
-            bg.add("landscape.pptx", dep)
+            mf.add("landscape.pptx", dep)
                 <<"atlandscape_ppt input=\""+input_str+"\" output_ppt=tmp.pptx " _cont
                 "               rigaoi_polygons=rigaoi.it " _cont
                 "                 ordered_plays=ordered_plays.t " _cont
@@ -8587,15 +8587,15 @@ class Main{
         }
         auto ventures_str = to_string(dep);
         dep.push_back("pap_ip_targets.t");
-        bg.add("vplan", dep)
+        mf.add("vplan", dep)
             <<"atventureplan ventures=\""+ventures_str+"\" titles=\""+titles+"\" targets=pap_ip_targets.t target_gas_volume=low_bscf target_oil_volume=low_mmbo target_cost=capex loadX=BP2025_27budget_add200MM_in2025_options.it loadX=bp_update_1.24_1.0_1.0_scenario1.t vplan2.t nyear=3 "
             ;
-        bg.add("vplan_upside", dep)
+        mf.add("vplan_upside", dep)
             <<"atventureplan ventures=\""+ventures_str+"\" titles=\""+titles+"\" targets=pap_ip_targets.t target_gas_volume=high_bscf target_oil_volume=high_mmbo target_cost=capex option=upside loadX=vplan2.t nyear=3 "
             ;
     }
     void benchmark(){
-        bg.add("benchmark_oil_wad", {"plan_selected_program_targets_postdrill.t", "plan_selected_program_target_welloilvol.g", "plan_selected_program_target_postdrill_welloilvol.g"})
+        mf.add("benchmark_oil_wad", {"plan_selected_program_targets_postdrill.t", "plan_selected_program_target_welloilvol.g", "plan_selected_program_target_postdrill_welloilvol.g"})
             <<HELP("benchmark oil well-additions for the concluded wells in the selected plan")
             <<"attsqltool plan_selected_program_targets_postdrill.t sql=\"select *, project||' ['||play||']' as welltarget, cast(maturity in ('CommercialSuccess', 'UnbookedResource', 'BookedResource') and variables like '\%oil_min=\%' as int) as towind from @1\" output=tmp1.t"
             <<"attwind din=plan_selected_program_target_welloilvol.g tin=tmp1.t tout=tmp2.t dout=tmp2.g expr=\"towind\""
@@ -8604,20 +8604,20 @@ class Main{
                 " gain=-1 tick_min=0.1 tick_max=0.5"
                     ;
 
-        bg.add("benchmark_gas_wad", {"plan_selected_program_targets_postdrill.t", "plan_selected_program_target_wellgasvol.g", "plan_selected_program_target_postdrill_wellgasvol.g"})
+        mf.add("benchmark_gas_wad", {"plan_selected_program_targets_postdrill.t", "plan_selected_program_target_wellgasvol.g", "plan_selected_program_target_postdrill_wellgasvol.g"})
             <<HELP("benchmark gas well-additions for the concluded wells in the selected plan")
             <<"attsqltool plan_selected_program_targets_postdrill.t sql=\"select *, project||' ['||play||']' as welltarget, cast(maturity in ('CommercialSuccess', 'UnbookedResource', 'BookedResource')  and variables like '\%gas_min=\%'as int) as towind from @1\" output=tmp1.t"
             <<"attwind din=plan_selected_program_target_wellgasvol.g tin=tmp1.t tout=tmp2.t dout=tmp2.g expr=\"towind\""
             <<"attwind din=plan_selected_program_target_postdrill_wellgasvol.g tin=tmp1.t tout=tmp3.t dout=tmp3.g expr=\"towind\""
             <<"atwigplot tmp2.g diff=tmp3.g attrib=tmp2.t trace_label_col=welltarget tbt_scale=true vsize=10 trace_label_height=150";
-        bg.add("benchmark_oil_fsd")
+        mf.add("benchmark_oil_fsd")
             <<HELP("benchmark oil field-size distribution for the recently generated prospects and leads")
             ;
-        bg.add("benchmark_gas_fsd")
+        mf.add("benchmark_gas_fsd")
             <<HELP("benchmark gas field-size distribution for the recently generated prospects and leads")
             ;
 
-        bg.add("benchmark_rigdays",{"plan_selected_program_projects.t", "plan_selected.t", "plan_selected_program_project_rigyears.g"})
+        mf.add("benchmark_rigdays",{"plan_selected_program_projects.t", "plan_selected.t", "plan_selected_program_project_rigyears.g"})
             <<HELP("benchmark rig-days for completed wells in the selected plan")
             <<"attsqltool tables=\"plan_selected_program_projects.t plan_selected.t\" sql=\"select *, cast(365*(@2.completion_date-@2.spud_date) as float) as duration, rigdays_cond ||' ['|| project ||']' as label from @1 inner join @2 on @1.project=@2.id\" output=tmp1.t"
             <<"attwind din=plan_selected_program_project_rigyears.g tin=tmp1.t tout=tmp2.t dout=tmp2.g expr=\"duration_1>0\""
@@ -8630,7 +8630,7 @@ class Main{
             <<"atthistogram input=tmp_rank.t expr=\"rank\" output=tmp_rank2.t"
             <<"attxycplot tin=tmp_rank2.t x=rank y=dist polyline=1 miny=0 minx=0 maxx=1"
             ;
-        bg.add("benchmark_cost",{"plan_selected_program_projects.t", "plan_selected.t", "plan_selected_program_project_costs.g", "drill_cost.t"})
+        mf.add("benchmark_cost",{"plan_selected_program_projects.t", "plan_selected.t", "plan_selected_program_project_costs.g", "drill_cost.t"})
             <<HELP("benchmark cost for completed wells in the selected plan")
             <<"attsqltool tables=\"plan_selected_program_projects.t plan_selected.t drill_cost.t\""
             " sql=\"select *, "
@@ -8650,136 +8650,136 @@ class Main{
             ;
     }
     void build_makefile(){
-        bg.add("gis", gis_targets)
+        mf.add("gis", gis_targets)
             <<HELP("Prepare GIS layers for viewing in QGIS project pap_qgis.qgz which has geo-spatial play input parameters");
 
-        bg.hidden_nodes.insert("template_play_report.tex");
-        bg.hidden_nodes.insert("template_area_report.tex");
-        bg.hidden_nodes.insert("template_execsum_report.tex");
-        bg.hidden_nodes.insert("template_latexdoc_top.tex");
-        bg.hidden_nodes.insert("template_latexdoc_bot.tex");
-        bg.hidden_nodes.insert("multirow.sty");
-        bg.hidden_nodes.insert("supertabular.sty");
-        bg.hidden_nodes.insert("template_teamreview.dbm");
-        bg.hidden_nodes.insert("template_rigaoi_view.dbm");
-        bg.hidden_nodes.insert("template_wf_top.tsk");
-        bg.hidden_nodes.insert("template_wf_bot.tsk");
-        bg.hidden_nodes.insert("template_wf_plotmap.tsk");
-        bg.hidden_nodes.insert("template_wf_plotmap2.tsk");
-        bg.hidden_nodes.insert("script_clone_portfolio.sql");
-        bg.hidden_nodes.insert("script_color_schedule_by_completion_year.sh");
-        bg.hidden_nodes.insert("script_color_schedule_by_dependency.sh");
-        bg.hidden_nodes.insert("script_color_schedule_by_maturity.sh");
-        bg.hidden_nodes.insert("script_color_schedule_by_wcdel.sh");
-        bg.hidden_nodes.insert("script_find_well.sh");
-        bg.hidden_nodes.insert("script_load_bp2426.sql");
-        bg.hidden_nodes.insert("script_my_plan_eval.sql");
-        bg.hidden_nodes.insert("script_shpcopy.sh");
-        bg.hidden_nodes.insert("script_shpop.sh");
-        bg.hidden_nodes.insert("sttool_compare_formations.sh");
-        bg.hidden_nodes.insert("sttool_compare_formations_based_epprt_tops.sh");
-        bg.hidden_nodes.insert("sttool_find_formation_occurances.sh");
-        bg.hidden_nodes.insert("sttool_locate_formation.sh");
-        bg.hidden_nodes.insert("sttool_remaining_tops.sh");
+        mf.hidden_nodes.insert("template_play_report.tex");
+        mf.hidden_nodes.insert("template_area_report.tex");
+        mf.hidden_nodes.insert("template_execsum_report.tex");
+        mf.hidden_nodes.insert("template_latexdoc_top.tex");
+        mf.hidden_nodes.insert("template_latexdoc_bot.tex");
+        mf.hidden_nodes.insert("multirow.sty");
+        mf.hidden_nodes.insert("supertabular.sty");
+        mf.hidden_nodes.insert("template_teamreview.dbm");
+        mf.hidden_nodes.insert("template_rigaoi_view.dbm");
+        mf.hidden_nodes.insert("template_wf_top.tsk");
+        mf.hidden_nodes.insert("template_wf_bot.tsk");
+        mf.hidden_nodes.insert("template_wf_plotmap.tsk");
+        mf.hidden_nodes.insert("template_wf_plotmap2.tsk");
+        mf.hidden_nodes.insert("script_clone_portfolio.sql");
+        mf.hidden_nodes.insert("script_color_schedule_by_completion_year.sh");
+        mf.hidden_nodes.insert("script_color_schedule_by_dependency.sh");
+        mf.hidden_nodes.insert("script_color_schedule_by_maturity.sh");
+        mf.hidden_nodes.insert("script_color_schedule_by_wcdel.sh");
+        mf.hidden_nodes.insert("script_find_well.sh");
+        mf.hidden_nodes.insert("script_load_bp2426.sql");
+        mf.hidden_nodes.insert("script_my_plan_eval.sql");
+        mf.hidden_nodes.insert("script_shpcopy.sh");
+        mf.hidden_nodes.insert("script_shpop.sh");
+        mf.hidden_nodes.insert("sttool_compare_formations.sh");
+        mf.hidden_nodes.insert("sttool_compare_formations_based_epprt_tops.sh");
+        mf.hidden_nodes.insert("sttool_find_formation_occurances.sh");
+        mf.hidden_nodes.insert("sttool_locate_formation.sh");
+        mf.hidden_nodes.insert("sttool_remaining_tops.sh");
         //folders
-        bg.hidden_nodes.insert("Play_Concepts");
-        bg.hidden_nodes.insert("trap_types");
-        bg.hidden_nodes.insert("sde_layers");
-        bg.hidden_nodes.insert("source_rock_phase");
-        //bg.hidden_nodes.insert("");
+        mf.hidden_nodes.insert("Play_Concepts");
+        mf.hidden_nodes.insert("trap_types");
+        mf.hidden_nodes.insert("sde_layers");
+        mf.hidden_nodes.insert("source_rock_phase");
+        //mf.hidden_nodes.insert("");
         // data
-        bg.hidden_nodes.insert(portfolio_path);
-        bg.hidden_nodes.insert("pap_qgis.qgz");
-        bg.hidden_nodes.insert("aed_portfolio.dbm");
-        bg.hidden_nodes.insert("README");
-        //bg.hidden_nodes.insert("");
-        bg.hidden_nodes.insert("sde_layers");
-        bg.hidden_nodes.insert("placeholder.shp");
-        bg.hidden_nodes.insert("placeholder_play_arrows.shp");
-        bg.hidden_nodes.insert("placeholder_play_locations.shp");
-        bg.hidden_nodes.insert("placeholder_play_rrad_locations.shp");
-        bg.hidden_nodes.insert("pap_qgis.qgz");
-        bg.hidden_nodes.insert("dump");
-        bg.hidden_nodes.insert("bu");
-        bg.hidden_nodes.insert("aed_portfolio.dbm");
-        bg.hidden_nodes.insert("README");
-        //bg.hidden_nodes.insert("");
+        mf.hidden_nodes.insert(portfolio_path);
+        mf.hidden_nodes.insert("pap_qgis.qgz");
+        mf.hidden_nodes.insert("aed_portfolio.dbm");
+        mf.hidden_nodes.insert("README");
+        //mf.hidden_nodes.insert("");
+        mf.hidden_nodes.insert("sde_layers");
+        mf.hidden_nodes.insert("placeholder.shp");
+        mf.hidden_nodes.insert("placeholder_play_arrows.shp");
+        mf.hidden_nodes.insert("placeholder_play_locations.shp");
+        mf.hidden_nodes.insert("placeholder_play_rrad_locations.shp");
+        mf.hidden_nodes.insert("pap_qgis.qgz");
+        mf.hidden_nodes.insert("dump");
+        mf.hidden_nodes.insert("bu");
+        mf.hidden_nodes.insert("aed_portfolio.dbm");
+        mf.hidden_nodes.insert("README");
+        //mf.hidden_nodes.insert("");
         //planning files
-        bg.hidden_nodes.insert("curr.canvas");
-        bg.hidden_nodes.insert("");
-        bg.hidden_nodes.insert("");
+        mf.hidden_nodes.insert("curr.canvas");
+        mf.hidden_nodes.insert("");
+        mf.hidden_nodes.insert("");
         for(auto & item : plays){
             if(item.first=="unza"){
                 continue;
             }
             {
                 string input_prefix="play_"+item.first;
-                bg.hidden_nodes.insert(input_prefix+"_stratcol.pdf");
-                bg.hidden_nodes.insert(input_prefix+"_stratcol.png");
+                mf.hidden_nodes.insert(input_prefix+"_stratcol.pdf");
+                mf.hidden_nodes.insert(input_prefix+"_stratcol.png");
             }
             {
                 string play=item.first;
                 string basename="papgis_play_"+play+"_phasemap";
-                bg.hidden_nodes.insert(basename+".it");
-                bg.hidden_nodes.insert("play_"+play+"_booked.shp");
-                bg.hidden_nodes.insert("play_"+play+"_booked.it");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_wc_pos");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_wc_pos.g");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_del_pos");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_del_pos.g");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_gas_cdf");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_gas_fsd");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_gas_fsd.g");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_gas_wad");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_gas_wad.g");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_oil_cdf");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_oil_fsd");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_oil_fsd.g");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_oil_wad");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_oil_wad.g");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_pos_cdf");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_geox_gas_fsd");
-                bg.hidden_nodes.insert("analysis_play_"+play+"_geox_oil_fsd");
+                mf.hidden_nodes.insert(basename+".it");
+                mf.hidden_nodes.insert("play_"+play+"_booked.shp");
+                mf.hidden_nodes.insert("play_"+play+"_booked.it");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_wc_pos");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_wc_pos.g");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_del_pos");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_del_pos.g");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_gas_cdf");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_gas_fsd");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_gas_fsd.g");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_gas_wad");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_gas_wad.g");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_oil_cdf");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_oil_fsd");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_oil_fsd.g");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_oil_wad");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_oil_wad.g");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_pos_cdf");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_geox_gas_fsd");
+                mf.hidden_nodes.insert("analysis_play_"+play+"_geox_oil_fsd");
 
                 /*
                 for(auto phase : vector<string>({"oil", "gas", "boe"})){
-                    bg.hidden_nodes.insert("mcrun_play_"+play+"_rig_"+phase+"findingcost.g");
-                    bg.hidden_nodes.insert("mcrun_play_"+play+"_campaign_rig_"+phase+"finding_rate.g");
-                    bg.hidden_nodes.insert("mcrun_play_"+play+"_campaign_rig_"+phase+"finding_rate_dist.pdf");
-                    bg.hidden_nodes.insert("mcrun_play_"+play+"_rig_"+phase+"finding_rate_dist.pdf");
-                    bg.hidden_nodes.insert("mcrun_play_"+play+"_rig_"+phase+"finding_rate_dist.g");
+                    mf.hidden_nodes.insert("mcrun_play_"+play+"_rig_"+phase+"findingcost.g");
+                    mf.hidden_nodes.insert("mcrun_play_"+play+"_campaign_rig_"+phase+"finding_rate.g");
+                    mf.hidden_nodes.insert("mcrun_play_"+play+"_campaign_rig_"+phase+"finding_rate_dist.pdf");
+                    mf.hidden_nodes.insert("mcrun_play_"+play+"_rig_"+phase+"finding_rate_dist.pdf");
+                    mf.hidden_nodes.insert("mcrun_play_"+play+"_rig_"+phase+"finding_rate_dist.g");
                     for(auto maturity : vector<string>({"assessed","identified","unidentified", "ytf"})){
                         for(auto scale : vector<string>({"upside", "well"})){
-                            bg.hidden_nodes.insert("mcrun_play_"+play+"_"+maturity+"_"+scale+phase+"_dist.g");
-                            bg.hidden_nodes.insert("mcrun_play_"+play+"_"+maturity+"_"+scale+phase+"_dist.pdf");
-                            bg.hidden_nodes.insert("mcrun_play_"+play+"_campaign_"+maturity+"_"+scale+phase+"vol.g");
+                            mf.hidden_nodes.insert("mcrun_play_"+play+"_"+maturity+"_"+scale+phase+"_dist.g");
+                            mf.hidden_nodes.insert("mcrun_play_"+play+"_"+maturity+"_"+scale+phase+"_dist.pdf");
+                            mf.hidden_nodes.insert("mcrun_play_"+play+"_campaign_"+maturity+"_"+scale+phase+"vol.g");
                         }
                     }
                 }
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_campaign_cost.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_campaign_findingcost.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_campaign_rig_years.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_cost_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_cost_dist.pdf");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_findingcost_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_findingcost_dist.pdf");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_ncomp_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_ncomp_dist.pdf");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_nprospect_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_nprospect_dist.pdf");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_nseismic_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_nstudy_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_ntargetsuccess_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_targetsuccessrate_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_targetsuccessrate_dist.pdf");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_ntargettest_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_nwellsuccess_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_wellsuccessrate_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_wellsuccessrate_dist.pdf");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_rig_level.it");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_stat_sum.dat");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_rig_years_dist.g");
-                bg.hidden_nodes.insert("mcrun_play_"+play+"_rig_years_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_campaign_cost.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_campaign_findingcost.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_campaign_rig_years.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_cost_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_cost_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_findingcost_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_findingcost_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_ncomp_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_ncomp_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_nprospect_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_nprospect_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_nseismic_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_nstudy_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_ntargetsuccess_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_targetsuccessrate_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_targetsuccessrate_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_ntargettest_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_nwellsuccess_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_wellsuccessrate_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_wellsuccessrate_dist.pdf");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_rig_level.it");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_stat_sum.dat");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_rig_years_dist.g");
+                mf.hidden_nodes.insert("mcrun_play_"+play+"_rig_years_dist.pdf");
                 */
 
             }
@@ -8787,27 +8787,27 @@ class Main{
         {
             for(int i=1; i<tstf_ntest; i++){
                 string test_name = "tstf"+to_string(i);
-                bg.hidden_nodes.insert(test_name+"_portfolio.txt");
+                mf.hidden_nodes.insert(test_name+"_portfolio.txt");
             }
             for(int i=2006; i<current_year; i++){
                 string test_name = "tstg"+to_string(i);
-                bg.hidden_nodes.insert(test_name+"_portfolio.txt");
+                mf.hidden_nodes.insert(test_name+"_portfolio.txt");
             }
             for(auto play:seq_plays){
                 string test_name = "tstm_"+play;
-                bg.hidden_nodes.insert(test_name+"_portfolio.txt");
+                mf.hidden_nodes.insert(test_name+"_portfolio.txt");
             }
             for(int i=0; i<tstf_ntest; i++){
                 string test_name = "tsth"+to_string(i);
-                bg.hidden_nodes.insert(test_name+"_portfolio.txt");
+                mf.hidden_nodes.insert(test_name+"_portfolio.txt");
             }
             for(int i=2014; i<current_year; i++){
                 string test_name = "tsti"+to_string(i);
-                bg.hidden_nodes.insert(test_name+"_portfolio.txt");
+                mf.hidden_nodes.insert(test_name+"_portfolio.txt");
             }
             for(int i=2014; i<current_year; i++){
                 string test_name = "tstj"+to_string(i);
-                bg.hidden_nodes.insert(test_name+"_portfolio.txt");
+                mf.hidden_nodes.insert(test_name+"_portfolio.txt");
             }
             for(auto wcdel: vector<string>({"Prospective", "Delineation"})){
                 for(auto play: seq_plays){
@@ -8815,25 +8815,25 @@ class Main{
                         continue;
                     }
                     string test_name = "tstk_"+play+"_"+wcdel;
-                    bg.hidden_nodes.insert(test_name+"_portfolio.txt");
-                    bg.hidden_nodes.insert(test_name+"_portfolio.t");
+                    mf.hidden_nodes.insert(test_name+"_portfolio.txt");
+                    mf.hidden_nodes.insert(test_name+"_portfolio.t");
                 }
             }
         }
         //rules
-        bg.hidden_nodes.insert("rm_db_data");
-        bg.hidden_nodes.insert("load_db_data");
-        bg.hidden_nodes.insert("reload_db_data");
-        bg.hidden_nodes.insert("guwi");
-        bg.hidden_nodes.insert("rm_db_exports");
-        bg.hidden_nodes.insert("export_from_guwi");
-        bg.hidden_nodes.insert("import_rrad_shapefiles");
-        //bg.hidden_nodes.insert("");
-        bg.add("rm_interm")
+        mf.hidden_nodes.insert("rm_db_data");
+        mf.hidden_nodes.insert("load_db_data");
+        mf.hidden_nodes.insert("reload_db_data");
+        mf.hidden_nodes.insert("guwi");
+        mf.hidden_nodes.insert("rm_db_exports");
+        mf.hidden_nodes.insert("export_from_guwi");
+        mf.hidden_nodes.insert("import_rrad_shapefiles");
+        //mf.hidden_nodes.insert("");
+        mf.add("rm_interm")
             <<"rm -f mcrun_* play_* rigaoi_* prms_* test_* tst* bplan_* seisplan_* *~ *.aux *.log *.out *.toc *.acn *.bbl *.blg *.glo *.ist *.sbl"
             ;
-        bg.generate_graph();
-        bg.dump_makefile();
+        mf.generate_graph();
+        mf.generate();
     };
 
     Main(){

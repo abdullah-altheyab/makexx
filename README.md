@@ -28,21 +28,21 @@ A three-step seismic processing pipeline:
 #include "makefile.hpp"
 
 int main() {
-    BuildGraph bg;
+    Makefile mf;
 
-    bg.add("filtered.bin", "raw.segy")
+    mf.add("filtered.bin", "raw.segy")
         << FINAL
         << "atbpfilt input=raw.segy flo=5 fhi=80 output=filtered.bin";
 
-    bg.add("velocity.bin", "filtered.bin")
+    mf.add("velocity.bin", "filtered.bin")
         << FINAL
         << "atnmo input=filtered.bin output=velocity.bin";
 
-    bg.add("image.bin", {"velocity.bin", "filtered.bin"})
+    mf.add("image.bin", {"velocity.bin", "filtered.bin"})
         << FINAL
         << "atkirchmig vel=velocity.bin input=filtered.bin output=image.bin";
 
-    bg.dump_makefile();
+    mf.generate();
 }
 ```
 
@@ -66,7 +66,7 @@ make image.bin  # run up to a specific target
 
 ```cpp
 for (auto& survey : surveys) {
-    bg.add(survey.prefix + "_result.bin", survey.prefix + "_input.bin")
+    mf.add(survey.prefix + "_result.bin", survey.prefix + "_input.bin")
         << ("atprocess --mode=" + survey.mode + " $< > $@");
 }
 ```
@@ -77,7 +77,7 @@ for (auto& survey : surveys) {
 struct Simulation { string name, grid, solver; int iterations; };
 
 for (auto& s : runs) {
-    bg.add(s.name + ".out", s.grid)
+    mf.add(s.name + ".out", s.grid)
         << ("runsim --solver=" + s.solver + " --iter=" + to_string(s.iterations) + " $< > $@");
 }
 ```
