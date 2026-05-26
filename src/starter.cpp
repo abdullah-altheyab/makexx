@@ -15,12 +15,11 @@ int main() {
     //   $@  target file
     //   $^  all source files
     //
-    // Organize help with menu groups:
-    //   mf.define_menu("name")              — declare a menu group upfront
-    //   mf.define_menu("name", FOLDED)      — declare folded by default in makexx -i
-    //   mf.set_current_menu("name")         — subsequent rules belong to this group
-    //   mf.set_current_menu("Parent/Child") — nested groups via slash separator
-    //   rule << MENU("name")                — override group for a single rule
+    // Organize help with groups:
+    //   mf.MENU("name")           — all subsequent rules belong to this group
+    //   mf.MENU("Parent/Child")   — nested groups via slash separator
+    //   mf.MENU("name", FOLDED)   — folded by default in makexx -i
+    //   HELP("group", "description")    — override group for a single rule
     //
     // Helper functions:
     //   stem("dir/file.cpp")            — "file"
@@ -28,7 +27,7 @@ int main() {
     //   change_ext("file.cpp", ".o")    — "file.o"
     //   join_path("obj", "file.o")      — "obj/file.o"
 
-    mf.set_current_menu("Processing");
+    mf.MENU("Processing");
 
     mf.add("step1.out", "input.dat")
         << HELP("run step 1")
@@ -38,7 +37,7 @@ int main() {
         << HELP("run step 2")
         << "your-other-tool $< > $@";
 
-    mf.set_current_menu("Reports");
+    mf.MENU("Reports");
 
     mf.add("report.pdf", {"step1.out", "step2.out"})
         << FINAL

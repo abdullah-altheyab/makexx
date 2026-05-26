@@ -49,7 +49,7 @@ int main() {
 ```bash
 makexx          # generates and runs the pipeline
 makexx -i       # interactive target selector (TUI)
-make            # reruns only what changed (auto-regenerates if makefile.cpp was edited)
+make            # reruns only what changed
 make image.bin  # run up to a specific target
 make help       # list all targets with descriptions
 ```
@@ -58,15 +58,10 @@ make help       # list all targets with descriptions
 
 ## Where it shines
 
-**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`, or pass them from the command line:
+**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`. Change `TRIAL` to a full run, switch input sources, enable optional steps — then re-run `makexx`.
 
 ```cpp
 #define TRIAL   // use 2 iterations instead of 500
-```
-
-```bash
-makexx -DTRIAL          # same as #define TRIAL in the file
-makexx -Diterations=50  # override a value
 ```
 
 **Parameterized rules.** Use C++ loops and data structures to generate many related rules concisely:
@@ -89,37 +84,22 @@ for (auto& s : runs) {
 }
 ```
 
-**Config separation.** Keep parameters in a `config.hpp` to keep `makefile.cpp` focused on rules. makexx automatically tracks the dependency — editing `config.hpp` and running `make` regenerates the makefile:
-
-```cpp
-// config.hpp
-#define TRIAL true
-int iterations = TRIAL ? 10 : 5000;
-vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
-```
-
-```cpp
-// makefile.cpp
-#include "makefile.hpp"
-#include "config.hpp"
-```
-
 **Self-documenting pipelines.** Add descriptions and organize targets into groups:
 
 ```cpp
 mf.help_title = "Seismic Pipeline v2";
 
-mf.set_current_menu("Processing");
+mf.MENU("Processing");
 mf.add("filtered.bin", "raw.segy")
     << FINAL << HELP("Apply bandpass filter") << "atbpfilt $< $@";
 
-mf.set_current_menu("Processing/QC");
+mf.MENU("Processing/QC");
 mf.add("report.pdf", "filtered.bin")
     << HELP("Generate QC report") << "qcplot $< $@";
 
-// Single rule in a group — use MENU inline, no need for set_current_menu:
+mf.MENU("Archive", FOLDED);   // folded by default in makexx -i
 mf.add("backup.tar", "filtered.bin")
-    << MENU("Archive") << HELP("Archive raw data") << "tar cf $@ $<";
+    << HELP("Archive raw data") << "tar cf $@ $<";
 ```
 
 Then `make help` prints:
@@ -244,4 +224,4 @@ cmake --install build   # installs makexx to /usr/local/bin
 
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
 
-See [`examples/`](examples/) for a full C++ project build, a portfolio analytics workflow with config separation, a genealogy workflow with AI agent context generation, and a simulation workflow.
+See [`examples/`](examples/) for a full C++ project build, a multi-stage research pipeline, and a genealogy workflow with AI agent context generation.

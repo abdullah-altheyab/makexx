@@ -27,7 +27,6 @@ makefile_nodes.txt
 makefile_tmp.txt
 .makexx_menu
 .makexx_history
-.makexx_deps
 tmp_makexx.cpp
 tmp_makexx
 tmp_makexx.exe
