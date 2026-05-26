@@ -201,14 +201,23 @@ The generated `makefile` is a plain text file. On most HPC clusters, `make` is t
 
 ## Installation
 
-**From source:**
+**From source (with cmake):**
 
 ```bash
 git clone https://github.com/abdullah-altheyab/makexx.git
 cd makexx
 cmake -B build
 cmake --build build
-cmake --install build   # installs makexx to /usr/local/bin
+cmake --install build   # installs to /usr/local/bin
+```
+
+**From source (without cmake):**
+
+```bash
+git clone https://github.com/abdullah-altheyab/makexx.git
+cd makexx
+sh build.sh             # needs only g++ or clang++
+sudo cp makexx /usr/local/bin/
 ```
 
 ---
