@@ -1,6 +1,6 @@
 # makexx
 
-**Write your pipelines and builds in C++, not YAML.**
+**Write your pipelines and builds in C++.**
 
 makexx lets you describe your workflow in a `makefile.cpp` — a plain C++ program using a simple API. Run `makexx`, and it compiles your program, executes it to generate a standard GNU `makefile`, then runs `make`.
 
