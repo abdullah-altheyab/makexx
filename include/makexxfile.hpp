@@ -28,11 +28,11 @@
 // Settings:
 //   mf.help_title = "My Project"           — title for 'make help'
 //   mf.description("...")                  — project description for AGENTS.md
-//   mf.agents = true/false                 — enable/disable AGENTS.md (default: true)
-//   mf.agents_filename = "CLAUDE.md"       — override output filename
+//   mf.context = true/false                — enable/disable AGENTS.md (default: true)
+//   mf.context_filename = "CLAUDE.md"      — override output filename
 //   mf.silent = true                       — prefix commands with @ in makefile
 //   mf.echo = false                        — suppress ### GENERATING decoration
-//   mf.retain("file")                      — exclude from soft_clean
+//   mf.on_softclean_retain("file")         — exclude from soft_clean
 //
 // Output:
 //   mf.generate()                          — write makefile + .makexx_menu + AGENTS.md

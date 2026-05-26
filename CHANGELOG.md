@@ -39,6 +39,9 @@ Initial public release.
 - `-c` compile only (skip `make`)
 - `-v` verbose output
 - `-i` interactive target selector
+- `-Dname=value` forward preprocessor defines to `makefile.cpp` compilation
+- `-h` / `--help` show usage, `--version` show version
+- Helpful compiler-not-found error with install suggestions
 - Version mismatch warning when local `makefile.hpp` differs from embedded version
 
 ### Deployment

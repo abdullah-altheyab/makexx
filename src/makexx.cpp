@@ -647,11 +647,33 @@ int run_interactive() {
 int main(int argc, char **argv) {
 	char const *hpp_path = "makefile.hpp";
 	char const *cpp_path = "makefile.cpp";
+	for(int i = 1; i < argc; i++) {
+		if(strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+			cout << "makexx " << MAKEXX_VERSION << " — C++ build system generator\n\n"
+				<< "Usage: makexx [flags] [make-args...]\n\n"
+				<< "Flags:\n"
+				<< "  -u              Force update makefile.hpp\n"
+				<< "  -f              Force overwrite non-makexx makefile\n"
+				<< "  -c              Compile only (skip running make)\n"
+				<< "  -v              Verbose output\n"
+				<< "  -i              Interactive target selector (TUI)\n"
+				<< "  -Dname[=value]  Define preprocessor macro for makefile.cpp\n"
+				<< "  -h, --help      Show this help\n"
+				<< "  --version       Show version\n\n"
+				<< "All other flags are forwarded to make.\n";
+			return 0;
+		}
+		if(strcmp(argv[i], "--version") == 0) {
+			cout << "makexx " << MAKEXX_VERSION << endl;
+			return 0;
+		}
+	}
 	bool update_makefile_hpp = false;
 	bool force_overwrite = false;
 	bool compile_only = false;
 	bool verbose = false;
 	bool interactive = false;
+	string define_flags;
 	for(int i = 1; i < argc; i++) {
 		if(strcmp(argv[i], "-u") == 0) {
 			update_makefile_hpp = true;
@@ -663,6 +685,9 @@ int main(int argc, char **argv) {
 			compile_only = true;
 		} else if(strcmp(argv[i], "-i") == 0) {
 			interactive = true;
+		} else if(strncmp(argv[i], "-D", 2) == 0) {
+			define_flags += " ";
+			define_flags += argv[i];
 		}
 	}
 	if(!exists(hpp_path) || update_makefile_hpp) {
@@ -713,13 +738,16 @@ int main(int argc, char **argv) {
 		}
 		compiler_id++;
 		if(compiler_id >= (int)compilers.size()) {
-			std::cerr << "error: could not find a C++ compiler. Set CXX to specify one." << endl;
+			std::cerr << "error: could not find a C++ compiler.\n"
+				<< "  Install one with: apt install g++  (Debian/Ubuntu)\n"
+				<< "                    brew install gcc  (macOS)\n"
+				<< "  Or set CXX to specify a compiler path." << endl;
 			return -1;
 		}
 	}
 	if(verbose)
 		cout << compilers[compiler_id] << " is used." << endl;
-	run_cmd(compilers[compiler_id] + " -std=c++17 -MMD -MF .makexx_deps -MT makefile makefile.cpp -o makefile_gen");
+	run_cmd(compilers[compiler_id] + " -std=c++17 -MMD -MF .makexx_deps -MT makefile" + define_flags + " makefile.cpp -o makefile_gen");
 	if(!exists("makefile_gen") && !exists("makefile_gen.exe")) {
 		std::cerr << "error: failed to compile makefile.cpp" << endl;
 		return -1;
@@ -755,6 +783,7 @@ int main(int argc, char **argv) {
 		if(strcmp(argv[i], "-u") == 0) {
 		} else if(strcmp(argv[i], "-f") == 0) {
 		} else if(strcmp(argv[i], "-i") == 0) {
+		} else if(strncmp(argv[i], "-D", 2) == 0) {
 		} else {
 			a += argv[i];
 			a += " ";

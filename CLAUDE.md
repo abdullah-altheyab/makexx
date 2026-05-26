@@ -43,6 +43,9 @@ When `makexx` is invoked in a user's project directory:
 | `-c` | Compile only — skip running `make` |
 | `-v` | Verbose output |
 | `-i` | Interactive target selector (TUI with arrow keys, foldable groups, search) |
+| `-Dname=value` | Define a C++ preprocessor macro, forwarded to the compiler when compiling `makefile.cpp` |
+| `-h`, `--help` | Show usage help |
+| `--version` | Show version |
 
 All other flags are forwarded to `make`.
 
@@ -159,14 +162,16 @@ Shows how to manage a project with many executables and shared object files. Key
 - **Conditional rules**: platform detection inside `makefile.cpp` itself controls which rules are added
 - **`xxd -i` embed pattern**: used in user projects to compile binary resources (e.g. header files) into `_xxd.hpp` byte arrays and list them as dependencies so make reruns the embed when the source changes
 
-### `examples/processing_workflow/makefile.cpp` — Domain-specific workflow (exploration analytics)
+### `examples/portfolio_analytics/` — Domain-specific workflow with config separation
 
 Shows how `makefile.cpp` can act as a full workflow orchestration script, not just a build script. Key patterns:
 
-- **`#define` feature flags** at the top (`TRIAL`, `SHARED`, `TESTING`, etc.) toggle whole branches of the pipeline — edit the defines and re-run `makexx` to switch modes
-- **Domain classes** (`Play`, `Portfolio`, `Venture`, `DrillZone`, `Basin`) hold pipeline parameters; loops over them generate many related rules from a single template
+- **Config separation** — `config.hpp` holds domain classes (`Deposit`, `Region`, `MiningZone`), feature flags, and parameters; `makefile.cpp` focuses on rules
+- **`#define` feature flags** (`TRIAL`, `SHARED`, `WITH_RARE`) toggle whole branches of the pipeline
+- **Domain classes** hold pipeline parameters; loops over them generate many related rules from a single template
 - **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
-- **SQL/string helpers** return shell command fragments that are composed into rule commands — the full power of C++ string manipulation is available
+- **Helper functions** return shell command fragments composed into rule commands
+- **`MENU()` per-rule** and **`set_current_menu()`** organize targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
 
 ### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
 
@@ -195,7 +200,7 @@ src/starter.cpp               — starter makefile.cpp written to new project di
 CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
 examples/compile/             — example: multi-target C++ project build
-examples/processing_workflow/ — example: domain-specific pipeline orchestration
+examples/portfolio_analytics/ — example: domain-specific workflow with config separation
 examples/family_tree/         — example: genealogy workflow with AI context generation
 examples/simulation/          — example: config separation with auto-dependency tracking
 tests/                        — test suite

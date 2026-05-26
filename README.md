@@ -58,10 +58,15 @@ make help       # list all targets with descriptions
 
 ## Where it shines
 
-**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`. Change `TRIAL` to a full run, switch input sources, enable optional steps — then re-run `makexx`.
+**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`, or pass them from the command line:
 
 ```cpp
 #define TRIAL   // use 2 iterations instead of 500
+```
+
+```bash
+makexx -DTRIAL          # same as #define TRIAL in the file
+makexx -Diterations=50  # override a value
 ```
 
 **Parameterized rules.** Use C++ loops and data structures to generate many related rules concisely:
@@ -239,4 +244,4 @@ cmake --install build   # installs makexx to /usr/local/bin
 
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
 
-See [`examples/`](examples/) for a full C++ project build, a multi-stage research pipeline, a genealogy workflow with AI agent context generation, and a simulation workflow with config separation.
+See [`examples/`](examples/) for a full C++ project build, a portfolio analytics workflow with config separation, a genealogy workflow with AI agent context generation, and a simulation workflow.
