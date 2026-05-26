@@ -119,6 +119,29 @@ struct MenuGroup {
 	bool folded = false;
 };
 
+vector<string> word_wrap(string const &text, int width) {
+	if(width < 1) return {text};
+	vector<string> lines;
+	size_t start = 0;
+	while(start < text.size()) {
+		if(text.size() - start <= (size_t)width) {
+			lines.push_back(text.substr(start));
+			break;
+		}
+		size_t brk = text.rfind(' ', start + width);
+		if(brk == string::npos || brk <= start) {
+			brk = text.find(' ', start + width);
+			if(brk == string::npos) {
+				lines.push_back(text.substr(start));
+				break;
+			}
+		}
+		lines.push_back(text.substr(start, brk - start));
+		start = brk + 1;
+	}
+	return lines;
+}
+
 int run_interactive() {
 	std::ifstream f(".makexx_menu");
 	if(!f.is_open()) {
@@ -181,6 +204,7 @@ int run_interactive() {
 	for(auto &e : entries)
 		if((int)e.target.size() > col_width) col_width = e.target.size();
 	col_width += 2;
+	int prefix_len = 6 + col_width + 2 + 3;
 	string fmt_sel   = "      \033[7m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
 	string fmt_unsel = "      \033[1m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
 
@@ -247,16 +271,56 @@ int run_interactive() {
 	};
 
 	int cursor = 0;
+	int scroll = 0;
 	bool running = true;
 	while(running) {
 		auto visible = build_visible();
 		if(cursor >= (int)visible.size()) cursor = visible.size() - 1;
 		if(cursor < 0) cursor = 0;
 
+		struct winsize ws;
+		int term_width = 80, term_height = 24;
+		if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
+			if(ws.ws_col > 0) term_width = ws.ws_col;
+			if(ws.ws_row > 0) term_height = ws.ws_row;
+		}
+		int viewport = term_height - 2;
+
+		struct ItemInfo { vector<string> wrapped; int height; };
+		vector<ItemInfo> rinfo(visible.size());
+		vector<int> line_at(visible.size());
+		int total_lines = 0;
+		for(int i = 0; i < (int)visible.size(); i++) {
+			line_at[i] = total_lines;
+			auto [gidx, eidx] = visible[i];
+			if(eidx == -1) {
+				rinfo[i].height = 1;
+			} else {
+				auto &e = entries[eidx];
+				int desc_avail = term_width - prefix_len - groups[gidx].depth * 3;
+				if(desc_avail < 10) desc_avail = 10;
+				for(auto &dl : e.desc_lines) {
+					if(dl.empty()) continue;
+					auto wl = word_wrap(dl, desc_avail);
+					rinfo[i].wrapped.insert(rinfo[i].wrapped.end(), wl.begin(), wl.end());
+				}
+				rinfo[i].height = 1 + ((int)rinfo[i].wrapped.size() > 1 ? (int)rinfo[i].wrapped.size() - 1 : 0);
+			}
+			total_lines += rinfo[i].height;
+		}
+
+		if(line_at[cursor] < scroll)
+			scroll = line_at[cursor];
+		if(line_at[cursor] + rinfo[cursor].height > scroll + viewport)
+			scroll = line_at[cursor] + rinfo[cursor].height - viewport;
+		if(scroll < 0) scroll = 0;
+
 		printf("\033[2J\033[H");
 		printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ navigate  ←→ fold/unfold  Enter run  q quit)\033[0m\n\n");
 
 		for(int i = 0; i < (int)visible.size(); i++) {
+			if(line_at[i] + rinfo[i].height <= scroll) continue;
+			if(line_at[i] >= scroll + viewport) break;
 			auto [gidx, eidx] = visible[i];
 			bool selected = (i == cursor);
 			if(eidx == -1) {
@@ -271,24 +335,33 @@ int run_interactive() {
 				bool next_is_cont = (i + 1 < (int)visible.size() &&
 					visible[i + 1].second >= 0 &&
 					entries[visible[i + 1].second].continuation);
-				string bracket = "";
-				if(!e.continuation && next_is_cont)
-					bracket = " ─┬─ ";
-				else if(e.continuation && next_is_cont)
-					bracket = "  │  ";
-				else if(e.continuation && !next_is_cont)
-					bracket = "  ┘  ";
+				bool is_multi_target = e.continuation || next_is_cont;
+				auto &wrapped = rinfo[i].wrapped;
+				bool has_multi_desc = wrapped.size() > 1;
+				string bracket;
+				if(e.continuation)
+					bracket = next_is_cont ? " │" : " ┘";
+				else if(is_multi_target && has_multi_desc)
+					bracket = " ┬";
+				else if(is_multi_target)
+					bracket = " ┬";
+				else if(has_multi_desc)
+					bracket = " ┌";
 				else
-					bracket = " ─── ";
+					bracket = " ─";
 				string eindent(groups[gidx].depth * 3, ' ');
-				string first_desc = e.desc_lines.empty() ? "" : e.desc_lines[0];
+				string first_desc = wrapped.empty() ? "" : " " + wrapped[0];
 				if(selected)
 					printf("%s", eindent.c_str()), printf(fmt_sel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
 				else
 					printf("%s", eindent.c_str()), printf(fmt_unsel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
-				string cont_pad = eindent + "      " + string(col_width, ' ') + "       ";
-				for(size_t dl = 1; dl < e.desc_lines.size(); dl++)
-					printf("%s%s\n", cont_pad.c_str(), e.desc_lines[dl].c_str());
+				if(has_multi_desc) {
+					string cont_pad = eindent + "      " + string(col_width, ' ') + "  ";
+					string last_brk = (is_multi_target && !e.continuation) ? " ├ " : " └ ";
+					for(size_t dl = 1; dl < wrapped.size() - 1; dl++)
+						printf("%s │ %s\n", cont_pad.c_str(), wrapped[dl].c_str());
+					printf("%s%s%s\n", cont_pad.c_str(), last_brk.c_str(), wrapped.back().c_str());
+				}
 			}
 		}
 
