@@ -1,0 +1,19 @@
+Start testing: May 23 13:30 +03
+----------------------------------------------------------
+1/1 Testing: dsl
+1/1 Test: dsl
+Command: "/home/altheyab/dropbox/makexx/build2/test_dsl"
+Directory: /home/altheyab/dropbox/makexx/build2
+"dsl" start time: May 23 13:30 +03
+Output:
+----------------------------------------------------------
+20/20 checks passed — all good.
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"dsl" end time: May 23 13:30 +03
+"dsl" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: May 23 13:30 +03

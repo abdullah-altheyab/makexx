@@ -1,0 +1,118 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this project is
+
+**makexx** is a C++ build system generator. Instead of writing Makefiles by hand, users write `makefile.cpp` (a C++ program using the `BuildGraph` DSL) and run `makexx` to compile and execute it, producing a standard GNU `makefile`.
+
+## Building makexx itself
+
+```bash
+cmake -B build
+cmake --build build
+cmake --install build   # installs to /usr/local/bin by default
+```
+
+Output binary: `build/makexx`
+
+**How the embed works:** `inc/makexxfile.hpp` and `src/makexxfile_example.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `makexxfile_example_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required.
+
+## How makexx works at runtime
+
+When `makexx` is invoked in a user's project directory:
+
+1. Extracts `makefile.hpp` from the embedded hex blob (skips if already present, unless `-u`)
+2. Creates `makefile.cpp` from the embedded example template (only if it doesn't exist yet)
+3. Auto-detects a C++ compiler (`g++-8`, `g++-7`, `g++`, `icpc`) by trying each
+4. Compiles `makefile.cpp` → `makefile_gen` executable
+5. Runs `makefile_gen` which calls `bg.dump_makefile()` to produce `makefile`
+6. Runs `make` with any extra args passed to `makexx` (except `-u`, `-f`, `-c`)
+7. Cleans up temp files (`tmp_makexx*`, `err_makexx.txt`, `makefile_gen`)
+
+**Makefile protection:** makexx checks whether an existing `makefile` starts with the header `# This is an automatically generated makefile via makexx.`. If not, it refuses to overwrite it unless `-f` is passed.
+
+## CLI flags
+
+| Flag | Effect |
+|------|--------|
+| `-u` | Force re-extract `makefile.hpp` (update it) |
+| `-f` | Force overwrite `makefile` even if not makexx-generated |
+| `-c` | Compile only — skip running `make` |
+| `-0` | Verbose output |
+
+All other flags are forwarded to `make`.
+
+## The BuildGraph DSL (`inc/makexxfile.hpp`)
+
+This is the API that users write in their `makefile.cpp`. Key concepts:
+
+```cpp
+BuildGraph bg;
+
+// Add a rule: bg.add(targets, sources)
+auto& rule = bg.add("output.o", "input.cpp");
+rule << "g++ -c input.cpp -o output.o";  // shell commands via <<
+
+// target_type enum controls 'all' target membership
+rule << FINAL;    // included in 'all'
+rule << OPTIONAL; // default, run-on-demand
+rule << INPUT;    // source file marker
+
+// Metadata helpers
+rule << TEMP({"tmp1", "tmp2"});     // cleaned by full_clean and soft_clean
+rule << BYPROD("byproduct.log");    // cleaned by full_clean and soft_clean
+rule << TARGET("manual_output");    // hidden/non-reproducible target
+rule << HELP("builds the thing");   // shown by 'make help'
+
+bg.on_softclean_retain("expensive_output"); // exclude from soft_clean
+
+bg.silent = true;   // prefix commands with @ in makefile
+bg.echo = false;    // suppress ### GENERATING echo lines
+
+bg.dump_makefile();         // write the makefile
+bg.generate_graph();        // write makefile_graph.gv (Graphviz DOT)
+```
+
+The generated makefile always includes: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help` rules.
+
+On Windows, the `<<` operator automatically replaces `/` with `\` in shell commands.
+
+## Examples
+
+### `examples/compile/makefile.cpp` — Large C++ project build
+
+Shows how to manage a project with many executables and shared object files. Key patterns:
+
+- **Path macros**: `#define O "./obj/"`, `#define S "./src/"`, etc. to keep rule definitions concise
+- **`CompileRule` struct**: groups target, dependencies, and extra flags; then batched into `vector<CompileRule>` by category (translators, signal processing, seismic, AI, etc.) and passed to helper functions
+- **`addexec()` / `addobj()` helpers**: wrap `bg.add()` + `<<` to reduce repetition and handle platform differences
+- **`$<`, `$@`, `$^`** GNU make automatic variables work normally inside command strings
+- **Groups**: `bg.get_rule(group)` + `bg.add_source(rule, target)` wires multiple executables as dependencies of a named group target (e.g., `"social"`)
+- **Conditional rules**: platform detection inside `makefile.cpp` itself controls which rules are added
+- **`xxd -i` embed pattern**: used in user projects to compile binary resources (e.g. header files) into `_xxd.hpp` byte arrays and list them as dependencies so make reruns the embed when the source changes
+
+### `examples/processing_workflow/makefile.cpp` — Domain-specific workflow (exploration analytics)
+
+Shows how `makefile.cpp` can act as a full workflow orchestration script, not just a build script. Key patterns:
+
+- **`#define` feature flags** at the top (`TRIAL`, `SHARED`, `TESTING`, etc.) toggle whole branches of the pipeline — edit the defines and re-run `makexx` to switch modes
+- **Domain classes** (`Play`, `Portfolio`, `Venture`, `DrillZone`, `Basin`) hold pipeline parameters; loops over them generate many related rules from a single template
+- **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
+- **SQL/string helpers** return shell command fragments that are composed into rule commands — the full power of C++ string manipulation is available
+
+## Architecture
+
+```
+src/makexx.cpp                — main binary: compiler detection, file bootstrapping, orchestration
+include/makexxfile.hpp        — the BuildGraph DSL header (source of truth, embedded at build time)
+src/starter.cpp               — starter makefile.cpp written to new project directories (source of truth, embedded at build time)
+CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
+cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
+examples/compile/             — example: multi-target C++ project build
+examples/processing_workflow/ — example: domain-specific pipeline orchestration
+tests/                        — test suite
+.github/workflows/ci.yml      — GitHub Actions CI (Linux + macOS)
+```
+
+The two embed headers (`makexxfile_embed.hpp`, `makexxfile_example_embed.hpp`) are generated into the CMake build directory and never checked in.

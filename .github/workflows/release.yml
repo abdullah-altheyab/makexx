@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            artifact: makexx-linux-x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            artifact: makexx-linux-aarch64
+          - os: macos-13
+            arch: x86_64
+            artifact: makexx-macos-x86_64
+          - os: macos-latest
+            arch: arm64
+            artifact: makexx-macos-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: cd build && ctest --output-on-failure
+
+      - name: Package tarball
+        run: |
+          mkdir -p dist
+          cp build/makexx dist/${{ matrix.artifact }}
+          chmod +x dist/${{ matrix.artifact }}
+          tar -czf dist/${{ matrix.artifact }}.tar.gz -C dist ${{ matrix.artifact }}
+
+      - name: Package deb
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DEB_ARCH=${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
+          PKG="makexx_${VERSION}_${DEB_ARCH}"
+          mkdir -p "${PKG}/DEBIAN" "${PKG}/usr/local/bin"
+          cp build/makexx "${PKG}/usr/local/bin/makexx"
+          chmod 755 "${PKG}/usr/local/bin/makexx"
+          cat > "${PKG}/DEBIAN/control" << EOF
+          Package: makexx
+          Version: ${VERSION}
+          Architecture: ${DEB_ARCH}
+          Maintainer: Abdullah AlTheyab <abdul900@gmail.com>
+          Description: C++ build system generator
+           Write makefile.cpp using a C++ DSL, run makexx to produce
+           standard GNU makefiles with dependency tracking.
+          Homepage: https://github.com/abdul900/makexx
+          License: MIT
+          Priority: optional
+          Section: devel
+          EOF
+          sed -i 's/^          //' "${PKG}/DEBIAN/control"
+          dpkg-deb --build "${PKG}" "dist/${PKG}.deb"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.artifact }}.tar.gz
+            dist/*.deb
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.deb

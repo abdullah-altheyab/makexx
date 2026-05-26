@@ -1,0 +1,9 @@
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/install/strip.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/install/local.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/install.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/list_install_components.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/rebuild_cache.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/edit_cache.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/test.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/test_dsl.dir
+/home/altheyab/dropbox/makexx/build2/CMakeFiles/makexx.dir
