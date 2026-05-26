@@ -81,7 +81,7 @@ No config file to edit, no environment variables to set.
 ## Try it
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abdul900/makexx/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/install.sh | sh
 ```
 
 Or build from source:
@@ -92,4 +92,4 @@ cmake -B build && cmake --build build && cmake --install build
 
 Then run `makexx` in any directory. It creates a starter `makefile.cpp` — edit it and go.
 
-GitHub: [github.com/abdul900/makexx](https://github.com/abdul900/makexx)
+GitHub: [github.com/abdullah-altheyab/makexx](https://github.com/abdullah-altheyab/makexx)

@@ -206,13 +206,13 @@ The generated `makefile` is a plain text file. On most HPC clusters, `make` is t
 **Quick install** (Linux & macOS):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abdul900/makexx/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/install.sh | sh
 ```
 
 **Homebrew** (macOS & Linux):
 
 ```bash
-brew tap abdul900/makexx
+brew tap abdullah-altheyab/makexx
 brew install makexx
 ```
 
@@ -220,7 +220,7 @@ brew install makexx
 
 ```bash
 # Download the .deb from the latest release
-curl -fsSLO https://github.com/abdul900/makexx/releases/latest/download/makexx_VERSION_amd64.deb
+curl -fsSLO https://github.com/abdullah-altheyab/makexx/releases/latest/download/makexx_VERSION_amd64.deb
 sudo dpkg -i makexx_*.deb
 ```
 

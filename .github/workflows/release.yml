@@ -63,7 +63,7 @@ jobs:
           Description: C++ build system generator
            Write makefile.cpp using a C++ DSL, run makexx to produce
            standard GNU makefiles with dependency tracking.
-          Homepage: https://github.com/abdul900/makexx
+          Homepage: https://github.com/abdullah-altheyab/makexx
           License: MIT
           Priority: optional
           Section: devel

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="abdul900/makexx"
+REPO="abdullah-altheyab/makexx"
 PREFIX="${PREFIX:-/usr/local}"
 INSTALL_DIR="${PREFIX}/bin"
 

@@ -1,10 +1,10 @@
 class Makexx < Formula
   desc "C++ build system generator — write makefile.cpp, get GNU makefiles"
-  homepage "https://github.com/abdul900/makexx"
-  url "https://github.com/abdul900/makexx/archive/refs/tags/VERSION.tar.gz"
+  homepage "https://github.com/abdullah-altheyab/makexx"
+  url "https://github.com/abdullah-altheyab/makexx/archive/refs/tags/VERSION.tar.gz"
   # sha256 "UPDATE_ON_RELEASE"
   license "MIT"
-  head "https://github.com/abdul900/makexx.git", branch: "main"
+  head "https://github.com/abdullah-altheyab/makexx.git", branch: "main"
 
   depends_on "cmake" => :build
 
