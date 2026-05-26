@@ -14,8 +14,27 @@
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/ioctl.h>
+#include <unistd.h>
+#endif
 
 typedef std::initializer_list<std::string> StringList;
+
+inline int get_terminal_width(int fallback = 100) {
+#ifdef _WIN32
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	if(GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+		return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+#else
+	struct winsize w;
+	if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0)
+		return w.ws_col;
+#endif
+	return fallback;
+}
 
 inline long double random_float() {
 	return (long double)(std::rand()) / RAND_MAX;
@@ -72,9 +91,11 @@ class Rule {
 	std::set<std::string> hidden_targets; // hidden_target
 	target_type type;
 	std::string help;
+	std::string help_group;
 	Rule() {
 		type = OPTIONAL;
 		help = "";
+		help_group = "";
 	}
 	std::string formatted(std::string prefix = "\t") {
 		std::string a = "";
@@ -191,9 +212,9 @@ class TARGET { // hidden target, usually for non-reproducible (manual) targets
 class HELP { // add help to the menu
   public:
 	std::string help;
-	HELP(std::string help) {
-		this->help = help;
-	};
+	std::string group;
+	HELP(std::string help) : help(help) {};
+	HELP(std::string group, std::string help) : help(help), group(group) {};
 };
 
 inline Rule &operator<<(Rule &a, TEMP t) {
@@ -215,6 +236,8 @@ inline Rule &operator<<(Rule &a, TARGET t) {
 
 inline Rule &operator<<(Rule &a, HELP t) {
 	a.help = t.help;
+	if(!t.group.empty())
+		a.help_group = t.group;
 	return a;
 }
 
@@ -227,12 +250,16 @@ class Makefile {
 	std::map<std::string, Rule *> target_rule;
 	std::multimap<Rule *, std::string> rule_source;
 	std::multimap<Rule *, std::string> rule_target;
-	std::vector<std::pair<std::string, std::string>> help_menu;
+	struct HelpEntry { std::string target; std::string description; std::string group; };
+	std::vector<HelpEntry> help_menu;
+	std::vector<std::string> help_group_order;
 	std::set<std::string> soft_clean_retain_nodes;
+	std::string current_help_group;
 
 	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources) {
 		commands.push_back(std::make_unique<Rule>());
 		Rule *A = commands.back().get();
+		A->help_group = current_help_group;
 		for(auto &s : sources) {
 			nodes.insert(s);
 			rule_source.insert({A, s});
@@ -250,53 +277,94 @@ class Makefile {
 
 	int max_width;
 
-	void add_to_help_menu(std::string make_rule, std::string helpstr) {
-		help_menu.push_back({make_rule, helpstr});
+	void add_to_help_menu(std::string make_rule, std::string helpstr, std::string group) {
+		help_menu.push_back({make_rule, helpstr, group});
+		if(!group.empty() && std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
+			help_group_order.push_back(group);
 	}
 
-	void add_help_rule() {
-		auto &f  = add("help");
-		for(auto itm : help_menu) {
+	void emit_help_entries(Rule &f, std::string group) {
+		for(auto &itm : help_menu) {
+			if(itm.group != group) continue;
 			std::stringstream ss;
-			ss << std::setw(max_width) << itm.first << ":  " << itm.second;
-			f << "@echo \"" + ss.str() + "\"\n";
+			ss << "  " << std::setw(max_width) << itm.target << itm.description;
+			f << "@echo \"" + ss.str() + "\"";
 		}
 	}
 
-	void dump_help() {
+	void add_help_rule(bool graph = false) {
+		auto &f  = add("help");
+		if(!help_title.empty()) {
+			f << "@echo \"" + help_title + "\"";
+			f << "@echo \"\"";
+		}
+		std::string pad = std::string(std::max(0, max_width - 10), ' ');
+		bool has_ungrouped = false;
+		for(auto &itm : help_menu)
+			if(itm.group.empty()) { has_ungrouped = true; break; }
+		if(has_ungrouped) {
+			f << "@echo \"Targets:\"";
+			emit_help_entries(f, "");
+			f << "@echo \"\"";
+		}
+		for(auto &grp : help_group_order) {
+			f << "@echo \"" + grp + ":\"";
+			emit_help_entries(f, grp);
+			f << "@echo \"\"";
+		}
+		auto builtin = [&](std::string name, std::string desc) {
+			std::stringstream ss;
+			ss << "  " << std::setw(max_width) << name << " \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 " << desc;
+			f << "@echo \"" + ss.str() + "\"";
+		};
+		f << "@echo \"Built-in:\"";
+		builtin("all",          "Build all final targets");
+		builtin("full_clean",   "Remove all generated files");
+		builtin("soft_clean",   "Remove generated files (except retained)");
+		builtin("list",         "List all tracked files");
+		builtin("list_unknown", "List untracked files in directory");
+		builtin("list_input",   "List input files");
+		builtin("help",         "Show this help");
+		if(graph)
+			builtin("makefile_graph.pdf", "Generate dependency graph (requires Graphviz)");
+	}
+
+	void dump_help(bool graph = false) {
 		for(auto const& cmd : commands) {
-			if(!(cmd->help == "")) {
-				std::string targets_str = "";
-				auto trange = rule_target.equal_range(cmd.get());
-				bool first = true;
-				for(auto j = trange.first; j != trange.second; j++) {
-					if(first) {
-						first = false;
-					} else {
-						targets_str += " ";
-					}
-					targets_str += j->second;
-				}
-				if(!first) {
-					add_to_help_menu(targets_str, cmd->help);
-                    if(max_width<(int)targets_str.size()){
-                        max_width=targets_str.size();
-                    }
-				}
+			if(cmd->help.empty()) continue;
+			auto trange = rule_target.equal_range(cmd.get());
+			std::vector<std::string> targets;
+			for(auto j = trange.first; j != trange.second; j++)
+				targets.push_back(j->second);
+			if(targets.empty()) continue;
+			for(auto &t : targets)
+				if(max_width < (int)t.size())
+					max_width = t.size();
+			if(targets.size() == 1) {
+				add_to_help_menu(targets[0], " \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 " + cmd->help, cmd->help_group);
+			} else {
+				add_to_help_menu(targets[0], " \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 " + cmd->help, cmd->help_group);
+				for(size_t i = 1; i < targets.size() - 1; i++)
+					add_to_help_menu(targets[i], "  \xe2\x94\x82", cmd->help_group);
+				add_to_help_menu(targets.back(), "  \xe2\x94\x98", cmd->help_group);
 			}
 		}
-		add_help_rule();
+		add_help_rule(graph);
 	}
 
   public:
 	std::set<std::string> hidden_nodes; //notes to execlude from makefile graph
 	bool silent;
 	bool echo;
+	std::string help_title;
+
+	void HELP_GROUP(std::string group) { current_help_group = group; }
 
 	Makefile() {
         max_width=20;
 		silent = false;
 		echo = true;
+		help_title = "";
 	};
 
 	void add_source(Rule &f, std::string node) {
@@ -343,7 +411,7 @@ class Makefile {
 		generate(true);
 	}
 	void generate(bool graph = false) {
-		dump_help();
+		dump_help(graph);
 		std::set<std::string> processed_nodes;
 		std::string makefile;
 		std::set<std::string> defaultmake_list;
@@ -352,6 +420,7 @@ class Makefile {
 		std::set<std::string> temps_list;
 		std::set<std::string> byprods_list;
 		std::set<std::string> hidden_targets_list;
+		std::set<std::string> phony_targets = {"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"};
 		myfile.open("makefile");
 		myfile << makefile_header << std::endl;
 		myfile << "# DO NOT EDIT!" << std::endl;
@@ -386,7 +455,10 @@ class Makefile {
 					}
 					makefile += from;
 					makefile += "\n";
-					if(echo){
+					bool is_phony = false;
+					for(auto &i : to_list)
+						if(phony_targets.count(i)) { is_phony = true; break; }
+					if(echo && !is_phony){
 						makefile += "\t@echo \"### GENERATING : \"\n";
                         for(auto & i: to_list)
                             makefile += std::string("\t@echo \"###   "+i+"\"\n");

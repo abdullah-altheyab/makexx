@@ -3,6 +3,7 @@ using namespace std;
 
 int main() {
     Makefile mf;
+    mf.help_title = "My Project";
 
     // Add rules with: mf.add("target", "source") << FINAL << "shell command";
     //
@@ -13,16 +14,28 @@ int main() {
     //   $<  first source file
     //   $@  target file
     //   $^  all source files
+    //
+    // Organize help with groups:
+    //   mf.HELP_GROUP("name")           — all subsequent rules belong to this group
+    //   HELP("group", "description")    — override group for a single rule
+    //
+    // Helper functions:
+    //   stem("dir/file.cpp")            — "file"
+    //   basename("dir/file.cpp")        — "file.cpp"
+    //   change_ext("file.cpp", ".o")    — "file.o"
+    //   join_path("obj", "file.o")      — "obj/file.o"
+
+    mf.HELP_GROUP("Processing");
 
     mf.add("step1.out", "input.dat")
-        << FINAL
         << HELP("run step 1")
         << "your-tool --input $< --output $@";
 
     mf.add("step2.out", "step1.out")
-        << FINAL
         << HELP("run step 2")
         << "your-other-tool $< > $@";
+
+    mf.HELP_GROUP("Reports");
 
     mf.add("report.pdf", {"step1.out", "step2.out"})
         << FINAL
