@@ -1,3 +1,49 @@
+// makexxfile.hpp — Makefile DSL for makexx
+//
+// Usage:
+//   #include "makefile.hpp"
+//   int main() {
+//       Makefile mf;
+//       mf.add("output.o", "input.cpp") << FINAL << "g++ -c $< -o $@";
+//       mf.generate();
+//   }
+//
+// Rules:
+//   auto& r = mf.add(target, source)       — single target, single source
+//   auto& r = mf.add(targets, sources)     — multiple targets/sources (vectors or {})
+//   r << "shell command"                    — append a shell command
+//   r << FINAL / OPTIONAL / INPUT           — target type (FINAL = in 'all')
+//   r << TEMP({"f1","f2"})                  — mark files for cleanup
+//   r << BYPRODUCT("file")                  — mark by-products for cleanup
+//   r << TARGET("file")                     — hidden/non-reproducible target
+//   r << HELP("description")               — shown by 'make help' and makexx -i
+//   r << HELP("group", "description")      — with explicit group override
+//
+// Menu groups:
+//   r << MENU("Forecasting")               — set group for a single rule
+//   mf.set_current_menu("Build")           — set group for many subsequent rules (defines if new)
+//   mf.set_current_menu("Build/Tests")     — nested group via slash separator
+//   mf.define_menu("Archive", FOLDED)      — pre-declare folded group without switching
+//
+// Settings:
+//   mf.help_title = "My Project"           — title for 'make help'
+//   mf.description("...")                  — project description for AGENTS.md
+//   mf.agents = true/false                 — enable/disable AGENTS.md (default: true)
+//   mf.agents_filename = "CLAUDE.md"       — override output filename
+//   mf.silent = true                       — prefix commands with @ in makefile
+//   mf.echo = false                        — suppress ### GENERATING decoration
+//   mf.retain("file")                      — exclude from soft_clean
+//
+// Output:
+//   mf.generate()                          — write makefile + .makexx_menu + AGENTS.md
+//   mf.generate_with_graph()               — also write makefile_graph.gv (Graphviz)
+//
+// Helpers:
+//   stem("dir/file.cpp")       → "file"        basename("dir/file.cpp")  → "file.cpp"
+//   change_ext("f.cpp", ".o")  → "f.o"         join_path("obj", "f.o")   → "obj/f.o"
+//   get_extension("file.cpp")  → "cpp"          replace_all(str, from, to)
+//   to_upper(str)               to_lower(str)
+
 #include <map>
 #include <set>
 #include <utility>
@@ -217,6 +263,12 @@ class HELP { // add help to the menu
 	HELP(std::string group, std::string help) : help(help), group(group) {};
 };
 
+class MENU { // override menu group for a single rule
+  public:
+	std::string group;
+	MENU(std::string group) : group(group) {};
+};
+
 inline Rule &operator<<(Rule &a, TEMP t) {
 	for(auto &tmp : t.filenames)
 		a.temp_files.insert(tmp);
@@ -238,6 +290,11 @@ inline Rule &operator<<(Rule &a, HELP t) {
 	a.help_lines.push_back(t.help);
 	if(!t.group.empty())
 		a.help_group = t.group;
+	return a;
+}
+
+inline Rule &operator<<(Rule &a, MENU t) {
+	a.help_group = t.group;
 	return a;
 }
 
@@ -294,9 +351,9 @@ class Makefile {
 		for(auto &itm : help_menu) {
 			if(itm.group != group) continue;
 			if(itm.bracket == BRK_MULTI_MID) {
-				script += "printf '" + indent + "  %" + p + "s  \xe2\x94\x82\\n' '" + shell_escape(itm.target) + "'; ";
+				script += "printf '" + indent + "  %" + p + "s \xe2\x94\x82\\n' '" + shell_escape(itm.target) + "'; ";
 			} else if(itm.bracket == BRK_MULTI_END) {
-				script += "printf '" + indent + "  %" + p + "s  \xe2\x94\x98\\n' '" + shell_escape(itm.target) + "'; ";
+				script += "printf '" + indent + "  %" + p + "s \xe2\x94\x98\\n' '" + shell_escape(itm.target) + "'; ";
 			} else {
 				std::string desc = replace_all(itm.description, "\n", "\\n");
 				std::string mode = (itm.bracket == BRK_MULTI_FIRST) ? "1" : "0";
@@ -304,12 +361,16 @@ class Makefile {
 					"printf '%b\\n' '" + shell_escape(desc) + "' | fold -s -w $$_d | "
 					"awk -v p=" + p + " -v m=" + mode + " '"
 					"{l[NR]=$$0}END{"
-					"if(NR<=1 && m==0)printf \" \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 %s\\n\",l[1];"
-					"else if(NR<=1)printf \" \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 %s\\n\",l[1];"
-					"else{printf \" \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 %s\\n\",l[1];"
-					"for(i=2;i<NR;i++)printf \"  %*s  \xe2\x94\x82  %s\\n\",p,\"\",l[i];"
-					"if(m==0)printf \"  %*s  \xe2\x94\x98  %s\\n\",p,\"\",l[NR];"
-					"else printf \"  %*s  \xe2\x94\x82  %s\\n\",p,\"\",l[NR]"
+					"if(NR<=1 && m==0)printf \" \xe2\x94\x80 %s\\n\",l[1];"
+					"else if(NR<=1)printf \" \xe2\x94\xac %s\\n\",l[1];"
+					"else if(m==0){"
+					"printf \" \xe2\x94\x8c %s\\n\",l[1];"
+					"for(i=2;i<NR;i++)printf \"  %*s \xe2\x94\x82 %s\\n\",p,\"\",l[i];"
+					"printf \"  %*s \xe2\x94\x94 %s\\n\",p,\"\",l[NR]"
+					"}else{"
+					"printf \" \xe2\x94\xac %s\\n\",l[1];"
+					"for(i=2;i<NR;i++)printf \"  %*s \xe2\x94\x82 %s\\n\",p,\"\",l[i];"
+					"if(NR>1)printf \"  %*s \xe2\x94\x9c %s\\n\",p,\"\",l[NR]"
 					"}}'; ";
 			}
 		}
@@ -318,7 +379,7 @@ class Makefile {
 	void add_help_rule(bool graph = false) {
 		auto &f  = add("help");
 		std::string p = std::to_string(max_width);
-		int prefix_len = 2 + max_width + 5;
+		int prefix_len = 2 + max_width + 3;
 		std::string script;
 		script += "_w=$$(tput cols 2>/dev/null || echo $${COLUMNS:-80}); "
 				  "_d=$$((_w - " + std::to_string(prefix_len) + ")); "
@@ -349,10 +410,11 @@ class Makefile {
 				"printf '%b\\n' '" + shell_escape(desc) + "' | fold -s -w $$_d | "
 				"awk -v p=" + p + " '"
 				"{l[NR]=$$0}END{"
-				"if(NR<=1)printf \" \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 %s\\n\",l[1];"
-				"else{printf \" \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 %s\\n\",l[1];"
-				"for(i=2;i<NR;i++)printf \"  %*s  \xe2\x94\x82  %s\\n\",p,\"\",l[i];"
-				"printf \"  %*s  \xe2\x94\x98  %s\\n\",p,\"\",l[NR]"
+				"if(NR<=1)printf \" \xe2\x94\x80 %s\\n\",l[1];"
+				"else{"
+				"printf \" \xe2\x94\x8c %s\\n\",l[1];"
+				"for(i=2;i<NR;i++)printf \"  %*s \xe2\x94\x82 %s\\n\",p,\"\",l[i];"
+				"printf \"  %*s \xe2\x94\x94 %s\\n\",p,\"\",l[NR]"
 				"}}'; ";
 		};
 		script += "echo 'Built-in:'; ";
@@ -407,12 +469,24 @@ class Makefile {
 		project_description = desc;
 	}
 
-	void HELP_GROUP(std::string group) {
-		current_help_group = group;
+	void define_menu(std::string group) {
+		if(std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
+			help_group_order.push_back(group);
 	}
 
-	void HELP_GROUP(std::string group, group_display display) {
+	void define_menu(std::string group, group_display display) {
+		define_menu(group);
+		if(display == FOLDED) folded_groups.insert(group);
+	}
+
+	void set_current_menu(std::string group) {
 		current_help_group = group;
+		if(std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
+			help_group_order.push_back(group);
+	}
+
+	void set_current_menu(std::string group, group_display display) {
+		set_current_menu(group);
 		if(display == FOLDED) folded_groups.insert(group);
 	}
 
@@ -485,6 +559,9 @@ class Makefile {
 		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
 		myfile << "SHELL=/bin/bash" << std::endl;
 		myfile << ".PHONY: all full_clean soft_clean list list_unknown list_input help" << std::endl;
+		myfile << "-include .makexx_deps" << std::endl;
+		myfile << "makefile: makefile.cpp makefile.hpp" << std::endl;
+		myfile << "\tmakexx -c" << std::endl;
 		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
 			if(target_rule.find(*itr) != target_rule.end()) {
 				if(processed_nodes.find(*itr) == processed_nodes.end()) {

@@ -4639,7 +4639,8 @@ class Main{
                 dep.push_back("play_"+play+"_spot_all_portfolio.it");
             }
             auto & f = mf.add({"assign_segid", "prop_match.t"}, dep);
-            f<<HELP("link AED plans to SPOT portfolio");
+            f<<HELP("link GUWI entries to SPOT portfolio");
+            f<<HELP("Here we use names, reservoirs, and spatial logic for matching");
             bool isfirst=true;
             for(auto item: plays){
                 string play = item.first;

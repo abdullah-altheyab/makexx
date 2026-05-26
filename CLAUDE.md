@@ -32,6 +32,8 @@ When `makexx` is invoked in a user's project directory:
 
 **Makefile protection:** makexx checks whether an existing `makefile` starts with the header `# This is an automatically generated makefile via makexx.`. If not, it refuses to overwrite it unless `-f` is passed.
 
+**Auto-regeneration:** The generated makefile includes a rule `makefile: makefile.cpp makefile.hpp` that reruns `makexx -c`. If the user edits `makefile.cpp` and runs `make`, GNU make detects the makefile is out of date, regenerates it, restarts, and then builds the requested targets using the new rules. makexx compiles `makefile.cpp` with `-MMD -MF .makexx_deps -MT makefile`, so any headers included by `makefile.cpp` (e.g., a `config.hpp`) are automatically tracked as dependencies via `-include .makexx_deps` in the generated makefile.
+
 ## CLI flags
 
 | Flag | Effect |
@@ -62,7 +64,7 @@ rule << INPUT;    // source file marker
 
 // Metadata helpers
 rule << TEMP({"tmp1", "tmp2"});     // cleaned by full_clean and soft_clean
-rule << BYPROD("byproduct.log");    // cleaned by full_clean and soft_clean
+rule << BYPRODUCT("byproduct.log"); // cleaned by full_clean and soft_clean
 rule << TARGET("manual_output");    // hidden/non-reproducible target
 rule << HELP("builds the thing");   // shown by 'make help'
 rule << HELP("Deploy", "deploy it"); // with explicit group
@@ -74,9 +76,19 @@ mf.echo = false;    // suppress ### GENERATING echo lines
 
 // Help organization
 mf.help_title = "My Project";       // printed at top of 'make help'
-mf.HELP_GROUP("Build");             // subsequent HELP() entries belong to this group
-mf.HELP_GROUP("Build/Tests");       // nested group via slash separator
-mf.HELP_GROUP("Archive", FOLDED);   // folded by default in makexx -i
+// Single rule in a group — use MENU with <<
+mf.add("forecast.bin", "data.t")
+    << MENU("Forecasting") << HELP("run forecast") << "forecast $< > $@";
+
+// Many rules in a group — use set_current_menu (defines the group if new)
+mf.set_current_menu("Build");
+mf.add("a.o", "a.cpp") << HELP("compile a") << "g++ -c $< -o $@";
+mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
+
+mf.set_current_menu("Build/Tests");     // nested group via slash separator
+
+// Pre-declare a folded group without switching to it
+mf.define_menu("Archive", FOLDED);
 // HELP("group", "desc") overrides the group for a single rule
 
 // AI agent context generation
@@ -161,9 +173,18 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealogy visualization) and demonstrates the AI agent context generation feature. Key patterns:
 
 - **`mf.description("...")`** provides a project summary for the generated `AGENTS.md`
-- **`HELP_GROUP()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
+- **`set_current_menu()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
 - **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call
+
+### `examples/simulation/` — Config separation pattern
+
+Shows how to separate configuration from rules by putting parameters in a `config.hpp` header. Key patterns:
+
+- **`#include "config.hpp"`** keeps data (runs, solver, iterations, trial flag) separate from logic
+- **`#define TRIAL`** toggles between trial and production runs
+- **Struct-based config** (`vector<Run>`) drives rule generation via loops
+- Editing `config.hpp` and running `make` auto-regenerates the makefile (via `-MMD` dependency tracking)
 
 ## Architecture
 
@@ -176,6 +197,7 @@ cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string lit
 examples/compile/             — example: multi-target C++ project build
 examples/processing_workflow/ — example: domain-specific pipeline orchestration
 examples/family_tree/         — example: genealogy workflow with AI context generation
+examples/simulation/          — example: config separation with auto-dependency tracking
 tests/                        — test suite
 .github/workflows/ci.yml      — GitHub Actions CI (Linux + macOS)
 ```
