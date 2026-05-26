@@ -2,7 +2,8 @@
 set -e
 
 REPO="abdul900/makexx"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+PREFIX="${PREFIX:-/usr/local}"
+INSTALL_DIR="${PREFIX}/bin"
 
 detect_platform() {
     OS="$(uname -s)"
@@ -20,7 +21,6 @@ detect_platform() {
         *)             echo "error: unsupported architecture: $ARCH" >&2; exit 1 ;;
     esac
 
-    # macOS arm64 uses arm64 in the artifact name
     if [ "$OS_NAME" = "macos" ] && [ "$ARCH_NAME" = "aarch64" ]; then
         ARCH_NAME="arm64"
     fi
