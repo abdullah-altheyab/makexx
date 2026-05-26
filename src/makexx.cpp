@@ -200,6 +200,47 @@ int run_interactive() {
 		return 1;
 	}
 
+	const int MAX_HISTORY = 5;
+	const string history_path = ".makexx_history";
+	vector<string> history;
+	auto load_history = [&]() {
+		history.clear();
+		std::ifstream hf(history_path);
+		string hl;
+		while(std::getline(hf, hl))
+			if(!hl.empty()) history.push_back(hl);
+	};
+	auto save_history = [&](string const &target) {
+		history.erase(std::remove(history.begin(), history.end(), target), history.end());
+		history.insert(history.begin(), target);
+		if((int)history.size() > MAX_HISTORY) history.resize(MAX_HISTORY);
+		std::ofstream hf(history_path);
+		for(auto &h : history) hf << h << "\n";
+	};
+	load_history();
+
+	std::map<string, int> target_to_entry;
+	for(int i = 0; i < (int)entries.size(); i++)
+		if(!entries[i].continuation)
+			target_to_entry[entries[i].target] = i;
+
+	auto rebuild_recent_group = [&]() {
+		const string rname = "\x01Recent";
+		if(group_index.count(rname)) {
+			groups[group_index[rname]].entries.clear();
+		} else {
+			group_index[rname] = groups.size();
+			groups.push_back({rname, "Recent", 0, {}, false});
+		}
+		auto &rg = groups[group_index[rname]];
+		for(auto &h : history) {
+			auto it = target_to_entry.find(h);
+			if(it != target_to_entry.end())
+				rg.entries.push_back(it->second);
+		}
+	};
+	rebuild_recent_group();
+
 	int col_width = 0;
 	for(auto &e : entries)
 		if((int)e.target.size() > col_width) col_width = e.target.size();
@@ -216,13 +257,12 @@ int run_interactive() {
 	newt.c_cc[VTIME] = 0;
 	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-	enum Key { KEY_NONE, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_SPACE, KEY_QUIT };
+	enum Key { KEY_NONE, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_SPACE, KEY_QUIT, KEY_ESC, KEY_BACKSPACE, KEY_CHAR, KEY_PGUP, KEY_PGDN, KEY_HOME, KEY_END, KEY_TAB, KEY_STAB };
+	char last_char = 0;
 	auto read_key = [&]() -> Key {
 		char c;
 		if(read(STDIN_FILENO, &c, 1) != 1) return KEY_QUIT;
-		if(c == 'q') return KEY_QUIT;
-		if(c == '\n' || c == '\r') return KEY_ENTER;
-		if(c == ' ') return KEY_SPACE;
+		last_char = c;
 		if(c == 27) {
 			struct termios tmp = newt;
 			tmp.c_cc[VMIN] = 0;
@@ -230,8 +270,8 @@ int run_interactive() {
 			tcsetattr(STDIN_FILENO, TCSANOW, &tmp);
 			char seq[2];
 			int n = read(STDIN_FILENO, seq, 1);
-			if(n == 0) { tcsetattr(STDIN_FILENO, TCSANOW, &newt); return KEY_QUIT; }
-			if(seq[0] != '[') { tcsetattr(STDIN_FILENO, TCSANOW, &newt); return KEY_NONE; }
+			if(n == 0) { tcsetattr(STDIN_FILENO, TCSANOW, &newt); return KEY_ESC; }
+			if(seq[0] != '[') { tcsetattr(STDIN_FILENO, TCSANOW, &newt); return KEY_ESC; }
 			n = read(STDIN_FILENO, seq + 1, 1);
 			tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 			if(n == 0) return KEY_NONE;
@@ -239,8 +279,27 @@ int run_interactive() {
 			if(seq[1] == 'B') return KEY_DOWN;
 			if(seq[1] == 'C') return KEY_RIGHT;
 			if(seq[1] == 'D') return KEY_LEFT;
+			if(seq[1] == 'H') return KEY_HOME;
+			if(seq[1] == 'F') return KEY_END;
+			if(seq[1] == 'Z') return KEY_STAB;
+			if(seq[1] >= '1' && seq[1] <= '6') {
+				char tilde;
+				struct termios tmp2 = newt;
+				tmp2.c_cc[VMIN] = 0; tmp2.c_cc[VTIME] = 1;
+				tcsetattr(STDIN_FILENO, TCSANOW, &tmp2);
+				read(STDIN_FILENO, &tilde, 1);
+				tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+				if(seq[1] == '5') return KEY_PGUP;
+				if(seq[1] == '6') return KEY_PGDN;
+				if(seq[1] == '1') return KEY_HOME;
+				if(seq[1] == '4') return KEY_END;
+			}
 			return KEY_NONE;
 		}
+		if(c == 127 || c == 8) return KEY_BACKSPACE;
+		if(c == '\t') return KEY_TAB;
+		if(c == '\n' || c == '\r') return KEY_ENTER;
+		if(c >= 32 && c < 127) return KEY_CHAR;
 		return KEY_NONE;
 	};
 
@@ -257,15 +316,41 @@ int run_interactive() {
 		return false;
 	};
 
+	string search;
+	bool searching = false;
+
+	auto matches_search = [&](int eidx) -> bool {
+		if(search.empty()) return true;
+		auto &e = entries[eidx];
+		string q = to_lower(search);
+		if(to_lower(e.target).find(q) != string::npos) return true;
+		for(auto &dl : e.desc_lines)
+			if(to_lower(dl).find(q) != string::npos) return true;
+		return false;
+	};
+
+	auto add_group_to_visible = [&](vector<std::pair<int,int>> &vis, int g) {
+		if(is_ancestor_folded(groups[g].name)) return;
+		vector<int> matched;
+		for(int ei : groups[g].entries)
+			if(matches_search(ei)) matched.push_back(ei);
+		if(!search.empty() && matched.empty()) return;
+		if(matched.empty()) return;
+		vis.push_back({g, -1});
+		if(!groups[g].folded || !search.empty()) {
+			for(int ei : matched)
+				vis.push_back({g, ei});
+		}
+	};
+
+	int recent_gidx = group_index["\x01Recent"];
+
 	auto build_visible = [&]() {
 		vector<std::pair<int,int>> vis;
+		add_group_to_visible(vis, recent_gidx);
 		for(int g = 0; g < (int)groups.size(); g++) {
-			if(is_ancestor_folded(groups[g].name)) continue;
-			vis.push_back({g, -1});
-			if(!groups[g].folded) {
-				for(int ei : groups[g].entries)
-					vis.push_back({g, ei});
-			}
+			if(g == recent_gidx) continue;
+			add_group_to_visible(vis, g);
 		}
 		return vis;
 	};
@@ -284,7 +369,7 @@ int run_interactive() {
 			if(ws.ws_col > 0) term_width = ws.ws_col;
 			if(ws.ws_row > 0) term_height = ws.ws_row;
 		}
-		int viewport = term_height - 2;
+		int viewport = term_height - 3;
 
 		struct ItemInfo { vector<string> wrapped; int height; };
 		vector<ItemInfo> rinfo(visible.size());
@@ -309,18 +394,26 @@ int run_interactive() {
 			total_lines += rinfo[i].height;
 		}
 
-		if(line_at[cursor] < scroll)
-			scroll = line_at[cursor];
-		if(line_at[cursor] + rinfo[cursor].height > scroll + viewport)
-			scroll = line_at[cursor] + rinfo[cursor].height - viewport;
-		if(scroll < 0) scroll = 0;
+		if(!visible.empty()) {
+			if(line_at[cursor] < scroll)
+				scroll = line_at[cursor];
+			if(line_at[cursor] + rinfo[cursor].height > scroll + viewport)
+				scroll = line_at[cursor] + rinfo[cursor].height - viewport;
+			if(scroll < 0) scroll = 0;
+		}
 
 		printf("\033[2J\033[H");
-		printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ navigate  ←→ fold/unfold  Enter run  q quit)\033[0m\n\n");
+		if(searching)
+			printf("\033[1mmakexx interactive\033[0m  / %s\033[5m▌\033[0m\n\n", search.c_str());
+		else if(!search.empty())
+			printf("\033[1mmakexx interactive\033[0m  \033[2mfilter:\033[0m %s  \033[2m(Esc clear)\033[0m\n\n", search.c_str());
+		else
+			printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ PgUp/Dn Home/End  Tab/S-Tab group  ←→ fold  / search  Enter run  d dry-run  q quit)\033[0m\n\n");
 
+		int lines_left = viewport;
 		for(int i = 0; i < (int)visible.size(); i++) {
 			if(line_at[i] + rinfo[i].height <= scroll) continue;
-			if(line_at[i] >= scroll + viewport) break;
+			if(line_at[i] >= scroll + viewport || lines_left <= 0) break;
 			auto [gidx, eidx] = visible[i];
 			bool selected = (i == cursor);
 			if(eidx == -1) {
@@ -330,6 +423,7 @@ int run_interactive() {
 					printf("%s   %s \033[7m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
 				else
 					printf("%s   %s \033[1m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
+				lines_left--;
 			} else {
 				auto &e = entries[eidx];
 				bool next_is_cont = (i + 1 < (int)visible.size() &&
@@ -355,32 +449,105 @@ int run_interactive() {
 					printf("%s", eindent.c_str()), printf(fmt_sel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
 				else
 					printf("%s", eindent.c_str()), printf(fmt_unsel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
+				lines_left--;
 				if(has_multi_desc) {
 					string cont_pad = eindent + "      " + string(col_width, ' ') + "  ";
 					string last_brk = (is_multi_target && !e.continuation) ? " ├ " : " └ ";
-					for(size_t dl = 1; dl < wrapped.size() - 1; dl++)
+					for(size_t dl = 1; dl < wrapped.size() - 1 && lines_left > 0; dl++) {
 						printf("%s │ %s\n", cont_pad.c_str(), wrapped[dl].c_str());
-					printf("%s%s%s\n", cont_pad.c_str(), last_brk.c_str(), wrapped.back().c_str());
+						lines_left--;
+					}
+					if(lines_left > 0) {
+						printf("%s%s%s\n", cont_pad.c_str(), last_brk.c_str(), wrapped.back().c_str());
+						lines_left--;
+					}
 				}
 			}
 		}
 
 		Key key = read_key();
-		if(key == KEY_QUIT) {
+		if(searching) {
+			if(key == KEY_ESC) {
+				searching = false;
+				search.clear();
+				cursor = 0; scroll = 0;
+			} else if(key == KEY_ENTER) {
+				searching = false;
+			} else if(key == KEY_BACKSPACE) {
+				if(!search.empty()) search.pop_back();
+				if(search.empty()) searching = false;
+				cursor = 0; scroll = 0;
+			} else if(key == KEY_CHAR) {
+				search += last_char;
+				cursor = 0; scroll = 0;
+			} else if(key == KEY_UP) {
+				if(cursor > 0) cursor--;
+			} else if(key == KEY_DOWN) {
+				if(cursor < (int)visible.size() - 1) cursor++;
+			} else if(key == KEY_PGUP) {
+				cursor = std::max(0, cursor - viewport);
+			} else if(key == KEY_PGDN) {
+				cursor = std::min((int)visible.size() - 1, cursor + viewport);
+			} else if(key == KEY_HOME) {
+				cursor = 0;
+			} else if(key == KEY_END) {
+				cursor = (int)visible.size() - 1;
+			} else if(key == KEY_TAB) {
+				for(int j = cursor + 1; j < (int)visible.size(); j++)
+					if(visible[j].second == -1) { cursor = j; break; }
+			} else if(key == KEY_STAB) {
+				for(int j = cursor - 1; j >= 0; j--)
+					if(visible[j].second == -1) { cursor = j; break; }
+			}
+		} else if(key == KEY_CHAR && last_char == 'q') {
 			running = false;
+		} else if(key == KEY_ESC) {
+			if(!search.empty()) { search.clear(); cursor = 0; scroll = 0; }
+			else running = false;
+		} else if(key == KEY_CHAR && last_char == '/') {
+			searching = true;
+			cursor = 0; scroll = 0;
 		} else if(key == KEY_UP) {
 			if(cursor > 0) cursor--;
 		} else if(key == KEY_DOWN) {
 			if(cursor < (int)visible.size() - 1) cursor++;
+		} else if(key == KEY_PGUP) {
+			cursor = std::max(0, cursor - viewport);
+		} else if(key == KEY_PGDN) {
+			cursor = std::min((int)visible.size() - 1, cursor + viewport);
+		} else if(key == KEY_HOME) {
+			cursor = 0;
+		} else if(key == KEY_END) {
+			cursor = (int)visible.size() - 1;
+		} else if(key == KEY_TAB) {
+			for(int j = cursor + 1; j < (int)visible.size(); j++)
+				if(visible[j].second == -1) { cursor = j; break; }
+		} else if(key == KEY_STAB) {
+			for(int j = cursor - 1; j >= 0; j--)
+				if(visible[j].second == -1) { cursor = j; break; }
 		} else if(key == KEY_RIGHT) {
 			auto [gidx, eidx] = visible[cursor];
 			groups[gidx].folded = false;
 		} else if(key == KEY_LEFT) {
 			auto [gidx, eidx] = visible[cursor];
 			groups[gidx].folded = true;
-		} else if(key == KEY_SPACE) {
+		} else if(key == KEY_CHAR && last_char == ' ') {
 			auto [gidx, eidx] = visible[cursor];
 			groups[gidx].folded = !groups[gidx].folded;
+		} else if(key == KEY_CHAR && last_char == 'd') {
+			auto [gidx, eidx] = visible[cursor];
+			if(eidx >= 0) {
+				tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+				printf("\033[2J\033[H");
+				string target = entries[eidx].target;
+				printf("\033[1mDry run: make -n %s\033[0m\n\n", target.c_str());
+				run_cmd("make -n " + target);
+				printf("\n\033[2mPress any key to return to menu...\033[0m");
+				fflush(stdout);
+				tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+				char dummy;
+				read(STDIN_FILENO, &dummy, 1);
+			}
 		} else if(key == KEY_ENTER) {
 			auto [gidx, eidx] = visible[cursor];
 			if(eidx == -1) {
@@ -390,8 +557,14 @@ int run_interactive() {
 				printf("\033[2J\033[H");
 				string target = entries[eidx].target;
 				printf("\033[1mRunning: make %s\033[0m\n\n", target.c_str());
-				run_cmd("make " + target);
-				printf("\n\033[2mPress any key to return to menu...\033[0m");
+				int rc = run_cmd("make " + target);
+				save_history(target);
+				rebuild_recent_group();
+				if(rc == 0)
+					printf("\n\033[32;1mDone.\033[0m \033[2mPress any key to return to menu...\033[0m");
+				else
+					printf("\n\033[31;1mFailed.\033[0m \033[2mPress any key to return to menu...\033[0m");
+				fflush(stdout);
 				tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 				char dummy;
 				read(STDIN_FILENO, &dummy, 1);

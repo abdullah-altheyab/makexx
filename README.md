@@ -138,7 +138,15 @@ mf.context = false;                  // disable AGENTS.md generation
 mf.context_filename = "CLAUDE.md";   // use a different filename
 ```
 
-**Interactive mode.** Run `makexx -i` for a terminal UI with arrow key navigation, foldable/nested groups, and Enter to run a target.
+**Interactive mode.** Run `makexx -i` for a terminal UI:
+
+- ↑↓, PgUp/PgDn, Home/End to navigate
+- Tab/Shift+Tab to jump between groups
+- ←→ to fold/unfold groups
+- Enter to run, `d` to dry-run preview (`make -n`)
+- `/` to search and filter targets by name or description
+- Green **Done.** / red **Failed.** exit status after each run
+- Recently run targets appear in a **Recent** group at the top
 
 **Helper functions.** Path manipulation utilities available in your `makefile.cpp`:
 

@@ -40,7 +40,7 @@ When `makexx` is invoked in a user's project directory:
 | `-f` | Force overwrite `makefile` even if not makexx-generated |
 | `-c` | Compile only — skip running `make` |
 | `-v` | Verbose output |
-| `-i` | Interactive target selector (TUI with arrow keys, foldable groups) |
+| `-i` | Interactive target selector (TUI with arrow keys, foldable groups, search) |
 
 All other flags are forwarded to `make`.
 
@@ -121,7 +121,15 @@ The file is generated entirely from data the `Makefile` class already holds — 
 
 ### Interactive mode
 
-`makexx -i` launches a terminal UI for selecting and running targets. It reads the `.makexx_menu` file generated alongside the makefile. Controls: ↑↓ navigate, ←→ fold/unfold groups, Enter to run, q/Esc to quit. POSIX only.
+`makexx -i` launches a terminal UI for selecting and running targets. It reads the `.makexx_menu` file generated alongside the makefile. POSIX only.
+
+Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom, Tab/Shift+Tab jump between groups, ←→ fold/unfold groups, Enter to run, `d` dry-run preview (`make -n`), `/` to search, q/Esc to quit. After running a target, a green **Done.** or red **Failed.** indicates the exit status.
+
+**Search:** Press `/` to enter search mode. Type to filter targets by name or description (case-insensitive). Backspace removes characters. Enter locks the filter and returns to normal navigation. Esc clears the filter. Groups with no matching entries are hidden; folded groups auto-expand when a filter is active.
+
+**Viewport scrolling:** When the menu is taller than the terminal, the view scrolls to keep the selected item visible. Long descriptions are word-wrapped to fit the terminal width. The terminal size is re-read each frame so resizing works live.
+
+**Multi-line descriptions:** Rules with multiple `HELP()` calls or descriptions that word-wrap display with box-drawing connectors (┌│└). Combined multi-target + multi-line descriptions use ┬│├ to connect both dimensions.
 
 ## Examples
 
