@@ -123,11 +123,13 @@ The file is generated entirely from data the `Makefile` class already holds — 
 
 `makexx -i` launches a terminal UI for selecting and running targets. It reads the `.makexx_menu` file generated alongside the makefile. POSIX only.
 
-Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom, Tab/Shift+Tab jump between groups, ←→ fold/unfold groups, Enter to run, `d` dry-run preview (`make -n`), `/` to search, q/Esc to quit. After running a target, a green **Done.** or red **Failed.** indicates the exit status.
+Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom, Tab/Shift+Tab jump between groups, ←→ fold/unfold groups, Enter to run, `d` dry-run preview (`make -n`), `?` show dependencies, `/` to search, Space to multi-select, `x` deselect all, q/Esc to quit. After running a target, a green **Done.** or red **Failed.** indicates the exit status.
 
 **Search:** Press `/` to enter search mode. Type to filter targets by name or description (case-insensitive). Backspace removes characters. Enter locks the filter and returns to normal navigation. Esc clears the filter. Groups with no matching entries are hidden; folded groups auto-expand when a filter is active.
 
-**Viewport scrolling:** When the menu is taller than the terminal, the view scrolls to keep the selected item visible. Long descriptions are word-wrapped to fit the terminal width. The terminal size is re-read each frame so resizing works live.
+**Viewport scrolling:** When the menu is taller than the terminal, the view scrolls to keep the selected item visible. `▲`/`▼` indicators show when content extends above or below. Long descriptions are word-wrapped to fit the terminal width. The terminal size is re-read each frame so resizing works live.
+
+**Multi-select:** Press Space on entries to toggle selection (marked with `●`). Enter runs all selected targets in sequence. `x` clears all selections. The header shows the selection count.
 
 **Multi-line descriptions:** Rules with multiple `HELP()` calls or descriptions that word-wrap display with box-drawing connectors (┌│└). Combined multi-target + multi-line descriptions use ┬│├ to connect both dimensions.
 

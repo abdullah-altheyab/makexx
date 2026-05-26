@@ -140,11 +140,11 @@ mf.context_filename = "CLAUDE.md";   // use a different filename
 
 **Interactive mode.** Run `makexx -i` for a terminal UI:
 
-- ↑↓, PgUp/PgDn, Home/End to navigate
-- Tab/Shift+Tab to jump between groups
-- ←→ to fold/unfold groups
-- Enter to run, `d` to dry-run preview (`make -n`)
+- ↑↓, PgUp/PgDn, Home/End to navigate; Tab/Shift+Tab to jump between groups
+- ←→ to fold/unfold groups; `▲`/`▼` scroll indicators
+- Enter to run, `d` to dry-run preview (`make -n`), `?` to show dependencies
 - `/` to search and filter targets by name or description
+- Space to multi-select targets (`●`), `x` to deselect all, Enter runs all selected in sequence
 - Green **Done.** / red **Failed.** exit status after each run
 - Recently run targets appear in a **Recent** group at the top
 

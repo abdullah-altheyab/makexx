@@ -246,8 +246,8 @@ int run_interactive() {
 		if((int)e.target.size() > col_width) col_width = e.target.size();
 	col_width += 2;
 	int prefix_len = 6 + col_width + 2 + 3;
-	string fmt_sel   = "      \033[7m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
-	string fmt_unsel = "      \033[1m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
+	string fmt_sel   = "    \033[7m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
+	string fmt_unsel = "    \033[1m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
 
 	struct termios oldt, newt;
 	tcgetattr(STDIN_FILENO, &oldt);
@@ -357,6 +357,7 @@ int run_interactive() {
 
 	int cursor = 0;
 	int scroll = 0;
+	std::set<int> selected;
 	bool running = true;
 	while(running) {
 		auto visible = build_visible();
@@ -369,8 +370,6 @@ int run_interactive() {
 			if(ws.ws_col > 0) term_width = ws.ws_col;
 			if(ws.ws_row > 0) term_height = ws.ws_row;
 		}
-		int viewport = term_height - 3;
-
 		struct ItemInfo { vector<string> wrapped; int height; };
 		vector<ItemInfo> rinfo(visible.size());
 		vector<int> line_at(visible.size());
@@ -394,6 +393,9 @@ int run_interactive() {
 			total_lines += rinfo[i].height;
 		}
 
+		bool needs_scroll = total_lines > term_height - 3;
+		int viewport = term_height - 3 - (needs_scroll ? 1 : 0);
+
 		if(!visible.empty()) {
 			if(line_at[cursor] < scroll)
 				scroll = line_at[cursor];
@@ -402,24 +404,32 @@ int run_interactive() {
 			if(scroll < 0) scroll = 0;
 		}
 
+		int entry_count = 0;
+		for(auto &v : visible) if(v.second >= 0) entry_count++;
+		string sel_info = selected.empty() ? "" : "  \033[33m" + std::to_string(selected.size()) + " selected\033[0m";
+
 		printf("\033[2J\033[H");
 		if(searching)
-			printf("\033[1mmakexx interactive\033[0m  / %s\033[5m▌\033[0m\n\n", search.c_str());
+			printf("\033[1mmakexx interactive\033[0m  / %s\033[5m▌\033[0m  \033[2m(%d)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
 		else if(!search.empty())
-			printf("\033[1mmakexx interactive\033[0m  \033[2mfilter:\033[0m %s  \033[2m(Esc clear)\033[0m\n\n", search.c_str());
+			printf("\033[1mmakexx interactive\033[0m  \033[2mfilter:\033[0m %s  \033[2m(%d matches, Esc clear)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
 		else
-			printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ PgUp/Dn Home/End  Tab/S-Tab group  ←→ fold  / search  Enter run  d dry-run  q quit)\033[0m\n\n");
+			printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ PgUp/Dn Home/End  Tab group  ←→ fold  / search  Space select  x clear  Enter run  d dry-run  ? deps  q quit)\033[0m%s\n", sel_info.c_str());
+		if(scroll > 0)
+			printf("\033[2m    ▲\033[0m\n");
+		else
+			printf("\n");
 
 		int lines_left = viewport;
 		for(int i = 0; i < (int)visible.size(); i++) {
 			if(line_at[i] + rinfo[i].height <= scroll) continue;
 			if(line_at[i] >= scroll + viewport || lines_left <= 0) break;
 			auto [gidx, eidx] = visible[i];
-			bool selected = (i == cursor);
+			bool at_cursor = (i == cursor);
 			if(eidx == -1) {
 				string arrow = groups[gidx].folded ? "▸" : "▾";
 				string gindent(groups[gidx].depth * 3, ' ');
-				if(selected)
+				if(at_cursor)
 					printf("%s   %s \033[7m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
 				else
 					printf("%s   %s \033[1m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
@@ -443,12 +453,14 @@ int run_interactive() {
 					bracket = " ┌";
 				else
 					bracket = " ─";
+				bool marked = selected.count(eidx);
+				string mark = marked ? "\033[33m● \033[0m" : "  ";
 				string eindent(groups[gidx].depth * 3, ' ');
 				string first_desc = wrapped.empty() ? "" : " " + wrapped[0];
-				if(selected)
-					printf("%s", eindent.c_str()), printf(fmt_sel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
+				if(at_cursor)
+					printf("%s%s", eindent.c_str(), mark.c_str()), printf(fmt_sel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
 				else
-					printf("%s", eindent.c_str()), printf(fmt_unsel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
+					printf("%s%s", eindent.c_str(), mark.c_str()), printf(fmt_unsel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
 				lines_left--;
 				if(has_multi_desc) {
 					string cont_pad = eindent + "      " + string(col_width, ' ') + "  ";
@@ -464,6 +476,9 @@ int run_interactive() {
 				}
 			}
 		}
+
+		if(needs_scroll && total_lines > scroll + viewport)
+			printf("\033[2m    ▼\033[0m\n");
 
 		Key key = read_key();
 		if(searching) {
@@ -531,9 +546,38 @@ int run_interactive() {
 		} else if(key == KEY_LEFT) {
 			auto [gidx, eidx] = visible[cursor];
 			groups[gidx].folded = true;
+			for(int j = cursor; j >= 0; j--)
+				if(visible[j].first == gidx && visible[j].second == -1) { cursor = j; break; }
 		} else if(key == KEY_CHAR && last_char == ' ') {
 			auto [gidx, eidx] = visible[cursor];
-			groups[gidx].folded = !groups[gidx].folded;
+			if(eidx == -1) {
+				bool folding = !groups[gidx].folded;
+				groups[gidx].folded = folding;
+				if(folding)
+					for(int j = cursor; j >= 0; j--)
+						if(visible[j].first == gidx && visible[j].second == -1) { cursor = j; break; }
+			} else {
+				if(selected.count(eidx)) selected.erase(eidx);
+				else selected.insert(eidx);
+				if(cursor < (int)visible.size() - 1) cursor++;
+			}
+		} else if(key == KEY_CHAR && last_char == 'x') {
+			selected.clear();
+		} else if(key == KEY_CHAR && last_char == '?') {
+			auto [gidx, eidx] = visible[cursor];
+			if(eidx >= 0) {
+				tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+				printf("\033[2J\033[H");
+				string target = entries[eidx].target;
+				printf("\033[1mDependencies: %s\033[0m\n\n", target.c_str());
+				string cmd = "awk '/^" + target + "[ ]*:/{sub(/^[^:]*:[ ]*/,\"\"); gsub(/ +/,\"\\n\"); print; exit}' makefile";
+				run_cmd(cmd);
+				printf("\n\033[2mPress any key to return to menu...\033[0m");
+				fflush(stdout);
+				tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+				char dummy;
+				read(STDIN_FILENO, &dummy, 1);
+			}
 		} else if(key == KEY_CHAR && last_char == 'd') {
 			auto [gidx, eidx] = visible[cursor];
 			if(eidx >= 0) {
@@ -550,7 +594,29 @@ int run_interactive() {
 			}
 		} else if(key == KEY_ENTER) {
 			auto [gidx, eidx] = visible[cursor];
-			if(eidx == -1) {
+			if(!selected.empty()) {
+				tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+				printf("\033[2J\033[H");
+				int total_rc = 0;
+				for(int si : selected) {
+					string target = entries[si].target;
+					printf("\033[1mRunning: make %s\033[0m\n\n", target.c_str());
+					int rc = run_cmd("make " + target);
+					if(rc != 0) total_rc = rc;
+					save_history(target);
+					printf("\n");
+				}
+				rebuild_recent_group();
+				selected.clear();
+				if(total_rc == 0)
+					printf("\033[32;1mAll done.\033[0m \033[2mPress any key to return to menu...\033[0m");
+				else
+					printf("\033[31;1mSome targets failed.\033[0m \033[2mPress any key to return to menu...\033[0m");
+				fflush(stdout);
+				tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+				char dummy;
+				read(STDIN_FILENO, &dummy, 1);
+			} else if(eidx == -1) {
 				groups[gidx].folded = !groups[gidx].folded;
 			} else {
 				tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
