@@ -8832,8 +8832,7 @@ class Main{
         mf.add("rm_interm")
             <<"rm -f mcrun_* play_* rigaoi_* prms_* test_* tst* bplan_* seisplan_* *~ *.aux *.log *.out *.toc *.acn *.bbl *.blg *.glo *.ist *.sbl"
             ;
-        mf.generate_graph();
-        mf.generate();
+        mf.generate_with_graph();
     };
 
     Main(){

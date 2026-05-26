@@ -29,6 +29,14 @@ static const char *current_test = "";
     } \
 } while(0)
 
+#define CHECK_EQ(actual, expected) do { \
+    ++total; \
+    if((actual) != (expected)) { \
+        std::cerr << "  FAIL [" << current_test << "]: expected \"" << (expected) << "\" got \"" << (actual) << "\"\n"; \
+        ++failures; \
+    } \
+} while(0)
+
 // ---------------------------------------------------------------------------
 // RAII temp directory — each test runs in its own isolated directory
 // ---------------------------------------------------------------------------
@@ -60,6 +68,30 @@ static std::string read_makefile() {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+static void test_basename() {
+    current_test = "test_basename";
+    CHECK_EQ(basename("dir/file.cpp"), "file.cpp");
+    CHECK_EQ(basename("a/b/c.txt"), "c.txt");
+    CHECK_EQ(basename("nodir.txt"), "nodir.txt");
+    CHECK_EQ(basename("dir\\win.txt"), "win.txt");
+}
+
+static void test_change_ext() {
+    current_test = "test_change_ext";
+    CHECK_EQ(change_ext("data.segy", ".bin"), "data.bin");
+    CHECK_EQ(change_ext("data.segy", "bin"), "data.bin");
+    CHECK_EQ(change_ext("dir/file.cpp", ".o"), "dir/file.o");
+    CHECK_EQ(change_ext("noext", ".txt"), "noext.txt");
+    CHECK_EQ(change_ext("file.tar.gz", ".bz2"), "file.tar.bz2");
+}
+
+static void test_join_path() {
+    current_test = "test_join_path";
+    CHECK_EQ(join_path("./obj", "main.o"), "./obj/main.o");
+    CHECK_EQ(join_path("./obj/", "main.o"), "./obj/main.o");
+    CHECK_EQ(join_path("", "main.o"), "main.o");
+}
 
 static void test_header() {
     current_test = "test_header";
@@ -199,6 +231,15 @@ static void test_no_echo() {
     CHECK_NOT_CONTAINS(content, "### GENERATING");
 }
 
+static void test_phony() {
+    current_test = "test_phony";
+    TempDir td;
+    Makefile mf;
+    mf.generate();
+    auto content = read_makefile();
+    CHECK_CONTAINS(content, ".PHONY: all full_clean soft_clean list list_unknown list_input help");
+}
+
 static void test_byproduct() {
     current_test = "test_byproduct";
     TempDir td;
@@ -215,6 +256,9 @@ static void test_byproduct() {
 // ---------------------------------------------------------------------------
 
 int main() {
+    test_basename();
+    test_change_ext();
+    test_join_path();
     test_header();
     test_basic_rule();
     test_command();
@@ -227,6 +271,7 @@ int main() {
     test_softclean_retain();
     test_silent();
     test_no_echo();
+    test_phony();
     test_byproduct();
 
     int passed = total - failures;

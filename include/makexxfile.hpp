@@ -95,6 +95,23 @@ inline std::string get_extension(std::string const filename) {
 	}
 }
 
+inline std::string basename(std::string const &path) {
+	return path.substr(path.find_last_of("/\\") + 1);
+}
+
+inline std::string change_ext(std::string const &filename, std::string const &new_ext) {
+	auto dot = filename.rfind('.');
+	std::string base = (dot != std::string::npos) ? filename.substr(0, dot) : filename;
+	if(new_ext.empty()) return base;
+	return (new_ext[0] == '.') ? base + new_ext : base + "." + new_ext;
+}
+
+inline std::string join_path(std::string dir, std::string const &file) {
+	if(!dir.empty() && dir.back() != '/' && dir.back() != '\\')
+		dir += '/';
+	return dir + file;
+}
+
 inline std::string replace_all(std::string str, const std::string &from, const std::string &to) {
 	size_t start_pos = 0;
 	while((start_pos = str.find(from, start_pos)) != std::string::npos) {
@@ -105,44 +122,11 @@ inline std::string replace_all(std::string str, const std::string &from, const s
 }
 
 inline Rule &operator<<(Rule &a, std::string const command) {
-	#ifdef _WIN32
-	//define something for Windows (32-bit and 64-bit, this part is common)
-	#ifdef _WIN64
-	//define something for Windows (64-bit only)
-	std::string const runsys = "win64";
-	#else
-	//define something for Windows (32-bit only)
-	#endif
-	#elif __APPLE__
-	#if TARGET_IPHONE_SIMULATOR
-	// iOS Simulator
-	#elif TARGET_OS_IPHONE
-	// iOS device
-	#elif TARGET_OS_MAC
-	// Other kinds of Mac OS
-	std::string const runsys = "macos";
-	#else
-#   error "Unknown Apple platform"
-	#endif
-	#elif __linux__
-	// linux
-	std::string const runsys = "linux";
-	#elif __unix__ // all unices not caught above
-	// Unix
-	std::string const runsys = "unix";
-	#elif defined(_POSIX_VERSION)
-	// POSIX
-	std::string const runsys = "posix";
-	#else
-#error "Unknown compiler"
-	#endif
-	std::string command2;
-	if(runsys == "win64") {
-		command2 = replace_all(command, "/", "\\");
-	} else {
-		command2 = command;
-	}
-	a.commands.push_back(command2);
+#if defined(_WIN64)
+	a.commands.push_back(replace_all(command, "/", "\\"));
+#else
+	a.commands.push_back(command);
+#endif
 	return a;
 }
 
@@ -234,7 +218,7 @@ inline Rule &operator<<(Rule &a, HELP t) {
 	return a;
 }
 
-char const *makefile_header = "# This is an automatically generated makefile via makexx.";
+constexpr char const* const makefile_header = "# This is an automatically generated makefile via makexx.";
 
 class Makefile {
   private:
@@ -245,15 +229,31 @@ class Makefile {
 	std::multimap<Rule *, std::string> rule_target;
 	std::vector<std::pair<std::string, std::string>> help_menu;
 	std::set<std::string> soft_clean_retain_nodes;
-  public:
-	std::set<std::string> hidden_nodes; //notes to execlude from makefile graph
 
-	//help functionalities
+	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources) {
+		commands.push_back(std::make_unique<Rule>());
+		Rule *A = commands.back().get();
+		for(auto &s : sources) {
+			nodes.insert(s);
+			rule_source.insert({A, s});
+		}
+		for(auto &t : targets) {
+			if(target_rule.find(t) != target_rule.end()) {
+				std::cerr << "# WARNING! Multiple build rules for the same target '" << t << "' only the latest rule defined will be used!" << std::endl;
+			}
+			nodes.insert(t);
+			target_rule[t] = A;
+			rule_target.insert({A, t});
+		}
+		return *A;
+	}
+
+	int max_width;
+
 	void add_to_help_menu(std::string make_rule, std::string helpstr) {
 		help_menu.push_back({make_rule, helpstr});
-	};
+	}
 
-    int max_width;
 	void add_help_rule() {
 		auto &f  = add("help");
 		for(auto itm : help_menu) {
@@ -263,6 +263,33 @@ class Makefile {
 		}
 	}
 
+	void dump_help() {
+		for(auto const& cmd : commands) {
+			if(!(cmd->help == "")) {
+				std::string targets_str = "";
+				auto trange = rule_target.equal_range(cmd.get());
+				bool first = true;
+				for(auto j = trange.first; j != trange.second; j++) {
+					if(first) {
+						first = false;
+					} else {
+						targets_str += " ";
+					}
+					targets_str += j->second;
+				}
+				if(!first) {
+					add_to_help_menu(targets_str, cmd->help);
+                    if(max_width<(int)targets_str.size()){
+                        max_width=targets_str.size();
+                    }
+				}
+			}
+		}
+		add_help_rule();
+	}
+
+  public:
+	std::set<std::string> hidden_nodes; //notes to execlude from makefile graph
 	bool silent;
 	bool echo;
 
@@ -287,85 +314,16 @@ class Makefile {
         }
     }
 
-	Rule &add(std::string target) {
-		return add({target});
-	}
-	Rule &add(StringList targets) {
-		return add(targets, {});
-	}
-	Rule &add(std::string target, std::string source) {
-		return add({target}, {source});
-	}
-	Rule &add(std::string targets, StringList sources) {
-		return add({targets}, sources);
-	}
-	Rule &add(StringList targets, std::string source) {
-		return add(targets, {source});
-	}
-	Rule &add(StringList targets, StringList sources) {
-		commands.push_back(std::make_unique<Rule>());
-		Rule *A = commands.back().get();
-		for(auto i = sources.begin(); i != sources.end(); i++) {
-			nodes.insert(*i);
-			rule_source.insert(std::pair<Rule *, std::string>(A, *i));
-		}
-		for(auto i = targets.begin(); i != targets.end(); i++) {
-			if(target_rule.find(*i) != target_rule.end()) {
-				std::cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << std::endl;
-			}
-			nodes.insert(*i);
-			target_rule[*i] = A;
-			rule_target.insert(std::pair<Rule *, std::string>(A, *i));
-		}
-		return *A;
-	}
-
-	Rule &add(std::vector<std::string> const targets, std::vector<std::string> const sources) {
-		commands.push_back(std::make_unique<Rule>());
-		Rule *A = commands.back().get();
-		for(auto i = sources.begin(); i != sources.end(); i++) {
-			nodes.insert(*i);
-			rule_source.insert(std::pair<Rule *, std::string>(A, *i));
-		}
-		for(auto i = targets.begin(); i != targets.end(); i++) {
-			if(target_rule.find(*i) != target_rule.end()) {
-				std::cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << std::endl;
-			}
-			nodes.insert(*i);
-			target_rule[*i] = A;
-			rule_target.insert(std::pair<Rule *, std::string>(A, *i));
-		}
-		return *A;
-	}
-
-	Rule &add(StringList targets, std::vector<std::string> const sources) {
-		commands.push_back(std::make_unique<Rule>());
-		Rule *A = commands.back().get();
-		for(auto i = sources.begin(); i != sources.end(); i++) {
-			nodes.insert(*i);
-			rule_source.insert(std::pair<Rule *, std::string>(A, *i));
-		}
-		for(auto i = targets.begin(); i != targets.end(); i++) {
-			if(target_rule.find(*i) != target_rule.end()) {
-				std::cerr << "# WARNING! Multiple build rules for the same target '" << *i << "' only the latest rule defined will be used!" << std::endl;
-			}
-			nodes.insert(*i);
-			target_rule[*i] = A;
-			rule_target.insert(std::pair<Rule *, std::string>(A, *i));
-		}
-		return *A;
-	}
-
-	Rule &add(std::vector<std::string> const targets, std::string const source) {
-		std::vector<std::string> a = {source};
-		return add(targets, a);
-	}
-
-	Rule &add(std::string target, std::vector<std::string> const sources) {
-		std::vector<std::string> targetvec;
-		targetvec.push_back(target);
-		return add(targetvec, sources);
-	}
+	Rule &add(std::string target) { return add_impl({target}, {}); }
+	Rule &add(StringList targets) { return add_impl(targets, {}); }
+	Rule &add(std::string target, std::string source) { return add_impl({target}, {source}); }
+	Rule &add(std::string target, StringList sources) { return add_impl({target}, sources); }
+	Rule &add(std::string target, std::vector<std::string> sources) { return add_impl({target}, sources); }
+	Rule &add(StringList targets, std::string source) { return add_impl(targets, {source}); }
+	Rule &add(StringList targets, StringList sources) { return add_impl(targets, sources); }
+	Rule &add(StringList targets, std::vector<std::string> sources) { return add_impl(targets, sources); }
+	Rule &add(std::vector<std::string> targets, std::string source) { return add_impl(targets, {source}); }
+	Rule &add(std::vector<std::string> targets, std::vector<std::string> sources) { return add_impl(targets, sources); }
 
 	void on_softclean_retain(std::string filename) {
         this->soft_clean_retain_nodes.insert(filename);
@@ -381,31 +339,10 @@ class Makefile {
 		}
     }
 
-	void dump_help() {
-		for(auto const& cmd : commands) {
-			if(!(cmd->help == "")) {
-				std::string targets_str = "";
-				auto trange = rule_target.equal_range(cmd.get());
-				bool first = true;
-				for(auto j = trange.first; j != trange.second; j++) {
-					if(first) {
-						first = false;
-					} else {
-						targets_str += " ";
-					}
-					targets_str += j->second;
-				}
-				if(!first) { // there is at least one source
-					add_to_help_menu(targets_str, cmd->help);
-                    if(max_width<(int)targets_str.size()){
-                        max_width=targets_str.size();
-                    }
-				}
-			}
-		}
-		add_help_rule();
+	void generate_with_graph() {
+		generate(true);
 	}
-	void generate() {
+	void generate(bool graph = false) {
 		dump_help();
 		std::set<std::string> processed_nodes;
 		std::string makefile;
@@ -420,6 +357,7 @@ class Makefile {
 		myfile << "# DO NOT EDIT!" << std::endl;
 		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
 		myfile << "SHELL=/bin/bash" << std::endl;
+		myfile << ".PHONY: all full_clean soft_clean list list_unknown list_input help" << std::endl;
 		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
 			if(target_rule.find(*itr) != target_rule.end()) {
 				if(processed_nodes.find(*itr) == processed_nodes.end()) {
@@ -563,6 +501,11 @@ class Makefile {
 		for(auto &itm : inputfiles_list)
 			myfile << "\t@echo \"\t" + itm + "\"\n";
 		myfile << makefile;
+		if(graph) {
+			generate_graph();
+			myfile << "\nmakefile_graph.pdf : makefile_graph.gv\n";
+			myfile << "\tdot -v -Tpdf makefile_graph.gv -o makefile_graph.pdf\n";
+		}
 		myfile.close();
 	}
 
@@ -630,8 +573,6 @@ class Makefile {
 		}
 		myfile << "}\n";
 		myfile << "}";
-		add("makefile_graph.pdf", "makefile.cpp")
-				<< "dot -v -Tpdf makefile_graph.gv -o makefile_graph.pdf";
 		myfile.close();
 	}
 };

@@ -70,8 +70,8 @@ mf.on_softclean_retain("expensive_output"); // exclude from soft_clean
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
 
-mf.generate();         // write the makefile
-mf.generate_graph();        // write makefile_graph.gv (Graphviz DOT)
+mf.generate();              // write the makefile
+mf.generate_with_graph();   // write the makefile + makefile_graph.gv (Graphviz DOT)
 ```
 
 The generated makefile always includes: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help` rules.
@@ -116,3 +116,4 @@ tests/                        — test suite
 ```
 
 The two embed headers (`makexxfile_embed.hpp`, `makexxfile_example_embed.hpp`) are generated into the CMake build directory and never checked in.
+

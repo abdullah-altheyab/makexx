@@ -113,6 +113,12 @@ cmake --install build   # installs makexx to /usr/local/bin
 
 ---
 
+## Optional dependencies
+
+- [Graphviz](https://graphviz.org/) — needed only if you use `generate_with_graph()` to visualize your dependency graph as a PDF. Install with `apt install graphviz`, `brew install graphviz`, or `choco install graphviz`.
+
+---
+
 ## Getting started
 
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
