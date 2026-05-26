@@ -37,6 +37,7 @@ target_include_directories(makexx PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}
 )
+target_compile_definitions(makexx PRIVATE MAKEXX_VERSION="${PROJECT_VERSION}")
 
 install(TARGETS makexx RUNTIME DESTINATION bin)
 

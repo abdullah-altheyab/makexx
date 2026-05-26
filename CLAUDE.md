@@ -43,6 +43,9 @@ When `makexx` is invoked in a user's project directory:
 | `-c` | Compile only — skip running `make` |
 | `-v` | Verbose output |
 | `-i` | Interactive target selector (TUI with arrow keys, foldable groups, search) |
+| `-Dname=value` | Define a C++ preprocessor macro, forwarded to the compiler when compiling `makefile.cpp` |
+| `-h`, `--help` | Show usage help |
+| `--version` | Show version |
 
 All other flags are forwarded to `make`.
 
@@ -76,9 +79,19 @@ mf.echo = false;    // suppress ### GENERATING echo lines
 
 // Help organization
 mf.help_title = "My Project";       // printed at top of 'make help'
-mf.MENU("Build");             // subsequent HELP() entries belong to this group
-mf.MENU("Build/Tests");       // nested group via slash separator
-mf.MENU("Archive", FOLDED);   // folded by default in makexx -i
+// Single rule in a group — use MENU with <<
+mf.add("forecast.bin", "data.t")
+    << MENU("Forecasting") << HELP("run forecast") << "forecast $< > $@";
+
+// Many rules in a group — use set_current_menu (defines the group if new)
+mf.set_current_menu("Build");
+mf.add("a.o", "a.cpp") << HELP("compile a") << "g++ -c $< -o $@";
+mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
+
+mf.set_current_menu("Build/Tests");     // nested group via slash separator
+
+// Pre-declare a folded group without switching to it
+mf.define_menu("Archive", FOLDED);
 // HELP("group", "desc") overrides the group for a single rule
 
 // AI agent context generation
@@ -149,21 +162,23 @@ Shows how to manage a project with many executables and shared object files. Key
 - **Conditional rules**: platform detection inside `makefile.cpp` itself controls which rules are added
 - **`xxd -i` embed pattern**: used in user projects to compile binary resources (e.g. header files) into `_xxd.hpp` byte arrays and list them as dependencies so make reruns the embed when the source changes
 
-### `examples/processing_workflow/makefile.cpp` — Domain-specific workflow (exploration analytics)
+### `examples/portfolio_analytics/` — Domain-specific workflow with config separation
 
 Shows how `makefile.cpp` can act as a full workflow orchestration script, not just a build script. Key patterns:
 
-- **`#define` feature flags** at the top (`TRIAL`, `SHARED`, `TESTING`, etc.) toggle whole branches of the pipeline — edit the defines and re-run `makexx` to switch modes
-- **Domain classes** (`Play`, `Portfolio`, `Venture`, `DrillZone`, `Basin`) hold pipeline parameters; loops over them generate many related rules from a single template
+- **Config separation** — `config.hpp` holds domain classes (`Deposit`, `Region`, `MiningZone`), feature flags, and parameters; `makefile.cpp` focuses on rules
+- **`#define` feature flags** (`TRIAL`, `SHARED`, `WITH_RARE`) toggle whole branches of the pipeline
+- **Domain classes** hold pipeline parameters; loops over them generate many related rules from a single template
 - **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
-- **SQL/string helpers** return shell command fragments that are composed into rule commands — the full power of C++ string manipulation is available
+- **Helper functions** return shell command fragments composed into rule commands
+- **`MENU()` per-rule** and **`set_current_menu()`** organize targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
 
 ### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
 
 Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealogy visualization) and demonstrates the AI agent context generation feature. Key patterns:
 
 - **`mf.description("...")`** provides a project summary for the generated `AGENTS.md`
-- **`MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
+- **`set_current_menu()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
 - **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call
 
@@ -185,7 +200,7 @@ src/starter.cpp               — starter makefile.cpp written to new project di
 CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
 examples/compile/             — example: multi-target C++ project build
-examples/processing_workflow/ — example: domain-specific pipeline orchestration
+examples/portfolio_analytics/ — example: domain-specific workflow with config separation
 examples/family_tree/         — example: genealogy workflow with AI context generation
 examples/simulation/          — example: config separation with auto-dependency tracking
 tests/                        — test suite

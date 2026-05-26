@@ -58,10 +58,15 @@ make help       # list all targets with descriptions
 
 ## Where it shines
 
-**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`. Change `TRIAL` to a full run, switch input sources, enable optional steps — then re-run `makexx`.
+**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`, or pass them from the command line:
 
 ```cpp
 #define TRIAL   // use 2 iterations instead of 500
+```
+
+```bash
+makexx -DTRIAL          # same as #define TRIAL in the file
+makexx -Diterations=50  # override a value
 ```
 
 **Parameterized rules.** Use C++ loops and data structures to generate many related rules concisely:
@@ -104,17 +109,17 @@ vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
 ```cpp
 mf.help_title = "Seismic Pipeline v2";
 
-mf.MENU("Processing");
+mf.set_current_menu("Processing");
 mf.add("filtered.bin", "raw.segy")
     << FINAL << HELP("Apply bandpass filter") << "atbpfilt $< $@";
 
-mf.MENU("Processing/QC");
+mf.set_current_menu("Processing/QC");
 mf.add("report.pdf", "filtered.bin")
     << HELP("Generate QC report") << "qcplot $< $@";
 
-mf.MENU("Archive", FOLDED);   // folded by default in makexx -i
+// Single rule in a group — use MENU inline, no need for set_current_menu:
 mf.add("backup.tar", "filtered.bin")
-    << HELP("Archive raw data") << "tar cf $@ $<";
+    << MENU("Archive") << HELP("Archive raw data") << "tar cf $@ $<";
 ```
 
 Then `make help` prints:
@@ -239,4 +244,4 @@ cmake --install build   # installs makexx to /usr/local/bin
 
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
 
-See [`examples/`](examples/) for a full C++ project build, a multi-stage research pipeline, a genealogy workflow with AI agent context generation, and a simulation workflow with config separation.
+See [`examples/`](examples/) for a full C++ project build, a portfolio analytics workflow with config separation, a genealogy workflow with AI agent context generation, and a simulation workflow.

@@ -20,18 +20,19 @@
 //   r << HELP("group", "description")      — with explicit group override
 //
 // Menu groups:
-//   mf.MENU("Build")                       — subsequent HELP() entries belong to this group
-//   mf.MENU("Build/Tests")                 — nested group via slash separator
-//   mf.MENU("Archive", FOLDED)             — folded by default in makexx -i
+//   r << MENU("Forecasting")               — set group for a single rule
+//   mf.set_current_menu("Build")           — set group for many subsequent rules (defines if new)
+//   mf.set_current_menu("Build/Tests")     — nested group via slash separator
+//   mf.define_menu("Archive", FOLDED)      — pre-declare folded group without switching
 //
 // Settings:
 //   mf.help_title = "My Project"           — title for 'make help'
 //   mf.description("...")                  — project description for AGENTS.md
-//   mf.agents = true/false                 — enable/disable AGENTS.md (default: true)
-//   mf.agents_filename = "CLAUDE.md"       — override output filename
+//   mf.context = true/false                — enable/disable AGENTS.md (default: true)
+//   mf.context_filename = "CLAUDE.md"      — override output filename
 //   mf.silent = true                       — prefix commands with @ in makefile
 //   mf.echo = false                        — suppress ### GENERATING decoration
-//   mf.retain("file")                      — exclude from soft_clean
+//   mf.on_softclean_retain("file")         — exclude from soft_clean
 //
 // Output:
 //   mf.generate()                          — write makefile + .makexx_menu + AGENTS.md
@@ -262,6 +263,12 @@ class HELP { // add help to the menu
 	HELP(std::string group, std::string help) : help(help), group(group) {};
 };
 
+class MENU { // override menu group for a single rule
+  public:
+	std::string group;
+	MENU(std::string group) : group(group) {};
+};
+
 inline Rule &operator<<(Rule &a, TEMP t) {
 	for(auto &tmp : t.filenames)
 		a.temp_files.insert(tmp);
@@ -283,6 +290,11 @@ inline Rule &operator<<(Rule &a, HELP t) {
 	a.help_lines.push_back(t.help);
 	if(!t.group.empty())
 		a.help_group = t.group;
+	return a;
+}
+
+inline Rule &operator<<(Rule &a, MENU t) {
+	a.help_group = t.group;
 	return a;
 }
 
@@ -457,12 +469,24 @@ class Makefile {
 		project_description = desc;
 	}
 
-	void MENU(std::string group) {
-		current_help_group = group;
+	void define_menu(std::string group) {
+		if(std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
+			help_group_order.push_back(group);
 	}
 
-	void MENU(std::string group, group_display display) {
+	void define_menu(std::string group, group_display display) {
+		define_menu(group);
+		if(display == FOLDED) folded_groups.insert(group);
+	}
+
+	void set_current_menu(std::string group) {
 		current_help_group = group;
+		if(std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
+			help_group_order.push_back(group);
+	}
+
+	void set_current_menu(std::string group, group_display display) {
+		set_current_menu(group);
 		if(display == FOLDED) folded_groups.insert(group);
 	}
 

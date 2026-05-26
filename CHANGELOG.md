@@ -9,7 +9,7 @@ Initial public release.
 - **Rule API:** `mf.add(targets, sources)` with `<<` for commands and metadata
 - **Target types:** `FINAL`, `OPTIONAL`, `INPUT`
 - **Metadata helpers:** `TEMP()`, `BYPRODUCT()`, `TARGET()`, `HELP()`
-- **Menu groups:** `mf.MENU("name")` with nested groups via `/` separator and `FOLDED` display
+- **Menu groups:** `rule << MENU("name")` for single-rule groups, `mf.set_current_menu("name")` for many rules in sequence (auto-defines), `mf.define_menu("name", FOLDED)` for upfront declaration. Nested groups via `/` separator
 - **Help system:** `make help` with box-drawing brackets, word-wrapping, and grouped output
 - **Path helpers:** `stem()`, `basename()`, `change_ext()`, `join_path()`, `get_extension()`, `replace_all()`, `to_upper()`, `to_lower()`
 - **AI context generation:** `mf.generate()` writes `AGENTS.md` alongside the makefile
@@ -39,6 +39,9 @@ Initial public release.
 - `-c` compile only (skip `make`)
 - `-v` verbose output
 - `-i` interactive target selector
+- `-Dname=value` forward preprocessor defines to `makefile.cpp` compilation
+- `-h` / `--help` show usage, `--version` show version
+- Helpful compiler-not-found error with install suggestions
 - Version mismatch warning when local `makefile.hpp` differs from embedded version
 
 ### Deployment

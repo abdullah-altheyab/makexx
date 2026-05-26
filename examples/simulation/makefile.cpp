@@ -13,7 +13,7 @@ int main() {
     mf.help_title = "Simulation Workflow";
     mf.description("Runs numerical simulations with configurable parameters.");
 
-    mf.MENU("Simulate");
+    mf.set_current_menu("Simulate");
     for (auto& r : runs) {
         string output = r.name + "_result.bin";
         mf.add(output, r.grid)
@@ -25,7 +25,7 @@ int main() {
                 + " $< > $@");
     }
 
-    mf.MENU("Reports");
+    mf.set_current_menu("Reports");
     vector<string> all_results;
     for (auto& r : runs)
         all_results.push_back(r.name + "_result.bin");
