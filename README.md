@@ -14,9 +14,8 @@ If you write C++, your pipelines probably look like one of these today:
 
 - A Makefile that's grown unreadable, full of string hacks and copy-pasted rules
 - A shell script with no dependency tracking — reruns everything every time
-- A Python workflow tool (Snakemake, Luigi) that feels foreign to your codebase
+- A Python workflow tool that feels foreign to your codebase
 
-Snakemake is an elegant solution, but it's built for Python practitioners. makexx is the equivalent for C++ engineers and scientists.
 
 ---
 
@@ -31,11 +30,9 @@ int main() {
     Makefile mf;
 
     mf.add("filtered.bin", "raw.segy")
-        << FINAL
         << "atbpfilt input=raw.segy flo=5 fhi=80 output=filtered.bin";
 
     mf.add("velocity.bin", "filtered.bin")
-        << FINAL
         << "atnmo input=filtered.bin output=velocity.bin";
 
     mf.add("image.bin", {"velocity.bin", "filtered.bin"})
@@ -111,7 +108,8 @@ mf.help_title = "Seismic Pipeline v2";
 
 mf.set_current_menu("Processing");
 mf.add("filtered.bin", "raw.segy")
-    << FINAL << HELP("Apply bandpass filter") << "atbpfilt $< $@";
+    << HELP("Apply bandpass filter")
+    << "atbpfilt $< $@";
 
 mf.set_current_menu("Processing/QC");
 mf.add("report.pdf", "filtered.bin")
