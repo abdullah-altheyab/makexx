@@ -91,11 +91,10 @@ class Rule {
 	std::set<std::string> byproducts;
 	std::set<std::string> hidden_targets; // hidden_target
 	target_type type;
-	std::string help;
+	std::vector<std::string> help_lines;
 	std::string help_group;
 	Rule() {
 		type = OPTIONAL;
-		help = "";
 		help_group = "";
 	}
 	std::string formatted(std::string prefix = "\t") {
@@ -236,7 +235,7 @@ inline Rule &operator<<(Rule &a, TARGET t) {
 }
 
 inline Rule &operator<<(Rule &a, HELP t) {
-	a.help = t.help;
+	a.help_lines.push_back(t.help);
 	if(!t.group.empty())
 		a.help_group = t.group;
 	return a;
@@ -251,7 +250,8 @@ class Makefile {
 	std::map<std::string, Rule *> target_rule;
 	std::multimap<Rule *, std::string> rule_source;
 	std::multimap<Rule *, std::string> rule_target;
-	struct HelpEntry { std::string target; std::string description; std::string group; };
+	enum BracketType { BRK_NORMAL=0, BRK_MULTI_FIRST=1, BRK_MULTI_MID=2, BRK_MULTI_END=3 };
+	struct HelpEntry { std::string target; std::string description; std::string group; BracketType bracket; };
 	std::vector<HelpEntry> help_menu;
 	std::vector<std::string> help_group_order;
 	std::set<std::string> soft_clean_retain_nodes;
@@ -279,47 +279,83 @@ class Makefile {
 
 	int max_width;
 
-	void add_to_help_menu(std::string make_rule, std::string helpstr, std::string group) {
-		help_menu.push_back({make_rule, helpstr, group});
+	void add_to_help_menu(std::string make_rule, std::string helpstr, std::string group, BracketType bracket = BRK_NORMAL) {
+		help_menu.push_back({make_rule, helpstr, group, bracket});
 		if(!group.empty() && std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
 			help_group_order.push_back(group);
 	}
 
-	void emit_help_entries(Rule &f, std::string group) {
+	static std::string shell_escape(std::string const &s) {
+		return replace_all(s, "'", "'\\''");
+	}
+
+	void emit_help_entries(std::string &script, std::string group, std::string indent = "") {
+		std::string p = std::to_string(max_width);
 		for(auto &itm : help_menu) {
 			if(itm.group != group) continue;
-			std::stringstream ss;
-			ss << "  " << std::setw(max_width) << itm.target << itm.description;
-			f << "@echo \"" + ss.str() + "\"";
+			if(itm.bracket == BRK_MULTI_MID) {
+				script += "printf '" + indent + "  %" + p + "s  \xe2\x94\x82\\n' '" + shell_escape(itm.target) + "'; ";
+			} else if(itm.bracket == BRK_MULTI_END) {
+				script += "printf '" + indent + "  %" + p + "s  \xe2\x94\x98\\n' '" + shell_escape(itm.target) + "'; ";
+			} else {
+				std::string desc = replace_all(itm.description, "\n", "\\n");
+				std::string mode = (itm.bracket == BRK_MULTI_FIRST) ? "1" : "0";
+				script += "printf '" + indent + "  %" + p + "s' '" + shell_escape(itm.target) + "'; "
+					"printf '%b\\n' '" + shell_escape(desc) + "' | fold -s -w $$_d | "
+					"awk -v p=" + p + " -v m=" + mode + " '"
+					"{l[NR]=$$0}END{"
+					"if(NR<=1 && m==0)printf \" \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 %s\\n\",l[1];"
+					"else if(NR<=1)printf \" \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 %s\\n\",l[1];"
+					"else{printf \" \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 %s\\n\",l[1];"
+					"for(i=2;i<NR;i++)printf \"  %*s  \xe2\x94\x82  %s\\n\",p,\"\",l[i];"
+					"if(m==0)printf \"  %*s  \xe2\x94\x98  %s\\n\",p,\"\",l[NR];"
+					"else printf \"  %*s  \xe2\x94\x82  %s\\n\",p,\"\",l[NR]"
+					"}}'; ";
+			}
 		}
 	}
 
 	void add_help_rule(bool graph = false) {
 		auto &f  = add("help");
-		if(!help_title.empty()) {
-			f << "@echo \"" + help_title + "\"";
-			f << "@echo \"\"";
-		}
-		std::string pad = std::string(std::max(0, max_width - 10), ' ');
+		std::string p = std::to_string(max_width);
+		int prefix_len = 2 + max_width + 5;
+		std::string script;
+		script += "_w=$$(tput cols 2>/dev/null || echo $${COLUMNS:-80}); "
+				  "_d=$$((_w - " + std::to_string(prefix_len) + ")); "
+				  "[ $$_d -lt 20 ] && _d=20; ";
+		if(!help_title.empty())
+			script += "echo '" + shell_escape(help_title) + "'; echo ''; ";
 		bool has_ungrouped = false;
 		for(auto &itm : help_menu)
 			if(itm.group.empty()) { has_ungrouped = true; break; }
 		if(has_ungrouped) {
-			f << "@echo \"Targets:\"";
-			emit_help_entries(f, "");
-			f << "@echo \"\"";
+			script += "echo 'Targets:'; ";
+			emit_help_entries(script, "");
+			script += "echo ''; ";
 		}
 		for(auto &grp : help_group_order) {
-			f << "@echo \"" + grp + ":\"";
-			emit_help_entries(f, grp);
-			f << "@echo \"\"";
+			std::string display_name = grp;
+			auto slash = grp.rfind('/');
+			if(slash != std::string::npos)
+				display_name = grp.substr(slash + 1);
+			int depth = std::count(grp.begin(), grp.end(), '/');
+			std::string indent(depth * 2, ' ');
+			script += "echo '" + indent + shell_escape(display_name) + ":'; ";
+			emit_help_entries(script, grp, indent);
+			script += "echo ''; ";
 		}
 		auto builtin = [&](std::string name, std::string desc) {
-			std::stringstream ss;
-			ss << "  " << std::setw(max_width) << name << " \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 " << desc;
-			f << "@echo \"" + ss.str() + "\"";
+			script += "printf '  %" + p + "s' '" + shell_escape(name) + "'; "
+				"printf '%b\\n' '" + shell_escape(desc) + "' | fold -s -w $$_d | "
+				"awk -v p=" + p + " '"
+				"{l[NR]=$$0}END{"
+				"if(NR<=1)printf \" \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 %s\\n\",l[1];"
+				"else{printf \" \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 %s\\n\",l[1];"
+				"for(i=2;i<NR;i++)printf \"  %*s  \xe2\x94\x82  %s\\n\",p,\"\",l[i];"
+				"printf \"  %*s  \xe2\x94\x98  %s\\n\",p,\"\",l[NR]"
+				"}}'; ";
 		};
-		f << "@echo \"Built-in:\"";
+		script += "echo 'Built-in:'; ";
 		builtin("all",          "Build all final targets");
 		builtin("full_clean",   "Remove all generated files");
 		builtin("soft_clean",   "Remove generated files (except retained)");
@@ -329,11 +365,12 @@ class Makefile {
 		builtin("help",         "Show this help");
 		if(graph)
 			builtin("makefile_graph.pdf", "Generate dependency graph (requires Graphviz)");
+		f << "@" + script;
 	}
 
 	void dump_help(bool graph = false) {
 		for(auto const& cmd : commands) {
-			if(cmd->help.empty()) continue;
+			if(cmd->help_lines.empty()) continue;
 			auto trange = rule_target.equal_range(cmd.get());
 			std::vector<std::string> targets;
 			for(auto j = trange.first; j != trange.second; j++)
@@ -342,13 +379,16 @@ class Makefile {
 			for(auto &t : targets)
 				if(max_width < (int)t.size())
 					max_width = t.size();
+			std::string help_joined = cmd->help_lines[0];
+			for(size_t h = 1; h < cmd->help_lines.size(); h++)
+				help_joined += "\n" + cmd->help_lines[h];
 			if(targets.size() == 1) {
-				add_to_help_menu(targets[0], " \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80 " + cmd->help, cmd->help_group);
+				add_to_help_menu(targets[0], help_joined, cmd->help_group, BRK_NORMAL);
 			} else {
-				add_to_help_menu(targets[0], " \xe2\x94\x80\xe2\x94\xac\xe2\x94\x80 " + cmd->help, cmd->help_group);
+				add_to_help_menu(targets[0], help_joined, cmd->help_group, BRK_MULTI_FIRST);
 				for(size_t i = 1; i < targets.size() - 1; i++)
-					add_to_help_menu(targets[i], "  \xe2\x94\x82", cmd->help_group);
-				add_to_help_menu(targets.back(), "  \xe2\x94\x98", cmd->help_group);
+					add_to_help_menu(targets[i], "", cmd->help_group, BRK_MULTI_MID);
+				add_to_help_menu(targets.back(), "", cmd->help_group, BRK_MULTI_END);
 			}
 		}
 		add_help_rule(graph);
@@ -358,7 +398,14 @@ class Makefile {
 	std::set<std::string> hidden_nodes; //notes to execlude from makefile graph
 	bool silent;
 	bool echo;
+	bool context;
+	std::string context_filename;
 	std::string help_title;
+	std::string project_description;
+
+	void description(std::string desc) {
+		project_description = desc;
+	}
 
 	void HELP_GROUP(std::string group) {
 		current_help_group = group;
@@ -373,6 +420,8 @@ class Makefile {
         max_width=20;
 		silent = false;
 		echo = true;
+		context = true;
+		context_filename = "AGENTS.md";
 		help_title = "";
 	};
 
@@ -589,6 +638,79 @@ class Makefile {
 		}
 		myfile.close();
 		write_menu_file(graph);
+		if(context)
+			generate_context(graph);
+	}
+
+	void generate_context(bool graph = false) {
+		std::ofstream cf(context_filename);
+		cf << "# " << (help_title.empty() ? "Project" : help_title) << "\n\n";
+		if(!project_description.empty())
+			cf << project_description << "\n\n";
+		cf << "This project uses [makexx](https://github.com/ab-10/makexx) as its build system. ";
+		cf << "Edit `makefile.cpp` to modify build rules, then run `makexx` to regenerate the makefile and build.\n\n";
+
+		std::set<std::string> inputfiles_list;
+		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
+			if(target_rule.find(*itr) == target_rule.end())
+				inputfiles_list.insert(*itr);
+		}
+		if(!inputfiles_list.empty()) {
+			cf << "## Input files\n\n";
+			for(auto &itm : inputfiles_list)
+				cf << "- `" << itm << "`\n";
+			cf << "\n";
+		}
+
+		bool has_ungrouped = false;
+		for(auto &itm : help_menu)
+			if(itm.group.empty() && itm.bracket != BRK_MULTI_MID && itm.bracket != BRK_MULTI_END) {
+				has_ungrouped = true;
+				break;
+			}
+
+		auto write_entries = [&](std::ofstream &out, std::string const &group) {
+			for(auto &itm : help_menu) {
+				if(itm.group != group) continue;
+				if(itm.bracket == BRK_MULTI_MID || itm.bracket == BRK_MULTI_END) continue;
+				std::string flat_desc = replace_all(itm.description, "\n", " ");
+				auto srange = rule_source.equal_range(target_rule[itm.target]);
+				std::string deps;
+				for(auto j = srange.first; j != srange.second; j++) {
+					if(!deps.empty()) deps += ", ";
+					deps += "`" + j->second + "`";
+				}
+				out << "- `make " << itm.target << "`";
+				if(!deps.empty())
+					out << " (from " << deps << ")";
+				out << " \xe2\x80\x94 " << flat_desc << "\n";
+			}
+		};
+
+		cf << "## Targets\n\n";
+		if(has_ungrouped)
+			write_entries(cf, "");
+		for(auto &grp : help_group_order) {
+			std::string display_name = grp;
+			auto slash = grp.rfind('/');
+			if(slash != std::string::npos)
+				display_name = grp.substr(slash + 1);
+			int depth = std::count(grp.begin(), grp.end(), '/');
+			cf << std::string(depth * 2, ' ') << "### " << display_name << "\n\n";
+			write_entries(cf, grp);
+			cf << "\n";
+		}
+
+		cf << "## Built-in targets\n\n";
+		cf << "- `make all` — Build all final targets\n";
+		cf << "- `make full_clean` — Remove all generated files\n";
+		cf << "- `make soft_clean` — Remove generated files (except retained)\n";
+		cf << "- `make list` — List all tracked files\n";
+		cf << "- `make help` — Show help\n";
+		if(graph)
+			cf << "- `make makefile_graph.pdf` — Generate dependency graph (requires Graphviz)\n";
+		cf << "\n";
+		cf.close();
 	}
 
 	void write_menu_file(bool graph) {
@@ -599,17 +721,11 @@ class Makefile {
 			return name;
 		};
 		for(auto &itm : help_menu) {
-			bool is_mid = itm.description.find("\xe2\x94\x82") != std::string::npos;
-			bool is_end = itm.description.find("\xe2\x94\x98") != std::string::npos;
-			if(is_mid || is_end) {
+			if(itm.bracket == BRK_MULTI_MID || itm.bracket == BRK_MULTI_END) {
 				mf << group_prefix(itm.group) << "\t=" << itm.target << "\t\n";
 				continue;
 			}
-			std::string desc = itm.description;
-			auto pos = desc.find_last_of("\xe2\x94\x80");
-			if(pos != std::string::npos && pos + 1 < desc.size())
-				desc = desc.substr(pos + 1);
-			while(!desc.empty() && desc[0] == ' ') desc = desc.substr(1);
+			std::string desc = replace_all(itm.description, "\n", "|");
 			mf << group_prefix(itm.group) << "\t" << itm.target << "\t" << desc << "\n";
 		}
 		std::string builtin_group = "Built-in";

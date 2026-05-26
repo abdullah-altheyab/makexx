@@ -107,12 +107,14 @@ int run_cmd(string cmd) {
 struct MenuEntry {
 	string group;
 	string target;
-	string description;
+	vector<string> desc_lines;
 	bool continuation = false;
 };
 
 struct MenuGroup {
 	string name;
+	string display_name;
+	int depth = 0;
 	vector<int> entries;
 	bool folded = false;
 };
@@ -144,11 +146,28 @@ int run_interactive() {
 			target = target.substr(1);
 			cont = true;
 		}
+		vector<string> dl;
+		{
+			size_t start = 0;
+			while(true) {
+				auto p = desc.find('|', start);
+				dl.push_back(desc.substr(start, p - start));
+				if(p == string::npos) break;
+				start = p + 1;
+			}
+		}
 		int eidx = entries.size();
-		entries.push_back({grp, target, desc, cont});
+		entries.push_back({grp, target, dl, cont});
 		if(group_index.find(grp) == group_index.end()) {
+			string dname = grp;
+			int depth = 0;
+			auto slash = grp.rfind('/');
+			if(slash != string::npos) {
+				dname = grp.substr(slash + 1);
+				for(auto c : grp) if(c == '/') depth++;
+			}
 			group_index[grp] = groups.size();
-			groups.push_back({grp, {}, folded});
+			groups.push_back({grp, dname, depth, {}, folded});
 		}
 		groups[group_index[grp]].entries.push_back(eidx);
 	}
@@ -201,9 +220,23 @@ int run_interactive() {
 		return KEY_NONE;
 	};
 
+	auto is_ancestor_folded = [&](string const &grp) -> bool {
+		string path = grp;
+		while(true) {
+			auto slash = path.rfind('/');
+			if(slash == string::npos) break;
+			path = path.substr(0, slash);
+			auto it = group_index.find(path);
+			if(it != group_index.end() && groups[it->second].folded)
+				return true;
+		}
+		return false;
+	};
+
 	auto build_visible = [&]() {
 		vector<std::pair<int,int>> vis;
 		for(int g = 0; g < (int)groups.size(); g++) {
+			if(is_ancestor_folded(groups[g].name)) continue;
 			vis.push_back({g, -1});
 			if(!groups[g].folded) {
 				for(int ei : groups[g].entries)
@@ -228,10 +261,11 @@ int run_interactive() {
 			bool selected = (i == cursor);
 			if(eidx == -1) {
 				string arrow = groups[gidx].folded ? "▸" : "▾";
+				string gindent(groups[gidx].depth * 3, ' ');
 				if(selected)
-					printf("   %s \033[7m%s\033[0m\n", arrow.c_str(), groups[gidx].name.c_str());
+					printf("%s   %s \033[7m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
 				else
-					printf("   %s \033[1m%s\033[0m\n", arrow.c_str(), groups[gidx].name.c_str());
+					printf("%s   %s \033[1m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
 			} else {
 				auto &e = entries[eidx];
 				bool next_is_cont = (i + 1 < (int)visible.size() &&
@@ -246,10 +280,15 @@ int run_interactive() {
 					bracket = "  ┘  ";
 				else
 					bracket = " ─── ";
+				string eindent(groups[gidx].depth * 3, ' ');
+				string first_desc = e.desc_lines.empty() ? "" : e.desc_lines[0];
 				if(selected)
-					printf(fmt_sel.c_str(), e.target.c_str(), (bracket + e.description).c_str());
+					printf("%s", eindent.c_str()), printf(fmt_sel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
 				else
-					printf(fmt_unsel.c_str(), e.target.c_str(), (bracket + e.description).c_str());
+					printf("%s", eindent.c_str()), printf(fmt_unsel.c_str(), e.target.c_str(), (bracket + first_desc).c_str());
+				string cont_pad = eindent + "      " + string(col_width, ' ') + "       ";
+				for(size_t dl = 1; dl < e.desc_lines.size(); dl++)
+					printf("%s%s\n", cont_pad.c_str(), e.desc_lines[dl].c_str());
 			}
 		}
 
@@ -319,6 +358,13 @@ int main(int argc, char **argv) {
 		if(verbose)
 			cout << "Generating makefile.hpp..." << endl;
 		update_makefile_hpp = true;
+	} else {
+		char *local_hpp = read_file(hpp_path);
+		size_t embedded_len = sizeof(makefile_hpp_content) - 1;
+		if(strlen(local_hpp) != embedded_len || memcmp(local_hpp, makefile_hpp_content, embedded_len) != 0) {
+			std::cerr << "warning: makefile.hpp does not match this version of makexx; run makexx -u to update it" << endl;
+		}
+		free(local_hpp);
 	}
 	if(!exists(cpp_path)) {
 		if(verbose)

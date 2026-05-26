@@ -26,7 +26,7 @@ When `makexx` is invoked in a user's project directory:
 2. Creates `makefile.cpp` from the embedded example template (only if it doesn't exist yet)
 3. Selects a C++ compiler: uses `CXX` env var if set, otherwise probes `g++`, `clang++`, `icpx`, `icpc` in order
 4. Compiles `makefile.cpp` → `makefile_gen` executable
-5. Runs `makefile_gen` which calls `mf.generate()` to produce `makefile` and `.makexx_menu`
+5. Runs `makefile_gen` which calls `mf.generate()` to produce `makefile`, `.makexx_menu`, and `AGENTS.md`
 6. Runs `make` with any extra args passed to `makexx` (except `-u`, `-f`, `-c`, `-i`)
 7. Cleans up temp files (`tmp_makexx*`, `err_makexx.txt`, `makefile_gen`)
 
@@ -75,10 +75,18 @@ mf.echo = false;    // suppress ### GENERATING echo lines
 // Help organization
 mf.help_title = "My Project";       // printed at top of 'make help'
 mf.HELP_GROUP("Build");             // subsequent HELP() entries belong to this group
+mf.HELP_GROUP("Build/Tests");       // nested group via slash separator
+mf.HELP_GROUP("Archive", FOLDED);   // folded by default in makexx -i
 // HELP("group", "desc") overrides the group for a single rule
 
-mf.generate();              // write the makefile + .makexx_menu
-mf.generate_with_graph();   // write the makefile + .makexx_menu + makefile_graph.gv (Graphviz DOT)
+// AI agent context generation
+mf.description("What this project does..."); // project description for AGENTS.md
+mf.context = true;                           // enable AGENTS.md generation (default)
+mf.context = false;                          // disable AGENTS.md generation
+mf.context_filename = "CLAUDE.md";           // override output filename (default "AGENTS.md")
+
+mf.generate();              // write the makefile + .makexx_menu + AGENTS.md
+mf.generate_with_graph();   // write the makefile + .makexx_menu + AGENTS.md + makefile_graph.gv (Graphviz DOT)
 ```
 
 ### Helper functions
@@ -100,6 +108,16 @@ The generated makefile always includes `.PHONY` and the built-in targets: `all`,
 The `### GENERATING` decoration is suppressed for phony/built-in targets.
 
 On Windows, the `<<` operator automatically replaces `/` with `\` in shell commands.
+
+### AI agent context file (AGENTS.md)
+
+`mf.generate()` writes an `AGENTS.md` file alongside the makefile. This gives AI coding agents (Claude Code, Cursor, Copilot, etc.) a plain-English summary of the project: description, input files, targets with dependencies organized by group, and built-in targets.
+
+- `mf.description("...")` sets the project description included in the file
+- `mf.context = false` disables generation
+- `mf.context_filename = "CLAUDE.md"` overrides the output filename (default `AGENTS.md`)
+
+The file is generated entirely from data the `Makefile` class already holds — no AI is involved in the generation step.
 
 ### Interactive mode
 
@@ -128,6 +146,15 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 - **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
 - **SQL/string helpers** return shell command fragments that are composed into rule commands — the full power of C++ string manipulation is available
 
+### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
+
+Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealogy visualization) and demonstrates the AI agent context generation feature. Key patterns:
+
+- **`mf.description("...")`** provides a project summary for the generated `AGENTS.md`
+- **`HELP_GROUP()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
+- **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
+- **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call
+
 ## Architecture
 
 ```
@@ -138,6 +165,7 @@ CMakeLists.txt                — builds makexx; drives the embed step via cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
 examples/compile/             — example: multi-target C++ project build
 examples/processing_workflow/ — example: domain-specific pipeline orchestration
+examples/family_tree/         — example: genealogy workflow with AI context generation
 tests/                        — test suite
 .github/workflows/ci.yml      — GitHub Actions CI (Linux + macOS)
 ```

@@ -17,6 +17,8 @@ int main() {
     //
     // Organize help with groups:
     //   mf.HELP_GROUP("name")           — all subsequent rules belong to this group
+    //   mf.HELP_GROUP("Parent/Child")   — nested groups via slash separator
+    //   mf.HELP_GROUP("name", FOLDED)   — folded by default in makexx -i
     //   HELP("group", "description")    — override group for a single rule
     //
     // Helper functions:

@@ -93,9 +93,13 @@ mf.HELP_GROUP("Processing");
 mf.add("filtered.bin", "raw.segy")
     << FINAL << HELP("Apply bandpass filter") << "atbpfilt $< $@";
 
-mf.HELP_GROUP("QC");
+mf.HELP_GROUP("Processing/QC");
 mf.add("report.pdf", "filtered.bin")
     << HELP("Generate QC report") << "qcplot $< $@";
+
+mf.HELP_GROUP("Archive", FOLDED);   // folded by default in makexx -i
+mf.add("backup.tar", "filtered.bin")
+    << HELP("Archive raw data") << "tar cf $@ $<";
 ```
 
 Then `make help` prints:
@@ -106,8 +110,11 @@ Seismic Pipeline v2
 Processing:
   filtered.bin ─── Apply bandpass filter
 
-QC:
+  QC:
     report.pdf ─── Generate QC report
+
+Archive:
+    backup.tar ─── Archive raw data
 
 Built-in:
            all ─── Build all final targets
@@ -116,7 +123,22 @@ Built-in:
            ...
 ```
 
-**Interactive mode.** Run `makexx -i` for a terminal UI with arrow key navigation, foldable groups, and Enter to run a target.
+**AI agent context.** `generate()` writes an `AGENTS.md` alongside the makefile — a plain-English summary of the project for AI coding agents (Claude Code, Cursor, Copilot, etc.):
+
+```cpp
+mf.description("Manages a family genealogy database. Generates SVG "
+    "tree visualizations from a SQLite database using Graphviz.");
+mf.generate();  // writes makefile + .makexx_menu + AGENTS.md
+```
+
+The generated `AGENTS.md` lists the project description, input files, and all targets with dependencies organized by group — so an AI agent can understand your project and help modify `makefile.cpp` in domain terms.
+
+```cpp
+mf.context = false;                  // disable AGENTS.md generation
+mf.context_filename = "CLAUDE.md";   // use a different filename
+```
+
+**Interactive mode.** Run `makexx -i` for a terminal UI with arrow key navigation, foldable/nested groups, and Enter to run a target.
 
 **Helper functions.** Path manipulation utilities available in your `makefile.cpp`:
 
@@ -147,6 +169,7 @@ The generated `makefile` is a plain text file. On most HPC clusters, `make` is t
 | No new language for C++ users | ✓ | — | — | — |
 | Interactive target selector | ✓ | — | — | — |
 | Self-documenting targets | ✓ | — | ✓ | — |
+| AI agent context generation | ✓ | — | — | — |
 
 ---
 
@@ -170,4 +193,4 @@ cmake --install build   # installs makexx to /usr/local/bin
 
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
 
-See [`examples/`](examples/) for a full C++ project build and a multi-stage research pipeline.
+See [`examples/`](examples/) for a full C++ project build, a multi-stage research pipeline, and a genealogy workflow with AI agent context generation.
