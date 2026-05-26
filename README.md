@@ -49,7 +49,7 @@ int main() {
 ```bash
 makexx          # generates and runs the pipeline
 makexx -i       # interactive target selector (TUI)
-make            # reruns only what changed
+make            # reruns only what changed (auto-regenerates if makefile.cpp was edited)
 make image.bin  # run up to a specific target
 make help       # list all targets with descriptions
 ```
@@ -82,6 +82,21 @@ for (auto& s : runs) {
     mf.add(s.name + ".out", s.grid)
         << ("runsim --solver=" + s.solver + " --iter=" + to_string(s.iterations) + " $< > $@");
 }
+```
+
+**Config separation.** Keep parameters in a `config.hpp` to keep `makefile.cpp` focused on rules. makexx automatically tracks the dependency — editing `config.hpp` and running `make` regenerates the makefile:
+
+```cpp
+// config.hpp
+#define TRIAL true
+int iterations = TRIAL ? 10 : 5000;
+vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
+```
+
+```cpp
+// makefile.cpp
+#include "makefile.hpp"
+#include "config.hpp"
 ```
 
 **Self-documenting pipelines.** Add descriptions and organize targets into groups:
@@ -224,4 +239,4 @@ cmake --install build   # installs makexx to /usr/local/bin
 
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
 
-See [`examples/`](examples/) for a full C++ project build, a multi-stage research pipeline, and a genealogy workflow with AI agent context generation.
+See [`examples/`](examples/) for a full C++ project build, a multi-stage research pipeline, a genealogy workflow with AI agent context generation, and a simulation workflow with config separation.

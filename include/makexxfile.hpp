@@ -535,6 +535,9 @@ class Makefile {
 		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
 		myfile << "SHELL=/bin/bash" << std::endl;
 		myfile << ".PHONY: all full_clean soft_clean list list_unknown list_input help" << std::endl;
+		myfile << "-include .makexx_deps" << std::endl;
+		myfile << "makefile: makefile.cpp makefile.hpp" << std::endl;
+		myfile << "\tmakexx -c" << std::endl;
 		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
 			if(target_rule.find(*itr) != target_rule.end()) {
 				if(processed_nodes.find(*itr) == processed_nodes.end()) {

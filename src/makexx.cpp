@@ -719,7 +719,7 @@ int main(int argc, char **argv) {
 	}
 	if(verbose)
 		cout << compilers[compiler_id] << " is used." << endl;
-	run_cmd(compilers[compiler_id] + " -std=c++17 makefile.cpp -o makefile_gen");
+	run_cmd(compilers[compiler_id] + " -std=c++17 -MMD -MF .makexx_deps -MT makefile makefile.cpp -o makefile_gen");
 	if(!exists("makefile_gen") && !exists("makefile_gen.exe")) {
 		std::cerr << "error: failed to compile makefile.cpp" << endl;
 		return -1;

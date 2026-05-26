@@ -14,6 +14,7 @@ Initial public release.
 - **Path helpers:** `stem()`, `basename()`, `change_ext()`, `join_path()`, `get_extension()`, `replace_all()`, `to_upper()`, `to_lower()`
 - **AI context generation:** `mf.generate()` writes `AGENTS.md` alongside the makefile
 - **Dependency graph:** `mf.generate_with_graph()` outputs Graphviz DOT file
+- **Auto-regeneration:** editing `makefile.cpp` and running `make` automatically reruns `makexx -c` and restarts with the new rules. All headers included by `makefile.cpp` (e.g., `config.hpp`) are tracked via `-MMD` dependency scanning
 - **Built-in targets:** `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, `help`
 
 ### Interactive mode (`makexx -i`)
