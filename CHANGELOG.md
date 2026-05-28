@@ -5,6 +5,8 @@
 ### Makefile DSL
 
 - **`<< RETAIN`** — exclude rule targets from `soft_clean` directly on the rule definition; `<< RETAIN("file")` for explicit filenames, replacing `mf.on_softclean_retain()`
+- **`change_ext(file, {exts})`** — overload returning `vector<string>` for multiple extensions in one call
+- **`get_ext()`** — renamed from `get_extension()` for consistency with `change_ext()`
 
 ## v0.1.1
 

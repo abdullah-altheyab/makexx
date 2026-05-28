@@ -108,13 +108,14 @@ mf.generate_with_graph();   // write the makefile + .makexx_menu + AGENTS.md + m
 ### Helper functions
 
 ```cpp
-stem("dir/file.cpp")            // "file" — filename without directory or extension
-basename("dir/file.cpp")        // "file.cpp" — filename without directory
-change_ext("file.cpp", ".o")    // "file.o" — replace file extension
-join_path("obj", "file.o")      // "obj/file.o" — join directory and filename
-get_extension("file.cpp")       // "cpp" — file extension without dot
-replace_all(str, from, to)      // string replacement
-to_upper(str) / to_lower(str)   // case conversion
+stem("dir/file.cpp")                    // "file" — filename without directory or extension
+basename("dir/file.cpp")               // "file.cpp" — filename without directory
+change_ext("file.cpp", ".o")           // "file.o" — replace file extension
+change_ext("file.cpp", {".o", ".d"})   // {"file.o", "file.d"} — same file, multiple extensions
+join_path("obj", "file.o")             // "obj/file.o" — join directory and filename
+get_ext("file.cpp")                    // "cpp" — file extension without dot
+replace_all(str, from, to)             // string replacement
+to_upper(str) / to_lower(str)          // case conversion
 ```
 
 ### Generated makefile features

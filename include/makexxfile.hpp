@@ -41,10 +41,11 @@
 //   mf.generate_with_graph()               — also write makefile_graph.gv (Graphviz)
 //
 // Helpers:
-//   stem("dir/file.cpp")       → "file"        basename("dir/file.cpp")  → "file.cpp"
-//   change_ext("f.cpp", ".o")  → "f.o"         join_path("obj", "f.o")   → "obj/f.o"
-//   get_extension("file.cpp")  → "cpp"          replace_all(str, from, to)
-//   to_upper(str)               to_lower(str)
+//   stem("dir/file.cpp")                  → "file"       basename("dir/file.cpp") → "file.cpp"
+//   change_ext("f.cpp", ".o")             → "f.o"              get_ext("file.cpp") → "cpp"
+//   change_ext("f.cpp", {".o", ".d"})     → {"f.o","f.d"}
+//   join_path("obj", "f.o")               → "obj/f.o"    replace_all(str, from, to)
+//   to_upper(str)   to_lower(str)
 
 #include <map>
 #include <set>
@@ -158,7 +159,7 @@ class Rule {
 
 };
 
-inline std::string get_extension(std::string const filename) {
+inline std::string get_ext(std::string const filename) {
 	auto idx = filename.rfind('.');
 	if(idx != std::string::npos) {
 		return filename.substr(idx + 1);
@@ -176,6 +177,19 @@ inline std::string change_ext(std::string const &filename, std::string const &ne
 	std::string base = (dot != std::string::npos) ? filename.substr(0, dot) : filename;
 	if(new_ext.empty()) return base;
 	return (new_ext[0] == '.') ? base + new_ext : base + "." + new_ext;
+}
+
+inline std::vector<std::string> change_ext(std::string const &filename, StringList exts) {
+	std::vector<std::string> result;
+	for(auto const &ext : exts)
+		result.push_back(change_ext(filename, std::string(ext)));
+	return result;
+}
+inline std::vector<std::string> change_ext(std::string const &filename, std::vector<std::string> const &exts) {
+	std::vector<std::string> result;
+	for(auto const &ext : exts)
+		result.push_back(change_ext(filename, ext));
+	return result;
 }
 
 inline std::string join_path(std::string dir, std::string const &file) {
@@ -874,7 +888,7 @@ class Makefile {
 			if(hidden_nodes.find(*itr) != hidden_nodes.end())
 				continue;
 			std::string const scheme = "set312"; //"pastel28"
-			std::string extension = get_extension(*itr);
+			std::string extension = get_ext(*itr);
 			if(extension == "") {
 				//rule that is not a file
 				myfile << "\"" + (*itr) + "\" [shape=box, style=filled, fillcolor=black, fontcolor=white];\n";

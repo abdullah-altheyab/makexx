@@ -169,10 +169,12 @@ mf.context_filename = "CLAUDE.md";   // use a different filename
 **Helper functions.** Path manipulation utilities available in your `makefile.cpp`:
 
 ```cpp
-stem("dir/file.cpp")            // "file"
-basename("dir/file.cpp")        // "file.cpp"
-change_ext("file.cpp", ".o")    // "file.o"
-join_path("obj", "file.o")      // "obj/file.o"
+stem("dir/file.cpp")                    // "file"
+basename("dir/file.cpp")               // "file.cpp"
+change_ext("file.cpp", ".o")           // "file.o"
+change_ext("file.cpp", {".o", ".d"})   // {"file.o", "file.d"}
+get_ext("file.cpp")                    // "cpp"
+join_path("obj", "file.o")             // "obj/file.o"
 ```
 
 ---
