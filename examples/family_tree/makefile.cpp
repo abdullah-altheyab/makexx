@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     string server = "example.com";
     string person_page_prefix = "http://example.com/show_person.py?id=";
 
-    mf.set_current_menu("Visualize");
+    mf << MENU("Visualize");
     mf.add("family_network.svg", "family.db")
         <<HELP("Plot the whole relationship network without filters")
         <<"familytree2gv input=family.db output=dot.gv option=3 && dot dot.gv -Tsvg -o $@"
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         <<"familytree2gv input=family.db output=dot.gv option=1 && dot dot.gv -Tsvg -o $@"
         ;
 
-    mf.set_current_menu("Subtrees");
+    mf << MENU("Subtrees");
     mf.add("full_tree.pdf", "family.db")
         <<HELP("Plot full tree including male and female branching")
         <<"rm -f tree2.db && extracttree url_option=id rootid=1 input=family.db output=tree2.db"
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         <<"familytree2gv rootid=1 first_name=true input=tree2.db output=dot.gv option=3 ranksep=0.3 direction=BT seq=desc url_prefix=\""+person_page_prefix+"\" showid=false && dot dot.gv -Tsvg -o $@"
         ;
 
-    mf.set_current_menu("Batch");
+    mf << MENU("Batch");
     mf.add("svgs", {"family.db", "full_tree.svg", "male_tree.svg", "male_1level.svg"})
         <<HELP("Generate all family tree SVGs")
         <<"mkdir -p family_svgs"
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         <<"tforeach input_tbl=tmp.t template_file=generate_ans_tree.sh XROOTIDX=id | sh -v"
         ;
 
-    mf.set_current_menu("Deploy");
+    mf << MENU("Deploy");
     mf.add("push")
         <<HELP("Upload SVGs and database to server")
         <<"rsync "+ssh_cmd+" -rPv family_svgs "+ssh_usr+"@"+server+":~/www/html/."
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
         <<"rsync "+ssh_cmd+" -rPv "+ssh_usr+"@"+server+":~/www/html/family_svgs/photo ."
         ;
 
-    mf.set_current_menu("Utilities");
+    mf << MENU("Utilities");
     mf.add("gen_contacts")
         <<HELP("Generate vCard contacts from database")
         <<"dbdump db=family.db qry=\"select title, contact from person where not contact is null and not contact=''\" output=tmp1.t"

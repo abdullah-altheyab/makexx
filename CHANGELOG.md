@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Makefile DSL
+
+- **Menu groups:** `mf << MENU("name")` replaces `mf.set_current_menu("name")` and `mf.define_menu("name", FOLDED)` — same `<<` idiom as rules, supports optional `FOLDED` argument
+
 ## v0.1.0
 
 Initial public release.
@@ -9,7 +15,7 @@ Initial public release.
 - **Rule API:** `mf.add(targets, sources)` with `<<` for commands and metadata
 - **Target types:** `FINAL`, `OPTIONAL`, `INPUT`
 - **Metadata helpers:** `TEMP()`, `BYPRODUCT()`, `TARGET()`, `HELP()`
-- **Menu groups:** `rule << MENU("name")` for single-rule groups, `mf.set_current_menu("name")` for many rules in sequence (auto-defines), `mf.define_menu("name", FOLDED)` for upfront declaration. Nested groups via `/` separator
+- **Menu groups:** `rule << MENU("name")` for single-rule groups, `mf << MENU("name")` for many rules in sequence, `mf << MENU("name", FOLDED)` for folded groups. Nested groups via `/` separator
 - **Help system:** `make help` with box-drawing brackets, word-wrapping, and grouped output
 - **Path helpers:** `stem()`, `basename()`, `change_ext()`, `join_path()`, `get_extension()`, `replace_all()`, `to_upper()`, `to_lower()`
 - **AI context generation:** `mf.generate()` writes `AGENTS.md` alongside the makefile

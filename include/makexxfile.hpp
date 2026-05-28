@@ -21,9 +21,9 @@
 //
 // Menu groups:
 //   r << MENU("Forecasting")               — set group for a single rule
-//   mf.set_current_menu("Build")           — set group for many subsequent rules (defines if new)
-//   mf.set_current_menu("Build/Tests")     — nested group via slash separator
-//   mf.define_menu("Archive", FOLDED)      — pre-declare folded group without switching
+//   mf << MENU("Build")                    — set group for subsequent rules
+//   mf << MENU("Build/Tests")              — nested group via slash separator
+//   mf << MENU("Archive", FOLDED)          — set group, folded by default in makexx -i
 //
 // Settings:
 //   mf.help_title = "My Project"           — title for 'make help'
@@ -263,10 +263,13 @@ class HELP { // add help to the menu
 	HELP(std::string group, std::string help) : help(help), group(group) {};
 };
 
-class MENU { // override menu group for a single rule
+class MENU { // set menu group for a rule or for subsequent rules (on Makefile)
   public:
 	std::string group;
-	MENU(std::string group) : group(group) {};
+	bool has_display;
+	group_display display;
+	MENU(std::string group) : group(group), has_display(false), display(FOLDED) {};
+	MENU(std::string group, group_display d) : group(group), has_display(true), display(d) {};
 };
 
 inline Rule &operator<<(Rule &a, TEMP t) {
@@ -819,6 +822,14 @@ class Makefile {
 		if(graph)
 			write_builtin("makefile_graph.pdf", "Generate dependency graph (requires Graphviz)");
 		mf.close();
+	}
+
+	Makefile& operator<<(MENU m) {
+		if(m.has_display)
+			set_current_menu(m.group, m.display);
+		else
+			set_current_menu(m.group);
+		return *this;
 	}
 
 	void generate_graph(std::string filename = "makefile_graph.gv") {

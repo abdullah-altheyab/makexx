@@ -83,15 +83,15 @@ mf.help_title = "My Project";       // printed at top of 'make help'
 mf.add("forecast.bin", "data.t")
     << MENU("Forecasting") << HELP("run forecast") << "forecast $< > $@";
 
-// Many rules in a group — use set_current_menu (defines the group if new)
-mf.set_current_menu("Build");
+// Many rules in a group — use mf << MENU (sets current group for subsequent rules)
+mf << MENU("Build");
 mf.add("a.o", "a.cpp") << HELP("compile a") << "g++ -c $< -o $@";
 mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
 
-mf.set_current_menu("Build/Tests");     // nested group via slash separator
+mf << MENU("Build/Tests");              // nested group via slash separator
 
-// Pre-declare a folded group without switching to it
-mf.define_menu("Archive", FOLDED);
+// Pre-declare a folded group
+mf << MENU("Archive", FOLDED);
 // HELP("group", "desc") overrides the group for a single rule
 
 // AI agent context generation
@@ -171,14 +171,14 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 - **Domain classes** hold pipeline parameters; loops over them generate many related rules from a single template
 - **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
 - **Helper functions** return shell command fragments composed into rule commands
-- **`MENU()` per-rule** and **`set_current_menu()`** organize targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
+- **`MENU()` per-rule** and **`mf << MENU()`** organize targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
 
 ### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
 
 Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealogy visualization) and demonstrates the AI agent context generation feature. Key patterns:
 
 - **`mf.description("...")`** provides a project summary for the generated `AGENTS.md`
-- **`set_current_menu()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
+- **`mf << MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
 - **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call
 

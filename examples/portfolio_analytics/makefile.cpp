@@ -28,7 +28,7 @@ int main() {
 
     // ─── Data Import ─────────────────────────────────────────────────
 
-    mf.set_current_menu("Data");
+    mf << MENU("Data");
 
     mf.add("portfolio.db", portfolio_file)
         << HELP("import portfolio database")
@@ -50,7 +50,7 @@ int main() {
 
     // ─── QC ──────────────────────────────────────────────────────────
 
-    mf.set_current_menu("QC");
+    mf << MENU("QC");
 
     for (auto& d : deposits) {
         string qc = d.prefix + "_qc.pdf";
@@ -65,7 +65,7 @@ int main() {
 
     // ─── Forecasting ─────────────────────────────────────────────────
 
-    mf.set_current_menu("Forecast");
+    mf << MENU("Forecast");
 
     for (auto& d : deposits) {
         string gold_out = d.prefix + "_forecast_gold.t";
@@ -95,7 +95,7 @@ int main() {
 
     // ─── Regional Aggregation ────────────────────────────────────────
 
-    mf.set_current_menu("Forecast/Regional");
+    mf << MENU("Forecast/Regional");
 
     for (auto& r : regions) {
         vector<string> region_deps;
@@ -109,7 +109,7 @@ int main() {
 
     // ─── Simulation Validation ───────────────────────────────────────
 
-    mf.set_current_menu("Validation");
+    mf << MENU("Validation");
 
     mf.add("mc_convergence.pdf", "all_deposits.t")
         << HELP("check Monte Carlo convergence ("
@@ -124,7 +124,7 @@ int main() {
 
     // ─── Reports ─────────────────────────────────────────────────────
 
-    mf.set_current_menu("Reports");
+    mf << MENU("Reports");
 
     vector<string> all_forecasts;
     for (auto& d : deposits)
@@ -150,7 +150,7 @@ int main() {
 
     // ─── Benchmarking ────────────────────────────────────────────────
 
-    mf.set_current_menu("Benchmark");
+    mf << MENU("Benchmark");
 
     mf.add("benchmark_gold.pdf", all_forecasts)
         << HELP("benchmark gold recovery across deposits")
@@ -169,7 +169,7 @@ int main() {
 
     // ─── Utilities ───────────────────────────────────────────────────
 
-    mf.set_current_menu("Utilities");
+    mf << MENU("Utilities");
 
     mf.add("list_deposits")
         << HELP("list all configured deposits")
