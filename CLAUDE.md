@@ -16,7 +16,7 @@ cmake --install build   # installs to /usr/local/bin by default
 
 Output binary: `build/makexx`
 
-**How the embed works:** `inc/makexxfile.hpp` and `src/makexxfile_example.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `makexxfile_example_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required.
+**How the embed works:** `include/makexxfile.hpp` and `src/starter.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `starter_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required.
 
 ## How makexx works at runtime
 
@@ -49,7 +49,7 @@ When `makexx` is invoked in a user's project directory:
 
 All other flags are forwarded to `make`.
 
-## The Makefile DSL (`inc/makexxfile.hpp`)
+## The Makefile DSL (`include/makexxfile.hpp`)
 
 This is the API that users write in their `makefile.cpp`. Key concepts:
 
@@ -91,7 +91,7 @@ mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
 
 mf << MENU("Build/Tests");              // nested group via slash separator
 
-// Pre-declare a folded group
+// Switch to group and mark as folded in makexx -i
 mf << MENU("Archive", FOLDED);
 // HELP("group", "desc") overrides the group for a single rule
 
@@ -209,5 +209,5 @@ tests/                        — test suite
 .github/workflows/ci.yml      — GitHub Actions CI (Linux + macOS)
 ```
 
-The two embed headers (`makexxfile_embed.hpp`, `makexxfile_example_embed.hpp`) are generated into the CMake build directory and never checked in.
+The two embed headers (`makexxfile_embed.hpp`, `starter_embed.hpp`) are generated into the CMake build directory and never checked in.
 
