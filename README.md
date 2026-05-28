@@ -106,16 +106,16 @@ vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
 ```cpp
 mf.help_title = "Seismic Pipeline v2";
 
-mf.set_current_menu("Processing");
+mf << MENU("Processing");
 mf.add("filtered.bin", "raw.segy")
     << HELP("Apply bandpass filter")
     << "atbpfilt $< $@";
 
-mf.set_current_menu("Processing/QC");
+mf << MENU("Processing/QC");
 mf.add("report.pdf", "filtered.bin")
     << HELP("Generate QC report") << "qcplot $< $@";
 
-// Single rule in a group — use MENU inline, no need for set_current_menu:
+// Single rule in a group — use MENU inline:
 mf.add("backup.tar", "filtered.bin")
     << MENU("Archive") << HELP("Archive raw data") << "tar cf $@ $<";
 ```
