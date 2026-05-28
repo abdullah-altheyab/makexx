@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Makefile DSL
+
+- **Auto-created parent groups:** nested menu groups (e.g. `Build/Tests`, `Processing/QC/Plots`) now automatically register every parent path in `make help` and `AGENTS.md`, so parent section headers appear even when no rule lives directly in the parent
+
+### Interactive mode (`makexx -i`)
+
+- Parent group headers are auto-created in the TUI for nested groups, matching the behavior of `make help`; folding a parent now collapses all of its nested children
+
 ## v0.1.2
 
 ### Makefile DSL

@@ -65,6 +65,13 @@ static std::string read_makefile() {
     return ss.str();
 }
 
+static std::string read_file(std::string const &path) {
+    std::ifstream f(path);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -169,6 +176,23 @@ static void test_help() {
     CHECK_CONTAINS(content, "build the output");
 }
 
+static void test_nested_groups_emit_parents() {
+    current_test = "test_nested_groups_emit_parents";
+    TempDir td;
+    Makefile mf;
+    mf.add("report.pdf", "filtered.bin")
+        << MENU("Processing/QC")
+        << HELP("Generate QC report")
+        << "qcplot $< $@";
+    mf.generate();
+    auto makefile = read_makefile();
+    auto context = read_file("AGENTS.md");
+    CHECK_CONTAINS(makefile, "echo 'Processing:';");
+    CHECK_CONTAINS(makefile, "echo '  QC:';");
+    CHECK_CONTAINS(context, "### Processing");
+    CHECK_CONTAINS(context, "  ### QC");
+}
+
 static void test_temp_in_full_clean() {
     current_test = "test_temp_in_full_clean";
     TempDir td;
@@ -266,6 +290,7 @@ int main() {
     test_optional_not_in_all();
     test_multi_source();
     test_help();
+    test_nested_groups_emit_parents();
     test_temp_in_full_clean();
     test_temp_in_soft_clean();
     test_softclean_retain();

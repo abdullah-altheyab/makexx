@@ -376,10 +376,22 @@ class Makefile {
 
 	int max_width;
 
+	void register_help_group(std::string const &group) {
+		if(group.empty()) return;
+		size_t start = 0;
+		while(true) {
+			size_t slash = group.find('/', start);
+			std::string prefix = group.substr(0, slash);
+			if(std::find(help_group_order.begin(), help_group_order.end(), prefix) == help_group_order.end())
+				help_group_order.push_back(prefix);
+			if(slash == std::string::npos) break;
+			start = slash + 1;
+		}
+	}
+
 	void add_to_help_menu(std::string make_rule, std::string helpstr, std::string group, BracketType bracket = BRK_NORMAL) {
 		help_menu.push_back({make_rule, helpstr, group, bracket});
-		if(!group.empty() && std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
-			help_group_order.push_back(group);
+		register_help_group(group);
 	}
 
 	static std::string shell_escape(std::string const &s) {
@@ -510,8 +522,7 @@ class Makefile {
 	}
 
 	void define_menu(std::string group) {
-		if(std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
-			help_group_order.push_back(group);
+		register_help_group(group);
 	}
 
 	void define_menu(std::string group, group_display display) {
@@ -521,8 +532,7 @@ class Makefile {
 
 	void set_current_menu(std::string group) {
 		current_help_group = group;
-		if(std::find(help_group_order.begin(), help_group_order.end(), group) == help_group_order.end())
-			help_group_order.push_back(group);
+		register_help_group(group);
 	}
 
 	void set_current_menu(std::string group, group_display display) {

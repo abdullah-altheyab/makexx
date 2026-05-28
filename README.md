@@ -111,7 +111,7 @@ mf.add("filtered.bin", "raw.segy")
     << HELP("Apply bandpass filter")
     << "atbpfilt $< $@";
 
-mf << MENU("Processing/QC");
+mf << MENU("Processing/QC");           // nested via "/" — parent headers are auto-created
 mf.add("report.pdf", "filtered.bin")
     << HELP("Generate QC report") << "qcplot $< $@";
 

@@ -89,7 +89,7 @@ mf << MENU("Build");
 mf.add("a.o", "a.cpp") << HELP("compile a") << "g++ -c $< -o $@";
 mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
 
-mf << MENU("Build/Tests");              // nested group via slash separator
+mf << MENU("Build/Tests");              // nested group via slash separator; parent groups are auto-created
 
 // Switch to group and mark as folded in makexx -i
 mf << MENU("Archive", FOLDED);
@@ -120,7 +120,7 @@ to_upper(str) / to_lower(str)          // case conversion
 
 ### Generated makefile features
 
-The generated makefile always includes `.PHONY` and the built-in targets: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help`. The `help` target shows user-defined targets with box-drawing brackets for multi-target rules, organized by groups, with built-in targets listed at the bottom. Long descriptions word-wrap to the terminal width.
+The generated makefile always includes `.PHONY` and the built-in targets: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help`. The `help` target shows user-defined targets with box-drawing brackets for multi-target rules, organized by groups, with parent sections auto-created for nested group paths and built-in targets listed at the bottom. Long descriptions word-wrap to the terminal width.
 
 The `### GENERATING` decoration is suppressed for phony/built-in targets.
 
@@ -128,7 +128,7 @@ On Windows, the `<<` operator automatically replaces `/` with `\` in shell comma
 
 ### AI agent context file (AGENTS.md)
 
-`mf.generate()` writes an `AGENTS.md` file alongside the makefile. This gives AI coding agents (Claude Code, Cursor, Copilot, etc.) a plain-English summary of the project: description, input files, targets with dependencies organized by group, and built-in targets.
+`mf.generate()` writes an `AGENTS.md` file alongside the makefile. This gives AI coding agents (Claude Code, Cursor, Copilot, etc.) a plain-English summary of the project: description, input files, targets with dependencies organized by group, and built-in targets. Nested groups such as `Build/Tests` appear with their parent sections automatically.
 
 - `mf.description("...")` sets the project description included in the file
 - `mf.context = false` disables generation
@@ -141,6 +141,8 @@ The file is generated entirely from data the `Makefile` class already holds — 
 `makexx -i` launches a terminal UI for selecting and running targets. It reads the `.makexx_menu` file generated alongside the makefile. POSIX only.
 
 Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom, Tab/Shift+Tab jump between groups, ←→ fold/unfold groups, Enter to run, `d` dry-run preview (`make -n`), `?` show dependencies, `/` to search, Space to multi-select, `x` deselect all, q/Esc to quit. After running a target, a green **Done.** or red **Failed.** indicates the exit status.
+
+**Nested groups:** parent group headers (e.g. `Processing` for a `Processing/QC` rule) are auto-created and rendered as section headers above their children, indented by depth. Folding a parent collapses all of its descendants.
 
 **Search:** Press `/` to enter search mode. Type to filter targets by name or description (case-insensitive). Backspace removes characters. Enter locks the filter and returns to normal navigation. Esc clears the filter. Groups with no matching entries are hidden; folded groups auto-expand when a filter is active.
 
@@ -210,4 +212,3 @@ tests/                        — test suite
 ```
 
 The two embed headers (`makexxfile_embed.hpp`, `starter_embed.hpp`) are generated into the CMake build directory and never checked in.
-

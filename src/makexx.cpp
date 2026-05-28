@@ -152,6 +152,40 @@ int run_interactive() {
 	vector<string> group_order;
 	std::map<string, int> group_index;
 	vector<MenuGroup> groups;
+	auto ensure_group = [&](string const &grp, bool folded = false) {
+		if(grp.empty()) {
+			if(group_index.find(grp) == group_index.end()) {
+				group_index[grp] = groups.size();
+				groups.push_back({grp, "Targets", 0, {}, folded});
+			} else if(folded) {
+				groups[group_index[grp]].folded = true;
+			}
+			return;
+		}
+
+		size_t start = 0;
+		while(true) {
+			auto slash = grp.find('/', start);
+			string path = grp.substr(0, slash);
+			if(group_index.find(path) == group_index.end()) {
+				string dname = path;
+				int depth = 0;
+				auto last_slash = path.rfind('/');
+				if(last_slash != string::npos) {
+					dname = path.substr(last_slash + 1);
+					for(auto c : path) if(c == '/') depth++;
+				}
+				group_index[path] = groups.size();
+				groups.push_back({path, dname, depth, {}, false});
+			}
+			if(slash == string::npos) {
+				if(folded)
+					groups[group_index[path]].folded = true;
+				break;
+			}
+			start = slash + 1;
+		}
+	};
 	string line;
 	while(std::getline(f, line)) {
 		std::istringstream iss(line);
@@ -164,6 +198,8 @@ int run_interactive() {
 			grp = grp.substr(1);
 			folded = true;
 		}
+		if(grp == "_")
+			grp.clear();
 		bool cont = false;
 		if(!target.empty() && target[0] == '=') {
 			target = target.substr(1);
@@ -181,17 +217,7 @@ int run_interactive() {
 		}
 		int eidx = entries.size();
 		entries.push_back({grp, target, dl, cont});
-		if(group_index.find(grp) == group_index.end()) {
-			string dname = grp;
-			int depth = 0;
-			auto slash = grp.rfind('/');
-			if(slash != string::npos) {
-				dname = grp.substr(slash + 1);
-				for(auto c : grp) if(c == '/') depth++;
-			}
-			group_index[grp] = groups.size();
-			groups.push_back({grp, dname, depth, {}, folded});
-		}
+		ensure_group(grp, folded);
 		groups[group_index[grp]].entries.push_back(eidx);
 	}
 	f.close();
@@ -240,6 +266,23 @@ int run_interactive() {
 		}
 	};
 	rebuild_recent_group();
+
+	vector<vector<int>> child_groups(groups.size());
+	vector<int> root_groups;
+	for(int g = 0; g < (int)groups.size(); g++) {
+		if(groups[g].name == "\x01Recent") continue;
+		auto slash = groups[g].name.rfind('/');
+		if(slash == string::npos) {
+			root_groups.push_back(g);
+			continue;
+		}
+		string parent = groups[g].name.substr(0, slash);
+		auto it = group_index.find(parent);
+		if(it == group_index.end())
+			root_groups.push_back(g);
+		else
+			child_groups[it->second].push_back(g);
+	}
 
 	int col_width = 0;
 	for(auto &e : entries)
@@ -329,29 +372,35 @@ int run_interactive() {
 		return false;
 	};
 
-	auto add_group_to_visible = [&](vector<std::pair<int,int>> &vis, int g) {
-		if(is_ancestor_folded(groups[g].name)) return;
+	auto add_group_to_visible = [&](auto &&self, vector<std::pair<int,int>> &vis, int g) -> bool {
+		if(is_ancestor_folded(groups[g].name)) return false;
 		vector<int> matched;
 		for(int ei : groups[g].entries)
 			if(matches_search(ei)) matched.push_back(ei);
-		if(!search.empty() && matched.empty()) return;
-		if(matched.empty()) return;
-		vis.push_back({g, -1});
-		if(!groups[g].folded || !search.empty()) {
+		vector<std::pair<int,int>> child_vis;
+		bool has_visible_children = false;
+		for(int child : child_groups[g])
+			if(self(self, child_vis, child))
+				has_visible_children = true;
+		if(matched.empty() && !has_visible_children) return false;
+		bool show_header = !groups[g].name.empty();
+		if(show_header)
+			vis.push_back({g, -1});
+		if(!groups[g].folded || !search.empty() || !show_header) {
 			for(int ei : matched)
 				vis.push_back({g, ei});
+			vis.insert(vis.end(), child_vis.begin(), child_vis.end());
 		}
+		return true;
 	};
 
 	int recent_gidx = group_index["\x01Recent"];
 
 	auto build_visible = [&]() {
 		vector<std::pair<int,int>> vis;
-		add_group_to_visible(vis, recent_gidx);
-		for(int g = 0; g < (int)groups.size(); g++) {
-			if(g == recent_gidx) continue;
-			add_group_to_visible(vis, g);
-		}
+		add_group_to_visible(add_group_to_visible, vis, recent_gidx);
+		for(int g : root_groups)
+			add_group_to_visible(add_group_to_visible, vis, g);
 		return vis;
 	};
 
