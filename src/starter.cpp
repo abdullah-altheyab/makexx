@@ -19,6 +19,7 @@ int main() {
     //   mf << MENU("name")                  — subsequent rules belong to this group
     //   mf << MENU("Parent/Child")          — nested groups via slash separator; parent groups are auto-created
     //   mf << MENU("name", FOLDED)          — group folded by default in makexx -i
+    //   mf << MENU("name", "description")   — group with a description shown in help/AGENTS/TUI
     //   rule << MENU("name")                — override group for a single rule
     //
     // Helper functions:

@@ -117,6 +117,7 @@ struct MenuGroup {
 	int depth = 0;
 	vector<int> entries;
 	bool folded = false;
+	string description;
 };
 
 vector<string> word_wrap(string const &text, int width) {
@@ -187,12 +188,17 @@ int run_interactive() {
 		}
 	};
 	string line;
+	std::map<string, string> pending_group_desc;
 	while(std::getline(f, line)) {
 		std::istringstream iss(line);
 		string grp, target, desc;
 		if(!std::getline(iss, grp, '\t')) continue;
 		if(!std::getline(iss, target, '\t')) continue;
 		std::getline(iss, desc, '\t');
+		if(grp == "!desc") {
+			pending_group_desc[target] = desc;
+			continue;
+		}
 		bool folded = false;
 		if(!grp.empty() && grp[0] == '+') {
 			grp = grp.substr(1);
@@ -224,6 +230,11 @@ int run_interactive() {
 	if(entries.empty()) {
 		std::cerr << "error: no targets found in .makexx_menu" << endl;
 		return 1;
+	}
+	for(auto &kv : pending_group_desc) {
+		auto it = group_index.find(kv.first);
+		if(it != group_index.end())
+			groups[it->second].description = kv.second;
 	}
 
 	const int MAX_HISTORY = 5;
@@ -478,10 +489,13 @@ int run_interactive() {
 			if(eidx == -1) {
 				string arrow = groups[gidx].folded ? "▸" : "▾";
 				string gindent(groups[gidx].depth * 3, ' ');
+				string suffix = groups[gidx].description.empty()
+					? ""
+					: "  \033[2m" + groups[gidx].description + "\033[0m";
 				if(at_cursor)
-					printf("%s   %s \033[7m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
+					printf("%s   %s \033[7m%s\033[0m%s\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str(), suffix.c_str());
 				else
-					printf("%s   %s \033[1m%s\033[0m\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str());
+					printf("%s   %s \033[1m%s\033[0m%s\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str(), suffix.c_str());
 				lines_left--;
 			} else {
 				auto &e = entries[eidx];

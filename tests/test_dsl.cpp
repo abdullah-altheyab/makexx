@@ -176,6 +176,22 @@ static void test_help() {
     CHECK_CONTAINS(content, "build the output");
 }
 
+static void test_menu_group_description() {
+    current_test = "test_menu_group_description";
+    TempDir td;
+    Makefile mf;
+    mf << MENU("Build", "Compile sources");
+    mf.add("foo.o", "foo.cpp") << HELP("compile foo") << "g++ -c $< -o $@";
+    mf.generate();
+    auto makefile = read_makefile();
+    auto context = read_file("AGENTS.md");
+    auto menu = read_file(".makexx_menu");
+    CHECK_CONTAINS(makefile, "Build: \xe2\x80\x94 Compile sources");
+    CHECK_CONTAINS(context, "### Build");
+    CHECK_CONTAINS(context, "_Compile sources_");
+    CHECK_CONTAINS(menu, "!desc\tBuild\tCompile sources");
+}
+
 static void test_nested_groups_emit_parents() {
     current_test = "test_nested_groups_emit_parents";
     TempDir td;
@@ -290,6 +306,7 @@ int main() {
     test_optional_not_in_all();
     test_multi_source();
     test_help();
+    test_menu_group_description();
     test_nested_groups_emit_parents();
     test_temp_in_full_clean();
     test_temp_in_soft_clean();

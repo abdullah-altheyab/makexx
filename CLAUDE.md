@@ -91,8 +91,13 @@ mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
 
 mf << MENU("Build/Tests");              // nested group via slash separator; parent groups are auto-created
 
+// Group with a description (shown in make help, AGENTS.md, and the TUI)
+mf << MENU("Processing", "Run the data pipeline");
+mf << MENU("Processing/QC", "Quality control checks");
+
 // Switch to group and mark as folded in makexx -i
 mf << MENU("Archive", FOLDED);
+mf << MENU("Archive", "Old runs", FOLDED); // description + folded
 // HELP("group", "desc") overrides the group for a single rule
 
 // AI agent context generation

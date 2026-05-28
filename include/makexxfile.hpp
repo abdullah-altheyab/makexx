@@ -26,6 +26,8 @@
 //   mf << MENU("Build")                    — set group for subsequent rules
 //   mf << MENU("Build/Tests")              — nested group via slash separator
 //   mf << MENU("Archive", FOLDED)          — set group, folded by default in makexx -i
+//   mf << MENU("Build", "Compile rules")   — set group with a description (shown in make help, AGENTS.md, TUI)
+//   mf << MENU("Build", "Compile rules", FOLDED)  — description + folded
 //
 // Settings:
 //   mf.help_title = "My Project"           — title for 'make help'
@@ -295,10 +297,13 @@ class HELP { // add help to the menu
 class MENU { // set menu group for a rule or for subsequent rules (on Makefile)
   public:
 	std::string group;
+	std::string description;
 	bool has_display;
 	group_display display;
 	MENU(std::string group) : group(group), has_display(false), display(FOLDED) {};
 	MENU(std::string group, group_display d) : group(group), has_display(true), display(d) {};
+	MENU(std::string group, std::string desc) : group(group), description(desc), has_display(false), display(FOLDED) {};
+	MENU(std::string group, std::string desc, group_display d) : group(group), description(desc), has_display(true), display(d) {};
 };
 
 inline Rule &operator<<(Rule &a, TEMP t) {
@@ -354,6 +359,7 @@ class Makefile {
 	std::set<std::string> soft_clean_retain_nodes;
 	std::string current_help_group;
 	std::set<std::string> folded_groups;
+	std::map<std::string, std::string> group_descriptions;
 
 	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources) {
 		commands.push_back(std::make_unique<Rule>());
@@ -453,7 +459,11 @@ class Makefile {
 				display_name = grp.substr(slash + 1);
 			int depth = std::count(grp.begin(), grp.end(), '/');
 			std::string indent(depth * 2, ' ');
-			script += "echo '" + indent + shell_escape(display_name) + ":'; ";
+			std::string header = indent + display_name + ":";
+			auto dit = group_descriptions.find(grp);
+			if(dit != group_descriptions.end())
+				header += " \xe2\x80\x94 " + dit->second;
+			script += "echo '" + shell_escape(header) + "'; ";
 			emit_help_entries(script, grp, indent);
 			script += "echo ''; ";
 		}
@@ -829,7 +839,11 @@ class Makefile {
 			if(slash != std::string::npos)
 				display_name = grp.substr(slash + 1);
 			int depth = std::count(grp.begin(), grp.end(), '/');
-			cf << std::string(depth * 2, ' ') << "### " << display_name << "\n\n";
+			std::string gindent(depth * 2, ' ');
+			cf << gindent << "### " << display_name << "\n\n";
+			auto dit = group_descriptions.find(grp);
+			if(dit != group_descriptions.end())
+				cf << gindent << "_" << dit->second << "_\n\n";
 			write_entries(cf, grp);
 			cf << "\n";
 		}
@@ -848,6 +862,10 @@ class Makefile {
 
 	void write_menu_file(bool graph) {
 		std::ofstream mf(".makexx_menu");
+		for(auto &kv : group_descriptions) {
+			std::string flat = replace_all(kv.second, "\n", " ");
+			mf << "!desc\t" << kv.first << "\t" << flat << "\n";
+		}
 		auto group_prefix = [&](std::string const &g) {
 			std::string name = g.empty() ? "_" : g;
 			if(folded_groups.count(g)) return "+" + name;
@@ -882,6 +900,8 @@ class Makefile {
 			set_current_menu(m.group, m.display);
 		else
 			set_current_menu(m.group);
+		if(!m.description.empty())
+			group_descriptions[m.group] = m.description;
 		return *this;
 	}
 

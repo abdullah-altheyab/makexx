@@ -106,7 +106,7 @@ vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
 ```cpp
 mf.help_title = "Seismic Pipeline v2";
 
-mf << MENU("Processing");
+mf << MENU("Processing", "Run the data pipeline");   // group with a description
 mf.add("filtered.bin", "raw.segy")
     << HELP("Apply bandpass filter")
     << "atbpfilt $< $@";
@@ -125,7 +125,7 @@ Then `make help` prints:
 ```
 Seismic Pipeline v2
 
-Processing:
+Processing: — Run the data pipeline
   filtered.bin ─── Apply bandpass filter
 
   QC:
