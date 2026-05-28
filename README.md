@@ -210,7 +210,7 @@ git clone https://github.com/abdullah-altheyab/makexx.git
 cd makexx
 cmake -B build
 cmake --build build
-cmake --install build   # installs to /usr/local/bin
+sudo cmake --install build   # installs to /usr/local/bin
 ```
 
 **From source (without cmake):**
