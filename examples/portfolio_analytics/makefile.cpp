@@ -40,8 +40,8 @@ int main() {
         db_tables.push_back(tbl);
         mf.add(tbl, "portfolio.db")
             << HELP("extract " + z.title + " deposits")
+            << RETAIN(iitable(z.prefix + "_boundary.it"))
             << sql(tbl, "SELECT * FROM deposits WHERE zone='" + z.db_name + "'");
-        mf.retain(iitable(z.prefix + "_boundary.it"));
     }
 
     mf.add("all_deposits.t", db_tables)

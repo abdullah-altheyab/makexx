@@ -15,6 +15,8 @@
 //   r << FINAL / OPTIONAL / INPUT           — target type (FINAL = in 'all')
 //   r << TEMP({"f1","f2"})                  — mark files for cleanup
 //   r << BYPRODUCT("file")                  — mark by-products for cleanup
+//   r << RETAIN                             — exclude rule targets from soft_clean
+//   r << RETAIN("file")                     — exclude specific file from soft_clean
 //   r << TARGET("file")                     — hidden/non-reproducible target
 //   r << HELP("description")               — shown by 'make help' and makexx -i
 //   r << HELP("group", "description")      — with explicit group override
@@ -136,12 +138,15 @@ class Rule {
 	std::set<std::string> temp_files;
 	std::set<std::string> byproducts;
 	std::set<std::string> hidden_targets; // hidden_target
+	std::set<std::string> retain_files;
+	bool retain_targets;
 	target_type type;
 	std::vector<std::string> help_lines;
 	std::string help_group;
 	Rule() {
 		type = OPTIONAL;
 		help_group = "";
+		retain_targets = false;
 	}
 	std::string formatted(std::string prefix = "\t") {
 		std::string a = "";
@@ -237,6 +242,16 @@ class BYPRODUCT { // by products
 		}
 	}
 };
+class RETAIN { // exclude from soft_clean: no-arg retains rule targets, with args retains named files
+  public:
+	std::set<std::string> filenames;
+	bool retain_targets;
+	RETAIN() : retain_targets(true) {};
+	RETAIN(std::string filename) : retain_targets(false) { filenames.insert(filename); }
+	RETAIN(StringList filenames) : retain_targets(false) { for(auto f : filenames) this->filenames.insert(f); }
+	RETAIN(std::vector<std::string> filenames) : retain_targets(false) { for(auto f : filenames) this->filenames.insert(f); }
+};
+
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
   public:
 	std::set<std::string> filenames;
@@ -281,6 +296,14 @@ inline Rule &operator<<(Rule &a, TEMP t) {
 inline Rule &operator<<(Rule &a, BYPRODUCT t) {
 	for(auto &tmp : t.filenames)
 		a.byproducts.insert(tmp);
+	return a;
+}
+inline Rule &operator<<(Rule &a, RETAIN r) {
+	if(r.retain_targets)
+		a.retain_targets = true;
+	else
+		for(auto &f : r.filenames)
+			a.retain_files.insert(f);
 	return a;
 }
 inline Rule &operator<<(Rule &a, TARGET t) {
@@ -621,6 +644,12 @@ class Makefile {
 					for(auto tmp : command->hidden_targets) {
 						hidden_targets_list.insert(tmp);
 					}
+					if(command->retain_targets) {
+						for(auto &t : to_list)
+							soft_clean_retain_nodes.insert(t);
+					}
+					for(auto &f : command->retain_files)
+						soft_clean_retain_nodes.insert(f);
 				}
 			} else {
 				inputfiles_list.insert(*itr);

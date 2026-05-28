@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Makefile DSL
+
+- **`<< RETAIN`** — exclude rule targets from `soft_clean` directly on the rule definition; `<< RETAIN("file")` for explicit filenames, replacing `mf.on_softclean_retain()`
+
 ## v0.1.1
 
 ### Makefile DSL
