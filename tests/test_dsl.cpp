@@ -176,6 +176,34 @@ static void test_help() {
     CHECK_CONTAINS(content, "build the output");
 }
 
+static void test_menu_order_matches_help() {
+    current_test = "test_menu_order_matches_help";
+    TempDir td;
+    Makefile mf;
+    mf << MENU("Build");
+    mf.add("a.o", "a.cpp") << HELP("a") << "g++ -c $< -o $@";
+    mf << MENU("Reports");
+    mf.add("rep.pdf") << HELP("r") << "echo r";
+    mf.add("gis.qgz") << MENU("GIS") << HELP("g") << "echo g";  // per-rule MENU
+    mf << MENU("Utilities");
+    mf.add("util") << HELP("u") << "echo u";
+    mf.generate();
+    auto menu = read_file(".makexx_menu");
+    CHECK_CONTAINS(menu, "!group\tBuild\t");
+    CHECK_CONTAINS(menu, "!group\tReports\t");
+    CHECK_CONTAINS(menu, "!group\tUtilities\t");
+    CHECK_CONTAINS(menu, "!group\tGIS\t");
+    // help_group_order: Build, Reports, Utilities (mf<<MENU registers
+    // immediately), then GIS (per-rule MENU registers at dump_help time).
+    auto pos_build = menu.find("!group\tBuild\t");
+    auto pos_reports = menu.find("!group\tReports\t");
+    auto pos_utils = menu.find("!group\tUtilities\t");
+    auto pos_gis = menu.find("!group\tGIS\t");
+    CHECK_EQ(pos_build < pos_reports, true);
+    CHECK_EQ(pos_reports < pos_utils, true);
+    CHECK_EQ(pos_utils < pos_gis, true);
+}
+
 static void test_menu_group_description() {
     current_test = "test_menu_group_description";
     TempDir td;
@@ -306,6 +334,7 @@ int main() {
     test_optional_not_in_all();
     test_multi_source();
     test_help();
+    test_menu_order_matches_help();
     test_menu_group_description();
     test_nested_groups_emit_parents();
     test_temp_in_full_clean();

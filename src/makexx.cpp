@@ -195,6 +195,10 @@ int run_interactive() {
 		if(!std::getline(iss, grp, '\t')) continue;
 		if(!std::getline(iss, target, '\t')) continue;
 		std::getline(iss, desc, '\t');
+		if(grp == "!group") {
+			ensure_group(target, desc == "+");
+			continue;
+		}
 		if(grp == "!desc") {
 			pending_group_desc[target] = desc;
 			continue;

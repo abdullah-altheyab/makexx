@@ -10,6 +10,7 @@
 ### Interactive mode (`makexx -i`)
 
 - Parent group headers are auto-created in the TUI for nested groups, matching the behavior of `make help`; folding a parent now collapses all of its nested children
+- **Fix:** group order in the TUI now matches `make help` (definition order). Previously the TUI ordered groups by entry insertion, so a per-rule `<< MENU("X")` (which registers `X` later, at `dump_help` time) could appear before a `mf << MENU("Y")` that was declared earlier. `.makexx_menu` now carries explicit `!group` lines in the canonical order
 
 ## v0.1.2
 

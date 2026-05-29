@@ -862,6 +862,12 @@ class Makefile {
 
 	void write_menu_file(bool graph) {
 		std::ofstream mf(".makexx_menu");
+		// Declare groups in canonical order (matching `make help`) so the
+		// interactive TUI doesn't fall back to entry-insertion order, which
+		// diverges when per-rule MENU() registers a group later than its
+		// neighbors declared via `mf << MENU(...)`.
+		for(auto &grp : help_group_order)
+			mf << "!group\t" << grp << "\t" << (folded_groups.count(grp) ? "+" : "") << "\n";
 		for(auto &kv : group_descriptions) {
 			std::string flat = replace_all(kv.second, "\n", " ");
 			mf << "!desc\t" << kv.first << "\t" << flat << "\n";
