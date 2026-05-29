@@ -60,6 +60,13 @@ Makefile mf;
 auto& rule = mf.add("output.o", "input.cpp");
 rule << "g++ -c input.cpp -o output.o";  // shell commands via <<
 
+// Hold a rule reference and append commands across statements (incl. loops).
+// Commands execute in the order they were appended.
+auto& list = mf.add("list_deposits");
+list << HELP("list deposits") << "echo 'Deposits:'";
+for (auto& d : deposits)
+    list << ("echo '  " + d.prefix + " - " + d.title + "'");
+
 // target_type enum controls 'all' target membership
 rule << FINAL;    // included in 'all'
 rule << OPTIONAL; // default, run-on-demand
@@ -181,6 +188,7 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 - **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
 - **Helper functions** return shell command fragments composed into rule commands
 - **`MENU()` per-rule** and **`mf << MENU()`** organize targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
+- **Incremental rule building**: `list_deposits`/`list_zones` hold a rule reference (`auto& list = mf.add(...)`) and append one `echo` command per deposit/zone in a loop
 
 ### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
 
@@ -189,6 +197,7 @@ Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealo
 - **`mf.description("...")`** provides a project summary for the generated `AGENTS.md`
 - **`mf << MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
+- **Incremental rule building**: the `push` rule is assembled by appending one `rsync` command per `(source, subdir)` pair from a `vector<pair<...>>` — adding a new path to deploy is one line of data, not a new shell line
 - **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call
 
 ### `examples/simulation/` — Config separation pattern

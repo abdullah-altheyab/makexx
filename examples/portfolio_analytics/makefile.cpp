@@ -171,17 +171,20 @@ int main() {
 
     mf << MENU("Utilities");
 
-    mf.add("list_deposits")
-        << HELP("list all configured deposits")
-        << ("echo 'Deposits:' && echo '" +
-            [&]() { string s; for (auto& d : deposits) s += "  " + d.prefix + " - " + d.title + "\\n"; return s; }()
-            + "'");
+    // Hold a reference to the rule and append commands across statements.
+    // The rule executes its commands in the order they were appended,
+    // so we can mix a fixed header with a loop over data.
+    auto& list_dep = mf.add("list_deposits");
+    list_dep << HELP("list all configured deposits")
+             << "echo 'Deposits:'";
+    for (auto& d : deposits)
+        list_dep << ("echo '  " + d.prefix + " - " + d.title + "'");
 
-    mf.add("list_zones")
-        << HELP("list all mining zones")
-        << ("echo 'Mining Zones:' && echo '" +
-            [&]() { string s; for (auto& z : zones) s += "  " + z.prefix + " - " + z.title + "\\n"; return s; }()
-            + "'");
+    auto& list_zn = mf.add("list_zones");
+    list_zn << HELP("list all mining zones")
+            << "echo 'Mining Zones:'";
+    for (auto& z : zones)
+        list_zn << ("echo '  " + z.prefix + " - " + z.title + "'");
 
     mf.generate();
 }

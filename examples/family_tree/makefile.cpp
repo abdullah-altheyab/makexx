@@ -1,5 +1,7 @@
 #include "makefile.hpp"
 using std::string;
+using std::vector;
+using std::pair;
 #define _cont " \\\n"
 
 int main(int argc, char **argv) {
@@ -63,14 +65,20 @@ int main(int argc, char **argv) {
         ;
 
     mf << MENU("Deploy");
-    mf.add("push")
-        <<HELP("Upload SVGs and database to server")
-        <<"rsync "+ssh_cmd+" -rPv family_svgs "+ssh_usr+"@"+server+":~/www/html/."
-        <<"rsync "+ssh_cmd+" -rPv *.svg "+ssh_usr+"@"+server+":~/www/html/family_svgs/."
-        <<"rsync "+ssh_cmd+" -rPv photo "+ssh_usr+"@"+server+":~/www/html/family_svgs/."
-        <<"rsync "+ssh_cmd+" -rPv family.db "+ssh_usr+"@"+server+":~/www/html/."
-        <<"rsync "+ssh_cmd+" -rPv contacts "+ssh_usr+"@"+server+":~/www/html/."
-        ;
+    // Hold a reference to the rule and append one rsync command per
+    // (source, destination) pair. Mixing a fixed HELP with a loop body
+    // keeps the rule readable as it grows.
+    vector<std::pair<string,string>> deploys = {
+        {"family_svgs", ""},
+        {"*.svg",       "family_svgs/"},
+        {"photo",       "family_svgs/"},
+        {"family.db",   ""},
+        {"contacts",    ""},
+    };
+    auto& push = mf.add("push");
+    push << HELP("Upload SVGs and database to server");
+    for (auto& [src, subdir] : deploys)
+        push << ("rsync "+ssh_cmd+" -rPv "+src+" "+ssh_usr+"@"+server+":~/www/html/"+subdir+".");
     mf.add("pull")
         <<HELP("Sync database and photos from server")
         <<"rsync "+ssh_cmd+" -rPv "+ssh_usr+"@"+server+":~/www/html/family.db ."
