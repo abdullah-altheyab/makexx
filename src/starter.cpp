@@ -3,7 +3,7 @@ using namespace std;
 
 int main() {
     Makefile mf;
-    mf.help_title = "My Project";
+    mf.title = "My Project";
 
     // Add rules with: mf.add("target", "source") << FINAL << "shell command";
     //

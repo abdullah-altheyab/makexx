@@ -88,7 +88,7 @@ mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
 
 // Help organization
-mf.help_title = "My Project";       // printed at top of 'make help'
+mf.title = "My Project";       // printed at top of 'make help'
 // Single rule in a group — use MENU with <<
 mf.add("forecast.bin", "data.t")
     << MENU("Forecasting") << HELP("run forecast") << "forecast $< > $@";
@@ -110,7 +110,7 @@ mf << MENU("Archive", "Old runs", FOLDED); // description + folded
 // HELP("group", "desc") overrides the group for a single rule
 
 // AI agent context generation
-mf.description("What this project does..."); // project description for AGENTS.md
+mf.description = "What this project does..."; // project description for AGENTS.md
 mf.context = true;                           // enable AGENTS.md generation (default)
 mf.context = false;                          // disable AGENTS.md generation
 mf.context_filename = "CLAUDE.md";           // override output filename (default "AGENTS.md")
@@ -144,7 +144,7 @@ On Windows, the `<<` operator automatically replaces `/` with `\` in shell comma
 
 `mf.generate()` writes an `AGENTS.md` file alongside the makefile. This gives AI coding agents (Claude Code, Cursor, Copilot, etc.) a plain-English summary of the project: description, input files, targets with dependencies organized by group, and built-in targets. Nested groups such as `Build/Tests` appear with their parent sections automatically.
 
-- `mf.description("...")` sets the project description included in the file
+- `mf.description = "..."` sets the project description included in the file
 - `mf.context = false` disables generation
 - `mf.context_filename = "CLAUDE.md"` overrides the output filename (default `AGENTS.md`)
 
@@ -196,7 +196,7 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 
 Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealogy visualization) and demonstrates the AI agent context generation feature. Key patterns:
 
-- **`mf.description("...")`** provides a project summary for the generated `AGENTS.md`
+- **`mf.description = "..."`** provides a project summary for the generated `AGENTS.md`
 - **`mf << MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
 - **Incremental rule building**: the `push` rule is assembled by appending one `rsync` command per `(source, subdir)` pair from a `vector<pair<...>>` — adding a new path to deploy is one line of data, not a new shell line

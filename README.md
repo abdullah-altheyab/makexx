@@ -104,7 +104,7 @@ vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
 **Self-documenting pipelines.** Add descriptions and organize targets into groups:
 
 ```cpp
-mf.help_title = "Seismic Pipeline v2";
+mf.title = "Seismic Pipeline v2";
 
 mf << MENU("Processing", "Run the data pipeline");   // group with a description
 mf.add("filtered.bin", "raw.segy")
@@ -144,8 +144,8 @@ Built-in:
 **AI agent context.** `generate()` writes an `AGENTS.md` alongside the makefile — a plain-English summary of the project for AI coding agents (Claude Code, Cursor, Copilot, etc.):
 
 ```cpp
-mf.description("Manages a family genealogy database. Generates SVG "
-    "tree visualizations from a SQLite database using Graphviz.");
+mf.description = "Manages a family genealogy database. Generates SVG "
+    "tree visualizations from a SQLite database using Graphviz.";
 mf.generate();  // writes makefile + .makexx_menu + AGENTS.md
 ```
 
@@ -286,8 +286,8 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   r << RETAIN("file.bin");                      // selective; also RETAIN("a","b") or RETAIN({"a","b"})
   mf << MENU("Build");                          // group subsequent rules
   mf << MENU("Build/Tests", "unit tests");      // nested group + description
-  mf.help_title = "My Project";
-  mf.description("project summary for AGENTS.md");
+  mf.title = "My Project";
+  mf.description = "project summary for AGENTS.md";
 
 Helpers (free functions):
   stem("dir/file.cpp")                  → "file"

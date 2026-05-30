@@ -21,10 +21,10 @@ string iitable(string name) {
 
 int main() {
     Makefile mf;
-    mf.help_title = "Mining Portfolio Analytics";
-    mf.description("Evaluates mineral deposit portfolios using Monte Carlo "
+    mf.title = "Mining Portfolio Analytics";
+    mf.description = "Evaluates mineral deposit portfolios using Monte Carlo "
         "simulation. Manages data import, QC, forecasting, and reporting "
-        "across multiple deposits, zones, and regions.");
+        "across multiple deposits, zones, and regions.";
 
     // ─── Data Import ─────────────────────────────────────────────────
 

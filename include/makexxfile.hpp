@@ -32,8 +32,8 @@
 //   mf << MENU("Build", "Compile rules", FOLDED)  — description + folded
 //
 // Settings:
-//   mf.help_title = "My Project"           — title for 'make help'
-//   mf.description("...")                  — project description for AGENTS.md
+//   mf.title = "My Project"           — title for 'make help'
+//   mf.description = "..."                  — project description for AGENTS.md
 //   mf.context = true/false                — enable/disable AGENTS.md (default: true)
 //   mf.context_filename = "CLAUDE.md"      — override output filename
 //   mf.silent = true                       — prefix commands with @ in makefile
@@ -496,8 +496,8 @@ class Makefile {
 		script += "_w=$$(tput cols 2>/dev/null || echo $${COLUMNS:-80}); "
 				  "_d=$$((_w - " + std::to_string(prefix_len) + ")); "
 				  "[ $$_d -lt 20 ] && _d=20; ";
-		if(!help_title.empty())
-			script += "echo '" + shell_escape(help_title) + "'; echo ''; ";
+		if(!title.empty())
+			script += "echo '" + shell_escape(title) + "'; echo ''; ";
 		bool has_ungrouped = false;
 		for(auto &itm : help_menu)
 			if(itm.group.empty()) { has_ungrouped = true; break; }
@@ -578,12 +578,8 @@ class Makefile {
 	bool echo;
 	bool context;
 	std::string context_filename;
-	std::string help_title;
-	std::string project_description;
-
-	void description(std::string desc) {
-		project_description = desc;
-	}
+	std::string title;
+	std::string description;
 
 	void define_menu(std::string group) {
 		register_help_group(group);
@@ -610,7 +606,7 @@ class Makefile {
 		echo = true;
 		context = true;
 		context_filename = "AGENTS.md";
-		help_title = "";
+		title = "";
 	};
 
 	void add_source(Rule &f, std::string node) {
@@ -856,9 +852,9 @@ class Makefile {
 
 	void generate_context(bool graph = false) {
 		std::ofstream cf(context_filename);
-		cf << "# " << (help_title.empty() ? "Project" : help_title) << "\n\n";
-		if(!project_description.empty())
-			cf << project_description << "\n\n";
+		cf << "# " << (title.empty() ? "Project" : title) << "\n\n";
+		if(!description.empty())
+			cf << description << "\n\n";
 		cf << "This project uses [makexx](https://github.com/ab-10/makexx) as its build system. ";
 		cf << "Edit `makefile.cpp` to modify build rules, then run `makexx` to regenerate the makefile and build.\n\n";
 

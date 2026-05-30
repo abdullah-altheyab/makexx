@@ -6,10 +6,10 @@ using std::pair;
 
 int main(int argc, char **argv) {
 	Makefile mf;
-    mf.help_title = "Family Tree";
-    mf.description("Manages a family genealogy database. Generates SVG tree visualizations "
+    mf.title = "Family Tree";
+    mf.description = "Manages a family genealogy database. Generates SVG tree visualizations "
         "from a SQLite database using Graphviz, syncs data with a remote server, "
-        "and generates vCard contact files.");
+        "and generates vCard contact files.";
 
     string ssh_cmd = "-e 'ssh -p 22'";
     string ssh_usr = "user";

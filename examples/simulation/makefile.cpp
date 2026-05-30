@@ -10,8 +10,8 @@ using std::to_string;
 
 int main() {
     Makefile mf;
-    mf.help_title = "Simulation Workflow";
-    mf.description("Runs numerical simulations with configurable parameters.");
+    mf.title = "Simulation Workflow";
+    mf.description = "Runs numerical simulations with configurable parameters.";
 
     mf << MENU("Simulate");
     for (auto& r : runs) {
