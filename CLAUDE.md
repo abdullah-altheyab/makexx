@@ -79,8 +79,10 @@ rule << TARGET("manual_output");    // hidden/non-reproducible target
 rule << HELP("builds the thing");   // shown by 'make help'
 rule << HELP("Deploy", "deploy it"); // with explicit group
 
-rule << RETAIN;              // exclude rule targets from soft_clean
-rule << RETAIN("file");     // exclude a specific file from soft_clean
+rule << RETAIN;                          // exclude all of rule's targets from soft_clean
+rule << RETAIN("file");                  // selective: also RETAIN("a","b") or RETAIN({"a","b"})
+rule << PHONY;                           // all of rule's targets are .PHONY (no output file)
+rule << PHONY("install");                // selective: also PHONY("a","b") or PHONY({"a","b"})
 
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines

@@ -235,3 +235,92 @@ sudo cp makexx /usr/local/bin/
 Run `makexx` in any directory. If no `makefile.cpp` exists, it creates a starter template. Edit it, then run `makexx` again.
 
 See [`examples/`](examples/) for a full C++ project build, a portfolio analytics workflow with config separation, a genealogy workflow with AI agent context generation, and a simulation workflow.
+
+---
+
+## Porting an existing Makefile
+
+makexx doesn't ship an importer — real-world Makefiles use pattern rules, `ifeq`, `$(call ...)`, includes, and target-specific variables that a hand-written parser would handle poorly. An AI assistant (Claude Code, Cursor, Copilot Chat, ChatGPT, …) is a much better fit: it understands the semantics, collapses repeated rules into C++ loops, and produces idiomatic `makefile.cpp` code. The catch is that the assistant probably doesn't know the makexx DSL yet — so you hand it over in the prompt.
+
+**Option A — point the assistant at the upstream DSL reference** (works with anything that can fetch URLs: Claude Code, Cursor, Claude.ai by paste, etc.):
+
+```text
+Read these two files from the makexx repository to learn the DSL:
+  https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/include/makexxfile.hpp
+  https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/CLAUDE.md
+
+Then translate the Makefile below into a single `makefile.cpp` using the
+makexx C++ DSL. Prefer C++ loops over copy-pasted rules. Output only the
+C++ source.
+
+--- Makefile ---
+<paste your Makefile here>
+```
+
+**Option B — self-contained prompt** (works in any chatbot, no web fetch needed). Paste the cheat sheet inline:
+
+```text
+makexx is a build-system generator: you write a C++ program (`makefile.cpp`)
+that builds rules via a DSL, and it produces a standard GNU makefile.
+
+Program skeleton:
+  #include "makefile.hpp"
+  int main() {
+      Makefile mf;
+      // ... define rules ...
+      mf.generate();   // writes makefile + AGENTS.md
+      return 0;
+  }
+
+DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works):
+  auto& r = mf.add("target", "source");        // or {tgt1, tgt2}, {src1, src2}
+  r << "shell command";                         // append a command (multiple OK, run in order)
+  r << FINAL;                                   // include in `make all` — apply to whatever
+                                                //   your original `all:` depended on
+  r << PHONY;                                   // all of rule's targets are .PHONY
+  r << PHONY("install");                        // selective: only named targets in a multi-target rule
+  r << PHONY("a", "b");                         // selective variadic; also accepts {"a","b"}
+  r << HELP("description");                     // show in `make help`
+  r << TEMP("scratch.tmp");                     // cleaned by full_clean / soft_clean
+  r << RETAIN;                                  // exclude all of rule's outputs from soft_clean
+  r << RETAIN("file.bin");                      // selective; also RETAIN("a","b") or RETAIN({"a","b"})
+  mf << MENU("Build");                          // group subsequent rules
+  mf << MENU("Build/Tests", "unit tests");      // nested group + description
+  mf.help_title = "My Project";
+  mf.description("project summary for AGENTS.md");
+
+Helpers (free functions):
+  stem("dir/file.cpp")                  → "file"
+  basename("dir/file.cpp")              → "file.cpp"
+  change_ext("file.cpp", ".o")          → "file.o"
+  join_path("obj", "file.o")            → "obj/file.o"
+  get_ext("file.cpp")                   → "cpp"
+
+Inside command strings use the standard GNU make automatics `$<`, `$@`, `$^`.
+
+Idioms when porting:
+  - GNU make pattern rules (`%.o: %.c`) become a C++ loop that calls `mf.add()`
+    once per source file.
+  - GNU make variables (`CC=g++`) become C++ `std::string` constants you can
+    concatenate into command strings.
+  - Drop user-written `clean` rules — `make full_clean` and `make soft_clean`
+    are emitted automatically.
+  - Mark any target that doesn't produce an output file (`install`, `deploy`,
+    `test`, etc.) with `<< PHONY`.
+
+Translate the Makefile below into a single `makefile.cpp`. Output only the
+C++ source.
+
+--- Makefile ---
+<paste your Makefile here>
+```
+
+After the assistant produces `makefile.cpp`, sanity-check it:
+
+```bash
+makexx -c                              # regenerate the makefile
+diff <(make -n all) <(make -n -f Makefile.orig all)   # compare command sequences
+make -n install                        # spot-check a few targets
+```
+
+Iterate with the assistant on anything that looks off — recursive variable expansion, non-trivial pattern-rule stem manipulation, and conditional blocks (`ifeq`) are the common rough edges.

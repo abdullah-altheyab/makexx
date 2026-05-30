@@ -4,6 +4,8 @@
 
 ### Makefile DSL
 
+- **`<< PHONY` flag:** mark a rule's targets as `.PHONY` so `make` always runs them even if a file with the same name exists. `<< PHONY` marks all of the rule's targets; `<< PHONY("name")`, `<< PHONY("a","b")`, or `<< PHONY({"a","b"})` mark only specific targets in a multi-target rule (when one output is a real file and the other is phony). The `.PHONY:` line is emitted from the union of built-ins and user-marked targets (sorted)
+- **`<< RETAIN` consistency:** the no-paren form `<< RETAIN` (previously documented but didn't compile) now actually works — `RETAIN` is a global instance whose `operator()` accepts the previous forms `RETAIN("file")` / `RETAIN({"a","b"})` and a new variadic form `RETAIN("a","b","c")`. Existing call sites are unchanged
 - **Menu group descriptions:** `mf << MENU("Build", "Compile sources")` attaches a description to a group. It's rendered next to the group header in `make help` (em-dash separator), as an italic line under the heading in `AGENTS.md`, and as dimmed text next to the group header in the interactive TUI. Compatible with `FOLDED`: `MENU("Build", "Compile sources", FOLDED)`
 - **Auto-created parent groups:** nested menu groups (e.g. `Build/Tests`, `Processing/QC/Plots`) now automatically register every parent path in `make help` and `AGENTS.md`, so parent section headers appear even when no rule lives directly in the parent
 

@@ -204,6 +204,30 @@ static void test_menu_order_matches_help() {
     CHECK_EQ(pos_utils < pos_gis, true);
 }
 
+static void test_user_phony() {
+    current_test = "test_user_phony";
+    TempDir td;
+    Makefile mf;
+    mf.add("install") << PHONY << HELP("install the thing") << "cp foo /usr/local/bin/";
+    mf.add("regular", "src.dat") << HELP("regular build") << "cp $< $@";
+    // Multi-target rule with one phony output and one real file output.
+    mf.add({"deploy", "deploy.log"}, "myapp")
+        << PHONY("deploy")
+        << "scripts/deploy.sh $< > deploy.log";
+    mf.generate();
+    auto content = read_makefile();
+    auto phony_line = content.substr(content.find(".PHONY:"), content.find('\n', content.find(".PHONY:")) - content.find(".PHONY:"));
+    CHECK_CONTAINS(phony_line, "install");
+    CHECK_CONTAINS(phony_line, "deploy");
+    CHECK_NOT_CONTAINS(phony_line, "regular");
+    CHECK_NOT_CONTAINS(phony_line, "deploy.log");
+    // Phony rule must NOT get the `### GENERATING` decoration.
+    auto install_rule_start = content.find("install :");
+    auto install_rule_end = content.find("\n\n", install_rule_start);
+    auto install_block = content.substr(install_rule_start, install_rule_end - install_rule_start);
+    CHECK_NOT_CONTAINS(install_block, "### GENERATING");
+}
+
 static void test_menu_group_description() {
     current_test = "test_menu_group_description";
     TempDir td;
@@ -277,6 +301,33 @@ static void test_softclean_retain() {
     CHECK_NOT_CONTAINS(content.substr(soft_pos, list_pos - soft_pos), "expensive.bin");
 }
 
+static void test_retain_forms() {
+    current_test = "test_retain_forms";
+    TempDir td;
+    Makefile mf;
+    // No-paren form: retain all of rule's targets.
+    mf.add({"a.bin", "b.bin"}, "in.dat") << FINAL << RETAIN << "run $< > $@";
+    // Variadic form: retain named files.
+    mf.add("c.bin", "in.dat") << FINAL << RETAIN("c.bin", "extra.log") << "run $< > $@";
+    // Braced form: still works.
+    mf.add("d.bin", "in.dat") << FINAL << RETAIN({"d.bin", "other.log"}) << "run $< > $@";
+    // Single string: still works.
+    mf.add("e.bin", "in.dat") << FINAL << RETAIN("e.bin") << "run $< > $@";
+    mf.generate();
+    auto content = read_makefile();
+    auto soft_pos = content.find("soft_clean:");
+    auto list_pos = content.find("list:");
+    auto soft = content.substr(soft_pos, list_pos - soft_pos);
+    // None of the retained files should appear in soft_clean.
+    CHECK_NOT_CONTAINS(soft, "a.bin");
+    CHECK_NOT_CONTAINS(soft, "b.bin");
+    CHECK_NOT_CONTAINS(soft, "c.bin");
+    CHECK_NOT_CONTAINS(soft, "extra.log");
+    CHECK_NOT_CONTAINS(soft, "d.bin");
+    CHECK_NOT_CONTAINS(soft, "other.log");
+    CHECK_NOT_CONTAINS(soft, "e.bin");
+}
+
 static void test_silent() {
     current_test = "test_silent";
     TempDir td;
@@ -305,7 +356,8 @@ static void test_phony() {
     Makefile mf;
     mf.generate();
     auto content = read_makefile();
-    CHECK_CONTAINS(content, ".PHONY: all full_clean soft_clean list list_unknown list_input help");
+    // Built-in phony targets are emitted in sorted order.
+    CHECK_CONTAINS(content, ".PHONY: all full_clean help list list_input list_unknown soft_clean");
 }
 
 static void test_byproduct() {
@@ -335,11 +387,13 @@ int main() {
     test_multi_source();
     test_help();
     test_menu_order_matches_help();
+    test_user_phony();
     test_menu_group_description();
     test_nested_groups_emit_parents();
     test_temp_in_full_clean();
     test_temp_in_soft_clean();
     test_softclean_retain();
+    test_retain_forms();
     test_silent();
     test_no_echo();
     test_phony();

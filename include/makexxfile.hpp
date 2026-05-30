@@ -15,8 +15,10 @@
 //   r << FINAL / OPTIONAL / INPUT           — target type (FINAL = in 'all')
 //   r << TEMP({"f1","f2"})                  — mark files for cleanup
 //   r << BYPRODUCT("file")                  — mark by-products for cleanup
-//   r << RETAIN                             — exclude rule targets from soft_clean
-//   r << RETAIN("file")                     — exclude specific file from soft_clean
+//   r << RETAIN                             — exclude all rule targets from soft_clean
+//   r << RETAIN("f") / RETAIN("a","b") / RETAIN({"a","b"})  — exclude specific files
+//   r << PHONY                              — mark all of rule's targets as .PHONY (no output file produced)
+//   r << PHONY("n") / PHONY("a","b") / PHONY({"a","b"})     — mark only specific targets
 //   r << TARGET("file")                     — hidden/non-reproducible target
 //   r << HELP("description")               — shown by 'make help' and makexx -i
 //   r << HELP("group", "description")      — with explicit group override
@@ -142,7 +144,9 @@ class Rule {
 	std::set<std::string> byproducts;
 	std::set<std::string> hidden_targets; // hidden_target
 	std::set<std::string> retain_files;
+	std::set<std::string> phony_targets;
 	bool retain_targets;
+	bool phony_all;
 	target_type type;
 	std::vector<std::string> help_lines;
 	std::string help_group;
@@ -150,6 +154,7 @@ class Rule {
 		type = OPTIONAL;
 		help_group = "";
 		retain_targets = false;
+		phony_all = false;
 	}
 	std::string formatted(std::string prefix = "\t") {
 		std::string a = "";
@@ -258,15 +263,56 @@ class BYPRODUCT { // by products
 		}
 	}
 };
-class RETAIN { // exclude from soft_clean: no-arg retains rule targets, with args retains named files
+// `<< RETAIN` retains all of the rule's targets across soft_clean.
+// `<< RETAIN("file")`, `<< RETAIN("f1","f2",...)`, or `<< RETAIN({"f1","f2"})`
+// retain only the named files.
+// RETAIN is a global instance of RETAIN_t; the operator() overloads let it act
+// like a constructor while still being usable bare without parentheses.
+class RETAIN_t {
   public:
 	std::set<std::string> filenames;
 	bool retain_targets;
-	RETAIN() : retain_targets(true) {};
-	RETAIN(std::string filename) : retain_targets(false) { filenames.insert(filename); }
-	RETAIN(StringList filenames) : retain_targets(false) { for(auto f : filenames) this->filenames.insert(f); }
-	RETAIN(std::vector<std::string> filenames) : retain_targets(false) { for(auto f : filenames) this->filenames.insert(f); }
+	RETAIN_t() : retain_targets(true) {}
+	template<typename... Rest>
+	RETAIN_t operator()(std::string first, Rest&&... rest) const {
+		RETAIN_t r; r.retain_targets = false;
+		r.filenames.insert(first);
+		(r.filenames.insert(std::string(std::forward<Rest>(rest))), ...);
+		return r;
+	}
+	RETAIN_t operator()(StringList fs) const {
+		RETAIN_t r; r.retain_targets = false; for(auto &f : fs) r.filenames.insert(f); return r;
+	}
+	RETAIN_t operator()(std::vector<std::string> fs) const {
+		RETAIN_t r; r.retain_targets = false; for(auto &f : fs) r.filenames.insert(f); return r;
+	}
 };
+inline const RETAIN_t RETAIN;
+
+// `<< PHONY` marks all of the rule's targets as .PHONY.
+// `<< PHONY("name")`, `<< PHONY("n1","n2",...)`, or `<< PHONY({"a","b"})`
+// marks only specific targets (relevant when a single multi-target rule has
+// mixed phony / real-file outputs).
+class PHONY_t {
+  public:
+	std::set<std::string> targets;
+	bool phony_all;
+	PHONY_t() : phony_all(true) {}
+	template<typename... Rest>
+	PHONY_t operator()(std::string first, Rest&&... rest) const {
+		PHONY_t r; r.phony_all = false;
+		r.targets.insert(first);
+		(r.targets.insert(std::string(std::forward<Rest>(rest))), ...);
+		return r;
+	}
+	PHONY_t operator()(StringList ts) const {
+		PHONY_t r; r.phony_all = false; for(auto &t : ts) r.targets.insert(t); return r;
+	}
+	PHONY_t operator()(std::vector<std::string> ts) const {
+		PHONY_t r; r.phony_all = false; for(auto &t : ts) r.targets.insert(t); return r;
+	}
+};
+inline const PHONY_t PHONY;
 
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
   public:
@@ -317,12 +363,20 @@ inline Rule &operator<<(Rule &a, BYPRODUCT t) {
 		a.byproducts.insert(tmp);
 	return a;
 }
-inline Rule &operator<<(Rule &a, RETAIN r) {
+inline Rule &operator<<(Rule &a, RETAIN_t r) {
 	if(r.retain_targets)
 		a.retain_targets = true;
 	else
 		for(auto &f : r.filenames)
 			a.retain_files.insert(f);
+	return a;
+}
+inline Rule &operator<<(Rule &a, PHONY_t p) {
+	if(p.phony_all)
+		a.phony_all = true;
+	else
+		for(auto &t : p.targets)
+			a.phony_targets.insert(t);
 	return a;
 }
 inline Rule &operator<<(Rule &a, TARGET t) {
@@ -613,12 +667,27 @@ class Makefile {
 		std::set<std::string> byprods_list;
 		std::set<std::string> hidden_targets_list;
 		std::set<std::string> phony_targets = {"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"};
+		// Collect user-marked phony targets so they appear in .PHONY and
+		// skip the ### GENERATING decoration. `rule << PHONY()` marks all
+		// of the rule's targets; `rule << PHONY("name")` marks only named
+		// ones (relevant when a single rule has mixed phony / file outputs).
+		for(auto const &cmd : commands) {
+			if(cmd->phony_all) {
+				auto trange = rule_target.equal_range(cmd.get());
+				for(auto j = trange.first; j != trange.second; j++)
+					phony_targets.insert(j->second);
+			}
+			for(auto const &t : cmd->phony_targets)
+				phony_targets.insert(t);
+		}
 		myfile.open("makefile");
 		myfile << makefile_header << std::endl;
 		myfile << "# DO NOT EDIT!" << std::endl;
 		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
 		myfile << "SHELL=/bin/bash" << std::endl;
-		myfile << ".PHONY: all full_clean soft_clean list list_unknown list_input help" << std::endl;
+		myfile << ".PHONY:";
+		for(auto const &p : phony_targets) myfile << " " << p;
+		myfile << std::endl;
 		myfile << "-include .makexx_deps" << std::endl;
 		myfile << "makefile: makefile.cpp makefile.hpp" << std::endl;
 		myfile << "\tmakexx -c" << std::endl;
