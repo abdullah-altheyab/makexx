@@ -423,8 +423,43 @@ int run_interactive() {
 	int scroll = 0;
 	std::set<int> selected;
 	bool running = true;
+	// Anything that shakes up the visible list — running a target (Recent
+	// group grows), clearing a search filter — leaves a plain row-index
+	// cursor pointing at the wrong row. Capture cursor identity *before*
+	// the shake-up and re-resolve after the next build_visible().
+	// Identity is (preferred group, target name) for an entry, or (group, "")
+	// for a group header.  restore_gidx == -1 means no restoration pending.
+	int restore_gidx = -1;
+	string restore_target;
+	// One-shot memory of "the entry the cursor was on when this group was
+	// folded from the inside". Consumed by an immediately-following unfold
+	// of the same group; cleared by any other key.
+	int fold_remember_gidx = -1;
+	string fold_remember_target;
 	while(running) {
 		auto visible = build_visible();
+		auto request_cursor_restore = [&]() {
+			if(visible.empty()) return;
+			auto [g, e] = visible[cursor];
+			restore_gidx = g;
+			restore_target = (e == -1) ? string() : entries[e].target;
+		};
+		if(restore_gidx != -1) {
+			int best = -1;
+			for(int i = 0; i < (int)visible.size(); i++) {
+				auto [g, e] = visible[i];
+				bool is_header = (e == -1);
+				if(restore_target.empty()) {
+					if(is_header && g == restore_gidx) { best = i; break; }
+				} else if(!is_header && entries[e].target == restore_target) {
+					if(g == restore_gidx) { best = i; break; }
+					if(best == -1) best = i;
+				}
+			}
+			if(best != -1) cursor = best;
+			restore_gidx = -1;
+			restore_target.clear();
+		}
 		if(cursor >= (int)visible.size()) cursor = visible.size() - 1;
 		if(cursor < 0) cursor = 0;
 
@@ -548,11 +583,13 @@ int run_interactive() {
 			printf("\033[2m    ▼\033[0m\n");
 
 		Key key = read_key();
+		bool keep_fold_memory = false;
 		if(searching) {
 			if(key == KEY_ESC) {
+				request_cursor_restore();
 				searching = false;
 				search.clear();
-				cursor = 0; scroll = 0;
+				scroll = 0;
 			} else if(key == KEY_ENTER) {
 				searching = false;
 			} else if(key == KEY_BACKSPACE) {
@@ -584,7 +621,7 @@ int run_interactive() {
 		} else if(key == KEY_CHAR && last_char == 'q') {
 			running = false;
 		} else if(key == KEY_ESC) {
-			if(!search.empty()) { search.clear(); cursor = 0; scroll = 0; }
+			if(!search.empty()) { request_cursor_restore(); search.clear(); scroll = 0; }
 			else running = false;
 		} else if(key == KEY_CHAR && last_char == '/') {
 			searching = true;
@@ -609,9 +646,19 @@ int run_interactive() {
 				if(visible[j].second == -1) { cursor = j; break; }
 		} else if(key == KEY_RIGHT) {
 			auto [gidx, eidx] = visible[cursor];
+			if(eidx == -1 && groups[gidx].folded
+			   && fold_remember_gidx == gidx && !fold_remember_target.empty()) {
+				restore_gidx = gidx;
+				restore_target = fold_remember_target;
+			}
 			groups[gidx].folded = false;
 		} else if(key == KEY_LEFT) {
 			auto [gidx, eidx] = visible[cursor];
+			if(eidx != -1) {
+				fold_remember_gidx = gidx;
+				fold_remember_target = entries[eidx].target;
+				keep_fold_memory = true;
+			}
 			groups[gidx].folded = true;
 			for(int j = cursor; j >= 0; j--)
 				if(visible[j].first == gidx && visible[j].second == -1) { cursor = j; break; }
@@ -619,6 +666,10 @@ int run_interactive() {
 			auto [gidx, eidx] = visible[cursor];
 			if(eidx == -1) {
 				bool folding = !groups[gidx].folded;
+				if(!folding && fold_remember_gidx == gidx && !fold_remember_target.empty()) {
+					restore_gidx = gidx;
+					restore_target = fold_remember_target;
+				}
 				groups[gidx].folded = folding;
 				if(folding)
 					for(int j = cursor; j >= 0; j--)
@@ -661,6 +712,7 @@ int run_interactive() {
 			}
 		} else if(key == KEY_ENTER) {
 			auto [gidx, eidx] = visible[cursor];
+			request_cursor_restore();
 			if(!selected.empty()) {
 				tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
 				printf("\033[2J\033[H");
@@ -702,6 +754,10 @@ int run_interactive() {
 				char dummy;
 				read(STDIN_FILENO, &dummy, 1);
 			}
+		}
+		if(!keep_fold_memory) {
+			fold_remember_gidx = -1;
+			fold_remember_target.clear();
 		}
 	}
 

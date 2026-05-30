@@ -11,6 +11,8 @@
 
 - Parent group headers are auto-created in the TUI for nested groups, matching the behavior of `make help`; folding a parent now collapses all of its nested children
 - **Fix:** group order in the TUI now matches `make help` (definition order). Previously the TUI ordered groups by entry insertion, so a per-rule `<< MENU("X")` (which registers `X` later, at `dump_help` time) could appear before a `mf << MENU("Y")` that was declared earlier. `.makexx_menu` now carries explicit `!group` lines in the canonical order
+- **Fix:** cursor sticks to the same target name across visible-list changes — running a target with Enter (Recent group grows by one and shifts rows below) and pressing Escape to clear a search filter (the visible list expands back to all rows). Previously the cursor was a plain row index, so both cases moved the highlight off the user's target
+- Folding a group from inside (`←` on an entry) jumps the cursor to the group header as before; unfolding that same group immediately afterwards (`→` or Space) now returns the cursor to the entry it was on before the fold. Any other key in between clears the memory
 
 ## v0.1.2
 
