@@ -84,6 +84,10 @@ rule << RETAIN("file");                  // selective: also RETAIN("a","b") or R
 rule << PHONY;                           // all of rule's targets are .PHONY (no output file)
 rule << PHONY("install");                // selective: also PHONY("a","b") or PHONY({"a","b"})
 
+// Makefile-level: declare phony / retain by name, independent of any rule
+mf << PHONY("install");                  // accepts single, variadic, or braced list
+mf << RETAIN("artifact.bin");            // same forms as the per-rule version
+
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
 

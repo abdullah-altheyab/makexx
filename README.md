@@ -286,6 +286,8 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   r << RETAIN("file.bin");                      // selective; also RETAIN("a","b") or RETAIN({"a","b"})
   mf << MENU("Build");                          // group subsequent rules
   mf << MENU("Build/Tests", "unit tests");      // nested group + description
+  mf << PHONY("install");                       // declare phony at the makefile level
+  mf << RETAIN("artifact.bin");                 // protect file from soft_clean
   mf.title = "My Project";
   mf.description = "project summary for AGENTS.md";
 

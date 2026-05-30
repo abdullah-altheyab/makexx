@@ -31,6 +31,10 @@
 //   mf << MENU("Build", "Compile rules")   — set group with a description (shown in make help, AGENTS.md, TUI)
 //   mf << MENU("Build", "Compile rules", FOLDED)  — description + folded
 //
+// Makefile-level (apply by target name, independent of rules):
+//   mf << PHONY("install") / PHONY("a","b") / PHONY({"a","b"})  — declare phony targets
+//   mf << RETAIN("file") / RETAIN("a","b") / RETAIN({"a","b"})  — exclude files from soft_clean
+//
 // Settings:
 //   mf.title = "My Project"           — title for 'make help'
 //   mf.description = "..."                  — project description for AGENTS.md
@@ -411,6 +415,7 @@ class Makefile {
 	std::vector<HelpEntry> help_menu;
 	std::vector<std::string> help_group_order;
 	std::set<std::string> soft_clean_retain_nodes;
+	std::set<std::string> mf_phony_targets;
 	std::string current_help_group;
 	std::set<std::string> folded_groups;
 	std::map<std::string, std::string> group_descriptions;
@@ -664,7 +669,7 @@ class Makefile {
 		std::set<std::string> hidden_targets_list;
 		std::set<std::string> phony_targets = {"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"};
 		// Collect user-marked phony targets so they appear in .PHONY and
-		// skip the ### GENERATING decoration. `rule << PHONY()` marks all
+		// skip the ### GENERATING decoration. `rule << PHONY` marks all
 		// of the rule's targets; `rule << PHONY("name")` marks only named
 		// ones (relevant when a single rule has mixed phony / file outputs).
 		for(auto const &cmd : commands) {
@@ -676,6 +681,10 @@ class Makefile {
 			for(auto const &t : cmd->phony_targets)
 				phony_targets.insert(t);
 		}
+		// Also include any names declared at the makefile level via
+		// `mf << PHONY("...")`, regardless of which rule produces them.
+		for(auto const &t : mf_phony_targets)
+			phony_targets.insert(t);
 		myfile.open("makefile");
 		myfile << makefile_header << std::endl;
 		myfile << "# DO NOT EDIT!" << std::endl;
@@ -973,6 +982,29 @@ class Makefile {
 			set_current_menu(m.group);
 		if(!m.description.empty())
 			group_descriptions[m.group] = m.description;
+		return *this;
+	}
+
+	// `mf << PHONY("install")` or `mf << PHONY("a","b")` marks named targets
+	// as .PHONY at the makefile level (useful when the producing rule is
+	// defined elsewhere or you want the declaration up front). The no-arg
+	// `mf << PHONY` form is a no-op — there's nothing to "mark all of"
+	// without a rule context.
+	Makefile& operator<<(PHONY_t p) {
+		if(!p.phony_all)
+			for(auto const &t : p.targets)
+				mf_phony_targets.insert(t);
+		return *this;
+	}
+
+	// `mf << RETAIN("file")`, `RETAIN("a","b")`, or `RETAIN({"a","b"})`
+	// excludes named files from soft_clean (same effect as
+	// `mf.on_softclean_retain(...)`, just on the `<<` idiom). The no-arg
+	// `mf << RETAIN` form is a no-op.
+	Makefile& operator<<(RETAIN_t r) {
+		if(!r.retain_targets)
+			for(auto const &f : r.filenames)
+				soft_clean_retain_nodes.insert(f);
 		return *this;
 	}
 

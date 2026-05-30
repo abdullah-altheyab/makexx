@@ -204,6 +204,28 @@ static void test_menu_order_matches_help() {
     CHECK_EQ(pos_utils < pos_gis, true);
 }
 
+static void test_mf_phony_and_retain() {
+    current_test = "test_mf_phony_and_retain";
+    TempDir td;
+    Makefile mf;
+    // Rule defined plainly — phony / retain applied at the makefile level.
+    mf.add("deploy", "myapp.bin") << "scripts/deploy.sh $<";
+    mf.add("myapp.bin", "src.cpp") << FINAL << "g++ $< -o $@";
+    mf << PHONY("deploy");
+    mf << RETAIN("myapp.bin");
+    mf.generate();
+    auto content = read_makefile();
+    // `deploy` should land in .PHONY even though its rule didn't say so.
+    auto phony_line = content.substr(content.find(".PHONY:"), content.find('\n', content.find(".PHONY:")) - content.find(".PHONY:"));
+    CHECK_CONTAINS(phony_line, "deploy");
+    // `myapp.bin` should be in full_clean but NOT in soft_clean.
+    auto full_pos = content.find("full_clean:");
+    auto soft_pos = content.find("soft_clean:");
+    auto list_pos = content.find("list:");
+    CHECK_CONTAINS(content.substr(full_pos, soft_pos - full_pos), "myapp.bin");
+    CHECK_NOT_CONTAINS(content.substr(soft_pos, list_pos - soft_pos), "myapp.bin");
+}
+
 static void test_user_phony() {
     current_test = "test_user_phony";
     TempDir td;
@@ -388,6 +410,7 @@ int main() {
     test_help();
     test_menu_order_matches_help();
     test_user_phony();
+    test_mf_phony_and_retain();
     test_menu_group_description();
     test_nested_groups_emit_parents();
     test_temp_in_full_clean();
