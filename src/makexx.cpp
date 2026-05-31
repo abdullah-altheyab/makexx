@@ -468,7 +468,9 @@ int run_interactive() {
 	};
 
 	auto add_group_to_visible = [&](auto &&self, vector<std::pair<int,int>> &vis, int g) -> bool {
-		if(is_ancestor_folded(groups[g].name)) return false;
+		// Skip when an ancestor is folded — unless a search is active, in
+		// which case matches under a folded parent should still surface.
+		if(search.empty() && is_ancestor_folded(groups[g].name)) return false;
 		vector<int> matched;
 		for(int ei : groups[g].entries)
 			if(matches_search(ei)) matched.push_back(ei);

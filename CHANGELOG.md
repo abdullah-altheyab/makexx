@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Interactive mode (`makexx -i`)
+
+- **Fix:** search now surfaces matches that live under a folded parent group. Previously the early `is_ancestor_folded` check short-circuited the recursion before the search-active override (which already lifted a group's own folded state) had a chance to apply
+
 ## v0.2.0
 
 ### Makefile DSL
