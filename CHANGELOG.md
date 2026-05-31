@@ -4,6 +4,9 @@
 
 ### Interactive mode (`makexx -i`)
 
+- **Fix:** backspacing the search query down to empty no longer kicks you out of search mode (you came in via `/`; only Esc or Enter should leave). Lets you rebuild a query without re-entering the mode
+- **Ctrl+Backspace in search:** clear the entire query while staying in search mode (Esc still both clears and exits). Shown in the search-input header so it's discoverable. Bytes 8 (Ctrl+Backspace) and 127 (plain Backspace) are now distinguished — previously both were collapsed into KEY_BACKSPACE
+- **Terminal signals disabled:** `ISIG` and `IEXTEN` are now turned off in the TUI's termios, so Ctrl+\\ no longer dumps core and Ctrl+C / Ctrl+Z are silent in interactive mode. Use `q` or double-Esc to quit
 - **Fix:** search now surfaces matches that live under a folded parent group. Previously the early `is_ancestor_folded` check short-circuited the recursion before the search-active override (which already lifted a group's own folded state) had a chance to apply
 - A single Escape no longer exits — too easy to fat-finger when meaning to dismiss something. Esc still clears a search filter if one is active; otherwise the first Esc replaces the keyboard-hints header with a yellow "Press Esc again to exit" prompt, and a second Esc within 2 s exits. The prompt clears itself after the window expires (the loop polls stdin with the remaining time and redraws on timeout) or on any other keypress. `q` continues to quit immediately
 

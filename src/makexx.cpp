@@ -392,12 +392,16 @@ int run_interactive() {
 	struct termios oldt, newt;
 	tcgetattr(STDIN_FILENO, &oldt);
 	newt = oldt;
-	newt.c_lflag &= ~(ICANON | ECHO);
+	// ISIG off: Ctrl+C/Z/\ stay as raw bytes instead of generating signals
+	// (so Ctrl+\ no longer dumps core; Ctrl+C/Z become silent no-ops here).
+	// IEXTEN off: disable line-editing extras (LNEXT, WERASE, etc.) so all
+	// control bytes are delivered verbatim.
+	newt.c_lflag &= ~(ICANON | ECHO | ISIG | IEXTEN);
 	newt.c_cc[VMIN] = 1;
 	newt.c_cc[VTIME] = 0;
 	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-	enum Key { KEY_NONE, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_SPACE, KEY_QUIT, KEY_ESC, KEY_BACKSPACE, KEY_CHAR, KEY_PGUP, KEY_PGDN, KEY_HOME, KEY_END, KEY_TAB, KEY_STAB };
+	enum Key { KEY_NONE, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_SPACE, KEY_QUIT, KEY_ESC, KEY_BACKSPACE, KEY_CTRL_BACKSPACE, KEY_CHAR, KEY_PGUP, KEY_PGDN, KEY_HOME, KEY_END, KEY_TAB, KEY_STAB };
 	char last_char = 0;
 	auto read_key = [&]() -> Key {
 		char c;
@@ -436,7 +440,8 @@ int run_interactive() {
 			}
 			return KEY_NONE;
 		}
-		if(c == 127 || c == 8) return KEY_BACKSPACE;
+		if(c == 127) return KEY_BACKSPACE;       // plain (and Shift+) Backspace
+		if(c == 8) return KEY_CTRL_BACKSPACE;    // Ctrl+Backspace
 		if(c == '\t') return KEY_TAB;
 		if(c == '\n' || c == '\r') return KEY_ENTER;
 		if(c >= 32 && c < 127) return KEY_CHAR;
@@ -600,7 +605,7 @@ int run_interactive() {
 
 		printf("\033[2J\033[H");
 		if(searching)
-			printf("\033[1mmakexx interactive\033[0m  / %s\033[5m▌\033[0m  \033[2m(%d)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
+			printf("\033[1mmakexx interactive\033[0m  / %s\033[5m▌\033[0m  \033[2m(%d, Ctrl+Backspace clear, Esc cancel)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
 		else if(!search.empty())
 			printf("\033[1mmakexx interactive\033[0m  \033[2mfilter:\033[0m %s  \033[2m(%d matches, Esc clear)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
 		else if(esc_armed)
@@ -704,7 +709,11 @@ int run_interactive() {
 				searching = false;
 			} else if(key == KEY_BACKSPACE) {
 				if(!search.empty()) search.pop_back();
-				if(search.empty()) searching = false;
+				// stay in search mode even when the query is empty — the
+				// user came in via "/" and only Esc or Enter should leave
+				cursor = 0; scroll = 0;
+			} else if(key == KEY_CTRL_BACKSPACE) {  // clear query, stay in search
+				search.clear();
 				cursor = 0; scroll = 0;
 			} else if(key == KEY_CHAR) {
 				search += last_char;
