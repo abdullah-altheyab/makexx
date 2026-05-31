@@ -100,6 +100,86 @@ int run_cmd(string cmd) {
 	return system(cmd.c_str());
 }
 
+// Run `make`, stream its output through to the user, and on failure parse
+// the error lines for the failing target name and point back to the
+// corresponding location(s) in makefile.cpp (Tier-1 diagnostics).
+//
+// Two error shapes we look for:
+//   make: *** No rule to make target 'X'         (missing rule / typo)
+//   make: *** [makefile:42: X] Error N           (shell command failed)
+int run_make_with_diagnostics(string cmd) {
+#ifdef _WIN32
+	FILE *fp = _popen((cmd + " 2>&1").c_str(), "r");
+#else
+	FILE *fp = popen((cmd + " 2>&1").c_str(), "r");
+#endif
+	if(!fp) return system(cmd.c_str());  // fallback if popen fails
+
+	vector<string> failed_targets;
+	std::set<string> seen;
+	auto try_capture = [&](string const &line, string const &start, string const &stop) {
+		auto a = line.find(start);
+		if(a == string::npos) return;
+		a += start.size();
+		auto b = line.find(stop, a);
+		if(b == string::npos) return;
+		string t = line.substr(a, b - a);
+		if(seen.insert(t).second) failed_targets.push_back(t);
+	};
+	char buf[4096];
+	while(fgets(buf, sizeof(buf), fp)) {
+		fputs(buf, stderr);
+		string line(buf);
+		// "make: *** No rule to make target 'X'"
+		try_capture(line, "No rule to make target '", "'");
+		// "make: *** [makefile:42: X] Error N"  — capture name between ": " and "]"
+		auto br = line.find("*** [");
+		if(br != string::npos) {
+			auto colon = line.find(": ", br);
+			auto rbr   = line.find("]", colon == string::npos ? br : colon);
+			if(colon != string::npos && rbr != string::npos && colon < rbr) {
+				string t = line.substr(colon + 2, rbr - colon - 2);
+				if(seen.insert(t).second) failed_targets.push_back(t);
+			}
+		}
+	}
+#ifdef _WIN32
+	int rc = _pclose(fp);
+#else
+	int status = pclose(fp);
+	int rc = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+#endif
+	if(rc == 0 || failed_targets.empty()) return rc;
+
+	// Read makefile.cpp and grep for each failing target string.
+	std::ifstream cpp("makefile.cpp");
+	if(!cpp.is_open()) return rc;
+	vector<string> src;
+	string l;
+	while(std::getline(cpp, l)) src.push_back(l);
+
+	fprintf(stderr, "\n");
+	for(auto const &t : failed_targets) {
+		string needle = "\"" + t + "\"";
+		bool header_printed = false;
+		for(size_t i = 0; i < src.size(); i++) {
+			auto col = src[i].find(needle);
+			if(col == string::npos) continue;
+			if(!header_printed) {
+				fprintf(stderr, "\033[1mmakexx:\033[0m target \033[1m'%s'\033[0m referenced in makefile.cpp:\n", t.c_str());
+				header_printed = true;
+			}
+			string ln = std::to_string(i + 1);
+			fprintf(stderr, "  \033[2mmakefile.cpp:%s:\033[0m %s\n", ln.c_str(), src[i].c_str());
+			// Underline the literal "target" inside the source line.
+			string pad(2 + 13 + ln.size() + 2 + col, ' ');
+			string under(needle.size(), '~');
+			fprintf(stderr, "%s\033[31m%s\033[0m\n", pad.c_str(), under.c_str());
+		}
+	}
+	return rc;
+}
+
 #ifndef _WIN32
 #include <termios.h>
 #include <unistd.h>
@@ -913,5 +993,6 @@ int main(int argc, char **argv) {
 		}
 	}
 	if(!compile_only)
-		run_cmd(a);
+		return run_make_with_diagnostics(a);
+	return 0;
 }
