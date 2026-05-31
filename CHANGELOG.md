@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Makefile DSL
+
+- **`open_file(path)` helper:** returns a portable shell snippet that hands the file to whichever OS opener exists at `make` time — tries `xdg-open` (Linux), `open` (macOS), `wslview` (WSL), then `start` (generic Windows). One `makefile.cpp` works across all of them; no regen needed when moving between systems
+
 ### Interactive mode (`makexx -i`)
 
 - **Fix:** folded parent groups with no direct entries (only nested children) now render their header so they can be unfolded. Previously the visibility check short-circuited through `is_ancestor_folded` and the parent hid itself, leaving the children effectively unreachable from the TUI

@@ -56,6 +56,9 @@
 //   change_ext("f.cpp", {".o", ".d"})     → {"f.o","f.d"}
 //   join_path("obj", "f.o")               → "obj/f.o"    replace_all(str, from, to)
 //   to_upper(str)   to_lower(str)
+//   open_file("report.pdf")               → shell snippet that hands the file to whichever
+//                                            opener is available at make time (xdg-open /
+//                                            open / wslview / start)
 
 #include <map>
 #include <set>
@@ -209,6 +212,18 @@ inline std::string join_path(std::string dir, std::string const &file) {
 	if(!dir.empty() && dir.back() != '/' && dir.back() != '\\')
 		dir += '/';
 	return dir + file;
+}
+
+// Shell snippet that hands a file to whichever OS opener is available on
+// the host that runs `make` — picks at make time, so the same makefile.cpp
+// works across Linux desktops (xdg-open), macOS (open), WSL (wslview), and
+// generic Windows (start). `path` may be a literal name or a make
+// automatic like "$<" / "$@".
+inline std::string open_file(std::string const &path) {
+	return "{ command -v xdg-open >/dev/null 2>&1 && xdg-open \"" + path + "\"; } || "
+	       "{ command -v open     >/dev/null 2>&1 && open \""     + path + "\"; } || "
+	       "{ command -v wslview  >/dev/null 2>&1 && wslview \""  + path + "\"; } || "
+	       "{ command -v start    >/dev/null 2>&1 && start \""    + path + "\"; }";
 }
 
 inline std::string replace_all(std::string str, const std::string &from, const std::string &to) {

@@ -241,6 +241,21 @@ static void test_mf_phony_and_retain() {
     CHECK_NOT_CONTAINS(content.substr(soft_pos, list_pos - soft_pos), "myapp.bin");
 }
 
+static void test_open_file() {
+    current_test = "test_open_file";
+    TempDir td;
+    Makefile mf;
+    mf.add("show", "report.pdf") << HELP("open the report") << open_file("$<");
+    mf.generate();
+    auto content = read_makefile();
+    // The snippet should mention all four openers in fallback order and
+    // expand the `$<` make automatic verbatim into each invocation.
+    CHECK_CONTAINS(content, "xdg-open \"$<\"");
+    CHECK_CONTAINS(content, "open \"$<\"");
+    CHECK_CONTAINS(content, "wslview \"$<\"");
+    CHECK_CONTAINS(content, "start \"$<\"");
+}
+
 static void test_user_phony() {
     current_test = "test_user_phony";
     TempDir td;
@@ -425,6 +440,7 @@ int main() {
     test_help();
     test_menu_order_matches_help();
     test_user_phony();
+    test_open_file();
     test_mf_phony_and_retain();
     test_preamble();
     test_menu_group_description();
