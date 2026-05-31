@@ -42,6 +42,8 @@
 //   mf.context_filename = "CLAUDE.md"      — override output filename
 //   mf.silent = true                       — prefix commands with @ in makefile
 //   mf.echo = false                        — suppress ### GENERATING decoration
+//   mf.preamble = "CFLAGS ?= -O2\n"        — raw text injected near top of generated makefile
+//                                            (for vars, include, vpath, .SUFFIXES, etc.)
 //   mf.on_softclean_retain("file")         — exclude from soft_clean
 //
 // Output:
@@ -585,6 +587,11 @@ class Makefile {
 	std::string context_filename;
 	std::string title;
 	std::string description;
+	// Raw text injected near the top of the generated makefile (after the
+	// auto-generated header, before .PHONY:). Escape hatch for variable
+	// defaults (`CFLAGS ?= -O2`), `include`, `vpath`, `.SUFFIXES`, etc.
+	// Errors in this text surface from `make`, not `makexx`.
+	std::string preamble;
 
 	void define_menu(std::string group) {
 		register_help_group(group);
@@ -690,6 +697,10 @@ class Makefile {
 		myfile << "# DO NOT EDIT!" << std::endl;
 		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
 		myfile << "SHELL=/bin/bash" << std::endl;
+		if(!preamble.empty()) {
+			myfile << preamble;
+			if(preamble.back() != '\n') myfile << '\n';
+		}
 		myfile << ".PHONY:";
 		for(auto const &p : phony_targets) myfile << " " << p;
 		myfile << std::endl;

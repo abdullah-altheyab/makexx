@@ -90,6 +90,7 @@ mf << RETAIN("artifact.bin");            // same forms as the per-rule version
 
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
+mf.preamble = "CFLAGS ?= -O2\n";    // raw make injected near top of generated makefile
 
 // Help organization
 mf.title = "My Project";       // printed at top of 'make help'

@@ -204,6 +204,21 @@ static void test_menu_order_matches_help() {
     CHECK_EQ(pos_utils < pos_gis, true);
 }
 
+static void test_preamble() {
+    current_test = "test_preamble";
+    TempDir td;
+    Makefile mf;
+    mf.preamble = "CFLAGS ?= -O2 -Wall\nvpath %.cpp src";
+    mf.add("foo.o", "foo.cpp") << "g++ $(CFLAGS) -c $< -o $@";
+    mf.generate();
+    auto content = read_makefile();
+    auto shell_pos = content.find("SHELL=/bin/bash");
+    auto phony_pos = content.find(".PHONY:");
+    auto block = content.substr(shell_pos, phony_pos - shell_pos);
+    CHECK_CONTAINS(block, "CFLAGS ?= -O2 -Wall");
+    CHECK_CONTAINS(block, "vpath %.cpp src");
+}
+
 static void test_mf_phony_and_retain() {
     current_test = "test_mf_phony_and_retain";
     TempDir td;
@@ -411,6 +426,7 @@ int main() {
     test_menu_order_matches_help();
     test_user_phony();
     test_mf_phony_and_retain();
+    test_preamble();
     test_menu_group_description();
     test_nested_groups_emit_parents();
     test_temp_in_full_clean();

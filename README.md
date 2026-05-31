@@ -290,6 +290,8 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   mf << RETAIN("artifact.bin");                 // protect file from soft_clean
   mf.title = "My Project";
   mf.description = "project summary for AGENTS.md";
+  mf.preamble = "CFLAGS ?= -O2\n";              // raw make injected near top
+                                                //   (vars, include, vpath, .SUFFIXES)
 
 Helpers (free functions):
   stem("dir/file.cpp")                  → "file"
