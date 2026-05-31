@@ -4,6 +4,8 @@
 
 ### Interactive mode (`makexx -i`)
 
+- **`r` refresh:** rerun `makexx -c` and reload the menu file in place — no need to quit, recompile, and relaunch after editing `makefile.cpp`. Cursor (by target name), fold state (by group name), multi-select (by target name), and search filter are all preserved across the reload. Compile errors are shown and the existing in-memory state is kept
+
 - **Fix:** backspacing the search query down to empty no longer kicks you out of search mode (you came in via `/`; only Esc or Enter should leave). Lets you rebuild a query without re-entering the mode
 - **Ctrl+Backspace in search:** clear the entire query while staying in search mode (Esc still both clears and exits). Shown in the search-input header so it's discoverable. Bytes 8 (Ctrl+Backspace) and 127 (plain Backspace) are now distinguished — previously both were collapsed into KEY_BACKSPACE
 - **Terminal signals disabled:** `ISIG` and `IEXTEN` are now turned off in the TUI's termios, so Ctrl+\\ no longer dumps core and Ctrl+C / Ctrl+Z are silent in interactive mode. Use `q` or double-Esc to quit

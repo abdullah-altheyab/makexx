@@ -226,102 +226,19 @@ vector<string> word_wrap(string const &text, int width) {
 }
 
 int run_interactive() {
-	std::ifstream f(".makexx_menu");
-	if(!f.is_open()) {
-		std::cerr << "error: .makexx_menu not found. Run makexx first to generate it." << endl;
-		return 1;
-	}
+	// Hoisted state — populated by load_menu(), which is re-invokable so
+	// the `r` shortcut can reload after `makexx -c` regenerates the menu
+	// file (without exiting the TUI).
 	vector<MenuEntry> entries;
-	vector<string> group_order;
 	std::map<string, int> group_index;
 	vector<MenuGroup> groups;
-	auto ensure_group = [&](string const &grp, bool folded = false) {
-		if(grp.empty()) {
-			if(group_index.find(grp) == group_index.end()) {
-				group_index[grp] = groups.size();
-				groups.push_back({grp, "Targets", 0, {}, folded});
-			} else if(folded) {
-				groups[group_index[grp]].folded = true;
-			}
-			return;
-		}
-
-		size_t start = 0;
-		while(true) {
-			auto slash = grp.find('/', start);
-			string path = grp.substr(0, slash);
-			if(group_index.find(path) == group_index.end()) {
-				string dname = path;
-				int depth = 0;
-				auto last_slash = path.rfind('/');
-				if(last_slash != string::npos) {
-					dname = path.substr(last_slash + 1);
-					for(auto c : path) if(c == '/') depth++;
-				}
-				group_index[path] = groups.size();
-				groups.push_back({path, dname, depth, {}, false});
-			}
-			if(slash == string::npos) {
-				if(folded)
-					groups[group_index[path]].folded = true;
-				break;
-			}
-			start = slash + 1;
-		}
-	};
-	string line;
-	std::map<string, string> pending_group_desc;
-	while(std::getline(f, line)) {
-		std::istringstream iss(line);
-		string grp, target, desc;
-		if(!std::getline(iss, grp, '\t')) continue;
-		if(!std::getline(iss, target, '\t')) continue;
-		std::getline(iss, desc, '\t');
-		if(grp == "!group") {
-			ensure_group(target, desc == "+");
-			continue;
-		}
-		if(grp == "!desc") {
-			pending_group_desc[target] = desc;
-			continue;
-		}
-		bool folded = false;
-		if(!grp.empty() && grp[0] == '+') {
-			grp = grp.substr(1);
-			folded = true;
-		}
-		if(grp == "_")
-			grp.clear();
-		bool cont = false;
-		if(!target.empty() && target[0] == '=') {
-			target = target.substr(1);
-			cont = true;
-		}
-		vector<string> dl;
-		{
-			size_t start = 0;
-			while(true) {
-				auto p = desc.find('|', start);
-				dl.push_back(desc.substr(start, p - start));
-				if(p == string::npos) break;
-				start = p + 1;
-			}
-		}
-		int eidx = entries.size();
-		entries.push_back({grp, target, dl, cont});
-		ensure_group(grp, folded);
-		groups[group_index[grp]].entries.push_back(eidx);
-	}
-	f.close();
-	if(entries.empty()) {
-		std::cerr << "error: no targets found in .makexx_menu" << endl;
-		return 1;
-	}
-	for(auto &kv : pending_group_desc) {
-		auto it = group_index.find(kv.first);
-		if(it != group_index.end())
-			groups[it->second].description = kv.second;
-	}
+	std::map<string, int> target_to_entry;
+	vector<vector<int>> child_groups;
+	vector<int> root_groups;
+	int recent_gidx = -1;
+	int col_width = 0;
+	int prefix_len = 0;
+	string fmt_sel, fmt_unsel;
 
 	const int MAX_HISTORY = 5;
 	const string history_path = ".makexx_history";
@@ -342,11 +259,6 @@ int run_interactive() {
 	};
 	load_history();
 
-	std::map<string, int> target_to_entry;
-	for(int i = 0; i < (int)entries.size(); i++)
-		if(!entries[i].continuation)
-			target_to_entry[entries[i].target] = i;
-
 	auto rebuild_recent_group = [&]() {
 		const string rname = "\x01Recent";
 		if(group_index.count(rname)) {
@@ -362,32 +274,140 @@ int run_interactive() {
 				rg.entries.push_back(it->second);
 		}
 	};
-	rebuild_recent_group();
 
-	vector<vector<int>> child_groups(groups.size());
-	vector<int> root_groups;
-	for(int g = 0; g < (int)groups.size(); g++) {
-		if(groups[g].name == "\x01Recent") continue;
-		auto slash = groups[g].name.rfind('/');
-		if(slash == string::npos) {
-			root_groups.push_back(g);
-			continue;
+	auto load_menu = [&]() -> bool {
+		entries.clear();
+		groups.clear();
+		group_index.clear();
+		std::ifstream f(".makexx_menu");
+		if(!f.is_open()) return false;
+
+		auto ensure_group = [&](string const &grp, bool folded = false) {
+			if(grp.empty()) {
+				if(group_index.find(grp) == group_index.end()) {
+					group_index[grp] = groups.size();
+					groups.push_back({grp, "Targets", 0, {}, folded});
+				} else if(folded) {
+					groups[group_index[grp]].folded = true;
+				}
+				return;
+			}
+			size_t start = 0;
+			while(true) {
+				auto slash = grp.find('/', start);
+				string path = grp.substr(0, slash);
+				if(group_index.find(path) == group_index.end()) {
+					string dname = path;
+					int depth = 0;
+					auto last_slash = path.rfind('/');
+					if(last_slash != string::npos) {
+						dname = path.substr(last_slash + 1);
+						for(auto c : path) if(c == '/') depth++;
+					}
+					group_index[path] = groups.size();
+					groups.push_back({path, dname, depth, {}, false});
+				}
+				if(slash == string::npos) {
+					if(folded)
+						groups[group_index[path]].folded = true;
+					break;
+				}
+				start = slash + 1;
+			}
+		};
+
+		std::map<string, string> pending_group_desc;
+		string line;
+		while(std::getline(f, line)) {
+			std::istringstream iss(line);
+			string grp, target, desc;
+			if(!std::getline(iss, grp, '\t')) continue;
+			if(!std::getline(iss, target, '\t')) continue;
+			std::getline(iss, desc, '\t');
+			if(grp == "!group") {
+				ensure_group(target, desc == "+");
+				continue;
+			}
+			if(grp == "!desc") {
+				pending_group_desc[target] = desc;
+				continue;
+			}
+			bool folded = false;
+			if(!grp.empty() && grp[0] == '+') {
+				grp = grp.substr(1);
+				folded = true;
+			}
+			if(grp == "_")
+				grp.clear();
+			bool cont = false;
+			if(!target.empty() && target[0] == '=') {
+				target = target.substr(1);
+				cont = true;
+			}
+			vector<string> dl;
+			{
+				size_t start = 0;
+				while(true) {
+					auto p = desc.find('|', start);
+					dl.push_back(desc.substr(start, p - start));
+					if(p == string::npos) break;
+					start = p + 1;
+				}
+			}
+			int eidx = entries.size();
+			entries.push_back({grp, target, dl, cont});
+			ensure_group(grp, folded);
+			groups[group_index[grp]].entries.push_back(eidx);
 		}
-		string parent = groups[g].name.substr(0, slash);
-		auto it = group_index.find(parent);
-		if(it == group_index.end())
-			root_groups.push_back(g);
-		else
-			child_groups[it->second].push_back(g);
-	}
+		f.close();
+		if(entries.empty()) return false;
+		for(auto &kv : pending_group_desc) {
+			auto it = group_index.find(kv.first);
+			if(it != group_index.end())
+				groups[it->second].description = kv.second;
+		}
 
-	int col_width = 0;
-	for(auto &e : entries)
-		if((int)e.target.size() > col_width) col_width = e.target.size();
-	col_width += 2;
-	int prefix_len = 6 + col_width + 2 + 3;
-	string fmt_sel   = "    \033[7m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
-	string fmt_unsel = "    \033[1m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
+		target_to_entry.clear();
+		for(int i = 0; i < (int)entries.size(); i++)
+			if(!entries[i].continuation)
+				target_to_entry[entries[i].target] = i;
+
+		rebuild_recent_group();
+
+		child_groups.assign(groups.size(), {});
+		root_groups.clear();
+		for(int g = 0; g < (int)groups.size(); g++) {
+			if(groups[g].name == "\x01Recent") continue;
+			auto slash = groups[g].name.rfind('/');
+			if(slash == string::npos) {
+				root_groups.push_back(g);
+				continue;
+			}
+			string parent = groups[g].name.substr(0, slash);
+			auto it = group_index.find(parent);
+			if(it == group_index.end())
+				root_groups.push_back(g);
+			else
+				child_groups[it->second].push_back(g);
+		}
+
+		recent_gidx = group_index["\x01Recent"];
+
+		col_width = 0;
+		for(auto &e : entries)
+			if((int)e.target.size() > col_width) col_width = e.target.size();
+		col_width += 2;
+		prefix_len = 6 + col_width + 2 + 3;
+		fmt_sel   = "    \033[7m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
+		fmt_unsel = "    \033[1m%-" + std::to_string(col_width) + "s\033[0m  %s\n";
+
+		return true;
+	};
+
+	if(!load_menu()) {
+		std::cerr << "error: .makexx_menu not found or empty. Run makexx first to generate it." << endl;
+		return 1;
+	}
 
 	struct termios oldt, newt;
 	tcgetattr(STDIN_FILENO, &oldt);
@@ -497,8 +517,6 @@ int run_interactive() {
 		}
 		return true;
 	};
-
-	int recent_gidx = group_index["\x01Recent"];
 
 	auto build_visible = [&]() {
 		vector<std::pair<int,int>> vis;
@@ -611,7 +629,7 @@ int run_interactive() {
 		else if(esc_armed)
 			printf("\033[1mmakexx interactive\033[0m  \033[33mPress Esc again to exit\033[0m%s\n", sel_info.c_str());
 		else
-			printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ PgUp/Dn Home/End  Tab group  ←→ fold  / search  Space select  x clear  Enter run  d dry-run  ? deps  q quit)\033[0m%s\n", sel_info.c_str());
+			printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ PgUp/Dn Home/End  Tab group  ←→ fold  / search  Space select  x clear  Enter run  d dry-run  ? deps  r refresh  q quit)\033[0m%s\n", sel_info.c_str());
 		if(scroll > 0)
 			printf("\033[2m    ▲\033[0m\n");
 		else
@@ -739,6 +757,65 @@ int run_interactive() {
 			}
 		} else if(key == KEY_CHAR && last_char == 'q') {
 			running = false;
+		} else if(key == KEY_CHAR && last_char == 'r') {
+			// Snapshot identity-by-name state to survive the reload.
+			// We track both fold state and which groups existed pre-refresh
+			// so we can restore an explicit unfold (overriding a FOLDED
+			// default) without trampling the default of brand-new groups.
+			std::set<string> saved_folded, saved_known_groups;
+			for(auto &g : groups) {
+				saved_known_groups.insert(g.name);
+				if(g.folded) saved_folded.insert(g.name);
+			}
+			std::set<string> saved_selected;
+			for(int si : selected) saved_selected.insert(entries[si].target);
+			string saved_search = search;
+			string saved_cursor_target, saved_cursor_group;
+			if(!visible.empty()) {
+				auto [g, e] = visible[cursor];
+				saved_cursor_group = groups[g].name;
+				if(e != -1) saved_cursor_target = entries[e].target;
+			}
+
+			// Hand the terminal back so compile output / errors are visible.
+			tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+			printf("\033[2J\033[H\033[1mRefreshing...\033[0m\n\n");
+			fflush(stdout);
+			int rc = run_cmd("makexx -c");
+			tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+			if(rc != 0) {
+				printf("\n\033[31;1mRefresh failed.\033[0m \033[2mPress any key to continue...\033[0m");
+				fflush(stdout);
+				char dummy;
+				read(STDIN_FILENO, &dummy, 1);
+				// Existing in-memory state is unchanged — fall through.
+			} else {
+				if(!load_menu()) {
+					std::cerr << "error: menu file missing or empty after refresh." << endl;
+					tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+					return 1;
+				}
+				// Restore preserved state by name. For pre-existing groups,
+				// reapply the exact saved fold state so an explicit unfold
+				// survives. Brand-new groups keep their load_menu default.
+				for(auto &g : groups)
+					if(saved_known_groups.count(g.name))
+						g.folded = saved_folded.count(g.name) > 0;
+				selected.clear();
+				for(int i = 0; i < (int)entries.size(); i++)
+					if(saved_selected.count(entries[i].target)) selected.insert(i);
+				search = saved_search;
+				if(!saved_cursor_target.empty()) {
+					restore_target = saved_cursor_target;
+					auto it = group_index.find(saved_cursor_group);
+					restore_gidx = (it != group_index.end()) ? it->second : 0;
+				} else if(!saved_cursor_group.empty()) {
+					restore_target.clear();
+					auto it = group_index.find(saved_cursor_group);
+					restore_gidx = (it != group_index.end()) ? it->second : 0;
+				}
+			}
 		} else if(key == KEY_ESC) {
 			if(!search.empty()) { request_cursor_restore(); search.clear(); scroll = 0; }
 			else {
