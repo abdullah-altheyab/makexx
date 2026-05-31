@@ -494,6 +494,17 @@ int run_interactive() {
 		return false;
 	};
 
+	// True if the group itself or any descendant has at least one entry
+	// matching the current search filter — regardless of fold state. Used
+	// to decide whether a folded parent should still render its header.
+	auto has_matchable_content = [&](auto &&self, int g) -> bool {
+		for(int ei : groups[g].entries)
+			if(matches_search(ei)) return true;
+		for(int child : child_groups[g])
+			if(self(self, child)) return true;
+		return false;
+	};
+
 	auto add_group_to_visible = [&](auto &&self, vector<std::pair<int,int>> &vis, int g) -> bool {
 		// Skip when an ancestor is folded — unless a search is active, in
 		// which case matches under a folded parent should still surface.
@@ -502,11 +513,18 @@ int run_interactive() {
 		for(int ei : groups[g].entries)
 			if(matches_search(ei)) matched.push_back(ei);
 		vector<std::pair<int,int>> child_vis;
-		bool has_visible_children = false;
 		for(int child : child_groups[g])
-			if(self(self, child_vis, child))
-				has_visible_children = true;
-		if(matched.empty() && !has_visible_children) return false;
+			self(self, child_vis, child);
+		// Show this group's header if it has any matchable content anywhere
+		// underneath, even when our fold/search settings would hide every
+		// descendant right now. Otherwise the user has no way to unfold us
+		// to reveal the children (the previous version short-circuited via
+		// has_visible_children, which double-counted the fold check).
+		bool has_any = !matched.empty();
+		if(!has_any)
+			for(int child : child_groups[g])
+				if(has_matchable_content(has_matchable_content, child)) { has_any = true; break; }
+		if(!has_any) return false;
 		bool show_header = !groups[g].name.empty();
 		if(show_header)
 			vis.push_back({g, -1});

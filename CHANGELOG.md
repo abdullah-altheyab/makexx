@@ -4,6 +4,7 @@
 
 ### Interactive mode (`makexx -i`)
 
+- **Fix:** folded parent groups with no direct entries (only nested children) now render their header so they can be unfolded. Previously the visibility check short-circuited through `is_ancestor_folded` and the parent hid itself, leaving the children effectively unreachable from the TUI
 - **`r` refresh:** rerun `makexx -c` and reload the menu file in place — no need to quit, recompile, and relaunch after editing `makefile.cpp`. Cursor (by target name), fold state (by group name), multi-select (by target name), and search filter are all preserved across the reload. Compile errors are shown and the existing in-memory state is kept
 
 - **Fix:** backspacing the search query down to empty no longer kicks you out of search mode (you came in via `/`; only Esc or Enter should leave). Lets you rebuild a query without re-entering the mode
