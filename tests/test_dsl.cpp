@@ -241,6 +241,29 @@ static void test_mf_phony_and_retain() {
     CHECK_NOT_CONTAINS(content.substr(soft_pos, list_pos - soft_pos), "myapp.bin");
 }
 
+static void test_tool() {
+    current_test = "test_tool";
+    TempDir td;
+    Makefile mf;
+    // Bare name → wrapped in $(shell command -v ...).
+    // Path with `/` → literal.
+    mf.add("out1.bin", "in1.dat") << TOOL("prog1") << "prog1 $< > $@";
+    mf.add("out2.bin", "in2.dat") << TOOL("../bin/prog2") << "../bin/prog2 $< > $@";
+    mf.generate();
+    auto content = read_makefile();
+    // Find each rule's prereq line.
+    auto pos1 = content.find("out1.bin :");
+    auto pos2 = content.find("out2.bin :");
+    auto line1 = content.substr(pos1, content.find('\n', pos1) - pos1);
+    auto line2 = content.substr(pos2, content.find('\n', pos2) - pos2);
+    CHECK_CONTAINS(line1, "in1.dat");
+    CHECK_CONTAINS(line1, "$(shell command -v prog1 2>/dev/null)");
+    CHECK_CONTAINS(line2, "in2.dat");
+    CHECK_CONTAINS(line2, "../bin/prog2");
+    // Path-form must NOT have been wrapped.
+    CHECK_NOT_CONTAINS(line2, "$(shell command -v ../bin/prog2");
+}
+
 static void test_open_file() {
     current_test = "test_open_file";
     TempDir td;
@@ -441,6 +464,7 @@ int main() {
     test_menu_order_matches_help();
     test_user_phony();
     test_open_file();
+    test_tool();
     test_mf_phony_and_retain();
     test_preamble();
     test_menu_group_description();

@@ -20,6 +20,11 @@
 //   r << PHONY                              — mark all of rule's targets as .PHONY (no output file produced)
 //   r << PHONY("n") / PHONY("a","b") / PHONY({"a","b"})     — mark only specific targets
 //   r << TARGET("file")                     — hidden/non-reproducible target
+//   r << TOOL("prog") / TOOL("a","b") / TOOL({"a","b"})   — external executable(s) the
+//                                                            rule depends on; mtime-tracked,
+//                                                            not added to `$^`. Bare name →
+//                                                            $(shell command -v ...); path
+//                                                            with `/` → used literally
 //   r << HELP("description")               — shown by 'make help' and makexx -i
 //   r << HELP("group", "description")      — with explicit group override
 //
@@ -154,6 +159,7 @@ class Rule {
 	std::set<std::string> hidden_targets; // hidden_target
 	std::set<std::string> retain_files;
 	std::set<std::string> phony_targets;
+	std::set<std::string> tools;
 	bool retain_targets;
 	bool phony_all;
 	target_type type;
@@ -335,6 +341,25 @@ class PHONY_t {
 };
 inline const PHONY_t PHONY;
 
+// Declare external executable(s) the rule depends on. Each entry becomes a
+// prerequisite (timestamp-tracked, so editing/replacing the tool triggers
+// rebuilds), but is NOT inserted into the regular rule_source list, so it
+// doesn't pollute `$^`. If the argument contains '/' it's added as a literal
+// path; otherwise it's wrapped in `$(shell command -v NAME 2>/dev/null)` so
+// make resolves PATH at parse time, keeping the same makefile.cpp portable
+// across machines with different install layouts.
+class TOOL {
+  public:
+	std::set<std::string> tools;
+	TOOL(StringList ts) { for(auto &t : ts) tools.insert(t); }
+	TOOL(std::vector<std::string> ts) { for(auto &t : ts) tools.insert(t); }
+	template<typename... Args>
+	TOOL(std::string first, Args&&... rest) {
+		tools.insert(first);
+		(tools.insert(std::string(std::forward<Args>(rest))), ...);
+	}
+};
+
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
   public:
 	std::set<std::string> filenames;
@@ -403,6 +428,11 @@ inline Rule &operator<<(Rule &a, PHONY_t p) {
 inline Rule &operator<<(Rule &a, TARGET t) {
 	for(auto &tmp : t.filenames)
 		a.hidden_targets.insert(tmp);
+	return a;
+}
+inline Rule &operator<<(Rule &a, TOOL t) {
+	for(auto &x : t.tools)
+		a.tools.insert(x);
 	return a;
 }
 
@@ -749,6 +779,14 @@ class Makefile {
 						from += j->second + " ";
 					}
 					makefile += from;
+					// External-tool prereqs: literal path if the name contains
+					// '/', otherwise let make resolve via PATH at parse time.
+					for(auto const &tool : command->tools) {
+						if(tool.find('/') != std::string::npos)
+							makefile += tool + " ";
+						else
+							makefile += "$(shell command -v " + tool + " 2>/dev/null) ";
+					}
 					makefile += "\n";
 					bool is_phony = false;
 					for(auto &i : to_list)

@@ -4,6 +4,7 @@
 
 ### Makefile DSL
 
+- **`<< TOOL("prog")` flag:** declare external executables a rule depends on. Each tool becomes a mtime-tracked prerequisite (so replacing/recompiling the tool triggers downstream rebuilds) but is NOT added to `$^` — your recipe keeps using `$<` cleanly. Bare names are resolved by make at parse time via `$(shell command -v ...)` for cross-machine portability; arguments containing `/` are used literally (best for sibling-project tools at known paths). Also accepts variadic `TOOL("a","b")` and `TOOL({"a","b"})` forms
 - **`open_file(path)` helper:** returns a portable shell snippet that hands the file to whichever OS opener exists at `make` time — tries `xdg-open` (Linux), `open` (macOS), `wslview` (WSL), then `start` (generic Windows). One `makefile.cpp` works across all of them; no regen needed when moving between systems
 
 ### Interactive mode (`makexx -i`)
