@@ -6,6 +6,7 @@
 #include <sstream>
 #include <map>
 #include <set>
+#include <chrono>
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #endif
@@ -183,6 +184,7 @@ int run_make_with_diagnostics(string cmd) {
 #ifndef _WIN32
 #include <termios.h>
 #include <unistd.h>
+#include <poll.h>
 
 struct MenuEntry {
 	string group;
@@ -505,6 +507,13 @@ int run_interactive() {
 	int scroll = 0;
 	std::set<int> selected;
 	bool running = true;
+	// Double-tap-to-exit: a single Esc with no active search no longer quits
+	// (too easy to fat-finger when meaning to dismiss something). Two Esc
+	// presses within this window do. Uses an explicit armed flag because
+	// time_point::min() would overflow when subtracted from now().
+	auto esc_window = std::chrono::seconds(2);
+	bool esc_armed = false;
+	std::chrono::steady_clock::time_point last_esc_at;
 	// Anything that shakes up the visible list — running a target (Recent
 	// group grows), clearing a search filter — leaves a plain row-index
 	// cursor pointing at the wrong row. Capture cursor identity *before*
@@ -594,6 +603,8 @@ int run_interactive() {
 			printf("\033[1mmakexx interactive\033[0m  / %s\033[5m▌\033[0m  \033[2m(%d)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
 		else if(!search.empty())
 			printf("\033[1mmakexx interactive\033[0m  \033[2mfilter:\033[0m %s  \033[2m(%d matches, Esc clear)\033[0m%s\n", search.c_str(), entry_count, sel_info.c_str());
+		else if(esc_armed)
+			printf("\033[1mmakexx interactive\033[0m  \033[33mPress Esc again to exit\033[0m%s\n", sel_info.c_str());
 		else
 			printf("\033[1mmakexx interactive\033[0m  \033[2m(↑↓ PgUp/Dn Home/End  Tab group  ←→ fold  / search  Space select  x clear  Enter run  d dry-run  ? deps  q quit)\033[0m%s\n", sel_info.c_str());
 		if(scroll > 0)
@@ -664,8 +675,25 @@ int run_interactive() {
 		if(needs_scroll && total_lines > scroll + viewport)
 			printf("\033[2m    ▼\033[0m\n");
 
-		Key key = read_key();
+		// When esc_armed, poll with the remaining window so the loop wakes
+		// up after the deadline and redraws (clearing the "Press Esc again
+		// to exit" hint) even if the user pressed nothing.
+		Key key;
+		if(esc_armed) {
+			auto remaining = esc_window - (std::chrono::steady_clock::now() - last_esc_at);
+			int ms = (int)std::chrono::duration_cast<std::chrono::milliseconds>(remaining).count();
+			if(ms <= 0) {
+				key = KEY_NONE;
+			} else {
+				struct pollfd pfd = {STDIN_FILENO, POLLIN, 0};
+				int r = poll(&pfd, 1, ms);
+				key = (r > 0) ? read_key() : KEY_NONE;
+			}
+		} else {
+			key = read_key();
+		}
 		bool keep_fold_memory = false;
+		bool keep_esc_armed = false;
 		if(searching) {
 			if(key == KEY_ESC) {
 				request_cursor_restore();
@@ -704,7 +732,16 @@ int run_interactive() {
 			running = false;
 		} else if(key == KEY_ESC) {
 			if(!search.empty()) { request_cursor_restore(); search.clear(); scroll = 0; }
-			else running = false;
+			else {
+				auto now = std::chrono::steady_clock::now();
+				if(esc_armed && (now - last_esc_at) < esc_window) {
+					running = false;
+				} else {
+					esc_armed = true;
+					last_esc_at = now;
+					keep_esc_armed = true;  // survive end-of-iter disarm
+				}
+			}
 		} else if(key == KEY_CHAR && last_char == '/') {
 			searching = true;
 			cursor = 0; scroll = 0;
@@ -837,6 +874,7 @@ int run_interactive() {
 				read(STDIN_FILENO, &dummy, 1);
 			}
 		}
+		if(!keep_esc_armed) esc_armed = false;
 		if(!keep_fold_memory) {
 			fold_remember_gidx = -1;
 			fold_remember_target.clear();

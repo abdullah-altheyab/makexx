@@ -5,6 +5,7 @@
 ### Interactive mode (`makexx -i`)
 
 - **Fix:** search now surfaces matches that live under a folded parent group. Previously the early `is_ancestor_folded` check short-circuited the recursion before the search-active override (which already lifted a group's own folded state) had a chance to apply
+- A single Escape no longer exits — too easy to fat-finger when meaning to dismiss something. Esc still clears a search filter if one is active; otherwise the first Esc replaces the keyboard-hints header with a yellow "Press Esc again to exit" prompt, and a second Esc within 2 s exits. The prompt clears itself after the window expires (the loop polls stdin with the remaining time and redraws on timeout) or on any other keypress. `q` continues to quit immediately
 
 ## v0.2.0
 
