@@ -222,13 +222,15 @@ inline std::string join_path(std::string dir, std::string const &file) {
 
 // Shell snippet that hands a file to whichever OS opener is available on
 // the host that runs `make` — picks at make time, so the same makefile.cpp
-// works across Linux desktops (xdg-open), macOS (open), WSL (wslview), and
-// generic Windows (start). `path` may be a literal name or a make
-// automatic like "$<" / "$@".
+// works across WSL (wslview), Linux desktops (xdg-open), macOS (open), and
+// generic Windows (start). wslview is tried first because xdg-open is also
+// present on WSL but routes some types (Office formats) to broken Linux
+// handlers instead of the Windows host. `path` may be a literal name or a
+// make automatic like "$<" / "$@".
 inline std::string open_file(std::string const &path) {
-	return "{ command -v xdg-open >/dev/null 2>&1 && xdg-open \"" + path + "\"; } || "
+	return "{ command -v wslview  >/dev/null 2>&1 && wslview \""  + path + "\"; } || "
+	       "{ command -v xdg-open >/dev/null 2>&1 && xdg-open \"" + path + "\"; } || "
 	       "{ command -v open     >/dev/null 2>&1 && open \""     + path + "\"; } || "
-	       "{ command -v wslview  >/dev/null 2>&1 && wslview \""  + path + "\"; } || "
 	       "{ command -v start    >/dev/null 2>&1 && start \""    + path + "\"; }";
 }
 

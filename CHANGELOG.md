@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Makefile DSL
+
+- **`open_file()` ordering:** try `wslview` before `xdg-open`. On WSL both exist, but `xdg-open` routes Office formats (e.g., `.pptx`) to broken Linux handlers instead of the Windows host. The new order is wslview → xdg-open → open → start
+
 ## v0.3.0
 
 ### Makefile DSL

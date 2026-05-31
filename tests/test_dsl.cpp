@@ -271,12 +271,16 @@ static void test_open_file() {
     mf.add("show", "report.pdf") << HELP("open the report") << open_file("$<");
     mf.generate();
     auto content = read_makefile();
-    // The snippet should mention all four openers in fallback order and
-    // expand the `$<` make automatic verbatim into each invocation.
+    // The snippet should mention all four openers and expand `$<` verbatim.
+    CHECK_CONTAINS(content, "wslview \"$<\"");
     CHECK_CONTAINS(content, "xdg-open \"$<\"");
     CHECK_CONTAINS(content, "open \"$<\"");
-    CHECK_CONTAINS(content, "wslview \"$<\"");
     CHECK_CONTAINS(content, "start \"$<\"");
+    // wslview must come before xdg-open: on WSL, xdg-open exists but mis-
+    // routes Office formats. The wslview-first ordering is load-bearing.
+    auto pos_wslview = content.find("wslview \"$<\"");
+    auto pos_xdg     = content.find("xdg-open \"$<\"");
+    CHECK_EQ(pos_wslview < pos_xdg, true);
 }
 
 static void test_user_phony() {
