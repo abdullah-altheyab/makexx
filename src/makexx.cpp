@@ -782,14 +782,29 @@ int run_interactive() {
 			groups[gidx].folded = false;
 		} else if(key == KEY_LEFT) {
 			auto [gidx, eidx] = visible[cursor];
-			if(eidx != -1) {
-				fold_remember_gidx = gidx;
-				fold_remember_target = entries[eidx].target;
-				keep_fold_memory = true;
+			if(eidx == -1 && groups[gidx].folded) {
+				// Already folded — propagate up: fold the parent group and
+				// move the cursor to its header in the rebuilt visible list.
+				auto slash = groups[gidx].name.rfind('/');
+				if(slash != string::npos) {
+					string parent = groups[gidx].name.substr(0, slash);
+					auto it = group_index.find(parent);
+					if(it != group_index.end()) {
+						groups[it->second].folded = true;
+						restore_gidx = it->second;
+						restore_target.clear();  // empty target = restore to header
+					}
+				}
+			} else {
+				if(eidx != -1) {
+					fold_remember_gidx = gidx;
+					fold_remember_target = entries[eidx].target;
+					keep_fold_memory = true;
+				}
+				groups[gidx].folded = true;
+				for(int j = cursor; j >= 0; j--)
+					if(visible[j].first == gidx && visible[j].second == -1) { cursor = j; break; }
 			}
-			groups[gidx].folded = true;
-			for(int j = cursor; j >= 0; j--)
-				if(visible[j].first == gidx && visible[j].second == -1) { cursor = j; break; }
 		} else if(key == KEY_CHAR && last_char == ' ') {
 			auto [gidx, eidx] = visible[cursor];
 			if(eidx == -1) {
