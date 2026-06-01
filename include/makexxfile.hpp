@@ -771,6 +771,12 @@ class Makefile {
 		myfile << "# DO NOT EDIT!" << std::endl;
 		myfile << "# You can control the generation via makefile.cpp!" << std::endl;
 		myfile << "SHELL=/bin/bash" << std::endl;
+		// Pin the default goal explicitly. Without this, GNU make picks the
+		// first non-special target — which is the `makefile: makefile.cpp
+		// makefile.hpp` regeneration rule emitted below — so `make` with no
+		// args would run `makexx -c` instead of building `all`. Emitted
+		// before `preamble` so a user can override via `mf.preamble`.
+		myfile << ".DEFAULT_GOAL := all" << std::endl;
 		if(!preamble.empty()) {
 			myfile << preamble;
 			if(preamble.back() != '\n') myfile << '\n';

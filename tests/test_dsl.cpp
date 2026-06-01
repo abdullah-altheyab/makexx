@@ -109,6 +109,12 @@ static void test_header() {
     CHECK_CONTAINS(content, "# This is an automatically generated makefile via makexx.");
     CHECK_CONTAINS(content, "# DO NOT EDIT!");
     CHECK_CONTAINS(content, "SHELL=/bin/bash");
+    // `.DEFAULT_GOAL := all` must precede the `makefile:` regen rule, so
+    // `make` with no args runs `all` instead of re-running `makexx -c`.
+    CHECK_CONTAINS(content, ".DEFAULT_GOAL := all");
+    auto goal_pos = content.find(".DEFAULT_GOAL := all");
+    auto regen_pos = content.find("makefile: makefile.cpp");
+    CHECK_EQ(goal_pos < regen_pos, true);
 }
 
 static void test_basic_rule() {

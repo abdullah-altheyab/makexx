@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Generated makefile
+
+- **Fix:** `make` with no arguments now runs `all` as intended. The generated makefile now emits `.DEFAULT_GOAL := all` near the top so GNU make doesn't pick the `makefile: makefile.cpp makefile.hpp` regen rule as the default goal (which was the first non-special target and was overshadowing `all`). Auto-regen on `makefile.cpp` edits still fires before the build, as before. Users can override by setting `.DEFAULT_GOAL` in `mf.preamble`
+
 ## v0.3.2
 
 ### Packaging / install
