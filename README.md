@@ -104,6 +104,15 @@ mf.add("report.pdf", "filtered.bin") << HELP("Generate QC report") << "qcplot $<
 
 ---
 
+## Requirements
+
+`makexx` invokes a C++ compiler to compile your `makefile.cpp`, then runs `make` on the generated makefile. Both must be on `PATH` at runtime:
+
+- **GNU make** (`apt install make`, ships on macOS, in any HPC environment).
+- **A C++17 compiler.** `makexx` honors `$CXX` if set, otherwise probes `g++`, `clang++`, `icpx`, `icpc` in that order. Any one of these is enough (`apt install g++` or `apt install clang`; on macOS install the Xcode Command Line Tools).
+
+These dependencies are declared by the `.deb` and Homebrew packages below — `apt install` and `brew install` will pull them in automatically. The bare-binary install (`install.sh` / manual download) won't.
+
 ## Installation
 
 **From source (with cmake):**

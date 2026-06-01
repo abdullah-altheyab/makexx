@@ -57,6 +57,7 @@ jobs:
           Version: ${VERSION}
           Architecture: ${DEB_ARCH}
           Maintainer: Abdullah AlTheyab <abdul900@gmail.com>
+          Depends: make, g++ | clang | c++-compiler
           Description: C++ build system generator
            Write makefile.cpp using a C++ DSL, run makexx to produce
            standard GNU makefiles with dependency tracking.

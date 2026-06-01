@@ -67,9 +67,32 @@ download_and_install() {
     echo "makexx ${VERSION} installed to ${INSTALL_DIR}/makexx"
 }
 
+check_runtime_deps() {
+    missing=""
+    if ! command -v make >/dev/null 2>&1; then
+        missing="${missing} make"
+    fi
+    if [ -z "${CXX:-}" ] \
+       && ! command -v g++ >/dev/null 2>&1 \
+       && ! command -v clang++ >/dev/null 2>&1 \
+       && ! command -v icpx >/dev/null 2>&1 \
+       && ! command -v icpc >/dev/null 2>&1; then
+        missing="${missing} a-C++-compiler-(g++/clang++)"
+    fi
+    if [ -n "$missing" ]; then
+        echo
+        echo "WARNING: missing runtime dependencies:$missing"
+        echo "  makexx needs GNU make and a C++17 compiler at runtime."
+        echo "  On Debian/Ubuntu:  sudo apt install make g++"
+        echo "  On Fedora/RHEL:    sudo dnf install make gcc-c++"
+        echo "  On macOS:          xcode-select --install"
+    fi
+}
+
 detect_platform
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
     get_latest_version
 fi
 download_and_install
+check_runtime_deps

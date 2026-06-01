@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Packaging / install
+
+- **Declare runtime dependencies on `make` and a C++ compiler** in every install path so users don't hit a cryptic compiler-not-found error on first run: the `.deb` control file now has `Depends: make, g++ | clang | c++-compiler`; the Homebrew formula adds `depends_on "make"` and `depends_on "gcc"`; `install.sh` runs a non-fatal check after installing and prints a per-distro install hint if `make` or any of `g++` / `clang++` / `icpx` / `icpc` is missing; README has a new "Requirements" section explaining what's needed and which install paths auto-pull what
+
 ### Makefile DSL
 
 - **`<< DESC("file", "description")`** — describe a file (input, intermediate, or output) — what it is, its format, where it comes from. The description is rendered next to the file name in AGENTS.md so any agent reading the project gets the provenance / schema / contact in the same place as the file path. Works in either scope (`mf << DESC(...)` or `rule << DESC(...)`, colocated with the consuming/producing rule). Multiple DESC calls for the same file **accumulate** — joined with a space — so you can layer annotations across scopes (e.g. a base description at the makefile level + a contact line added later, or schema notes split across declarations). Order is mf-level first, then rule-level in command-insertion order. Three render sites: inline in `## Input files`; as a `- File: …` sub-bullet under each target row in `## Targets` so the file-level annotation is visually distinct from the rule's `HELP()`; and as a `` `name`: … `` sub-bullet in `## Intermediate targets`
