@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### AGENTS.md
+
+- **Fix:** corrected the upstream link from the placeholder `ab-10/makexx` to the real repository
+- **Build-system overview:** added a "Build system" section explaining the makexx workflow (`makexx`, `makexx -c`, `makexx -i`) and pointing AI agents at the canonical DSL reference (`include/makexxfile.hpp` and `CLAUDE.md` raw URLs) so they can fetch context without external prompting
+- **Inline DSL quick reference:** AGENTS.md now embeds a compact, self-contained DSL cheat sheet covering the common call shapes (rule + flags + menu + settings + helpers). Lets offline / sandboxed / no-web-fetch agents make routine edits (add a rule, mark phony, add to a group) without having to fetch the upstream reference. The raw-URL links to the full reference are kept as a "go here for edge cases" fallback
+- **Target annotations:** phony rules now show `(phony)` and rules with `<< TOOL(...)` show `(uses ...)`, alongside the existing `(from ...)` source-deps annotation
+- **Built-in target list completed:** added `list_input` and `list_unknown`; tightened wording on the rest
+
 ## v0.3.1
 
 ### Makefile DSL

@@ -264,6 +264,36 @@ static void test_tool() {
     CHECK_NOT_CONTAINS(line2, "$(shell command -v ../bin/prog2");
 }
 
+static void test_agents_md() {
+    current_test = "test_agents_md";
+    TempDir td;
+    Makefile mf;
+    mf.title = "Demo";
+    mf.description = "A small demo project.";
+    mf << MENU("Build", "Compilation");
+    mf.add("main.o", "main.cpp") << HELP("compile main") << TOOL("g++") << "g++ -c $< -o $@";
+    mf.add("install", "main.o") << PHONY << HELP("install") << "cp $< /usr/local/bin/";
+    mf.generate();
+    auto content = read_file("AGENTS.md");
+    // Build system intro + corrected URL.
+    CHECK_CONTAINS(content, "abdullah-altheyab/makexx");
+    CHECK_NOT_CONTAINS(content, "ab-10/makexx");
+    CHECK_CONTAINS(content, "makexx -i");
+    // DSL reference URLs for AI agents.
+    CHECK_CONTAINS(content, "raw.githubusercontent.com/abdullah-altheyab/makexx/main/include/makexxfile.hpp");
+    // Inline DSL cheat sheet for offline agents.
+    CHECK_CONTAINS(content, "DSL quick reference");
+    CHECK_CONTAINS(content, "auto& r = mf.add");
+    CHECK_CONTAINS(content, "open_file(\"report.pdf\")");
+    // Phony flag on the install target.
+    CHECK_CONTAINS(content, "`make install` (phony)");
+    // Tool dep on the compile target.
+    CHECK_CONTAINS(content, "(uses `g++`)");
+    // Complete built-in target list.
+    CHECK_CONTAINS(content, "make list_input");
+    CHECK_CONTAINS(content, "make list_unknown");
+}
+
 static void test_open_file() {
     current_test = "test_open_file";
     TempDir td;
@@ -469,6 +499,7 @@ int main() {
     test_user_phony();
     test_open_file();
     test_tool();
+    test_agents_md();
     test_mf_phony_and_retain();
     test_preamble();
     test_menu_group_description();

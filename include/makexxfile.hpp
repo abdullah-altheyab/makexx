@@ -930,8 +930,45 @@ class Makefile {
 		cf << "# " << (title.empty() ? "Project" : title) << "\n\n";
 		if(!description.empty())
 			cf << description << "\n\n";
-		cf << "This project uses [makexx](https://github.com/ab-10/makexx) as its build system. ";
-		cf << "Edit `makefile.cpp` to modify build rules, then run `makexx` to regenerate the makefile and build.\n\n";
+
+		cf << "## Build system\n\n";
+		cf << "This project uses [makexx](https://github.com/abdullah-altheyab/makexx) — a C++ build-system generator. Build rules are written in `makefile.cpp` using a small C++ DSL; `makexx` compiles that program, runs it to produce a standard GNU `makefile`, then invokes `make`.\n\n";
+		cf << "**Workflow when modifying the build:**\n\n";
+		cf << "1. Edit `makefile.cpp` (and any `config.hpp` it includes).\n";
+		cf << "2. Run `makexx` to recompile, regenerate the makefile, and build.\n";
+		cf << "3. Run `makexx -c` to just regenerate the makefile without building.\n";
+		cf << "4. Run `makexx -i` for an interactive TUI to browse, search, and run targets.\n\n";
+		cf << "**DSL quick reference** (offline copy; see full reference URLs below):\n\n";
+		cf << "```cpp\n";
+		cf << "#include \"makefile.hpp\"\n";
+		cf << "int main() {\n";
+		cf << "    Makefile mf;\n";
+		cf << "    auto& r = mf.add(\"output.o\", \"input.cpp\");   // or {tgt1,tgt2}, {src1,src2}\n";
+		cf << "    r << \"g++ -c $< -o $@\";                      // append commands ($<, $@, $^)\n";
+		cf << "    r << FINAL;                                   // included in `make all`\n";
+		cf << "    r << PHONY;                                   // non-file target (install, etc.)\n";
+		cf << "    r << HELP(\"description shown in make help\");\n";
+		cf << "    r << TEMP(\"scratch.tmp\");                     // cleaned by full_clean/soft_clean\n";
+		cf << "    r << RETAIN;                                  // exclude rule outputs from soft_clean\n";
+		cf << "    r << TOOL(\"g++\");                             // executable prereq, mtime-tracked\n";
+		cf << "    r << MENU(\"Build\");                           // group this rule\n";
+		cf << "\n";
+		cf << "    mf << MENU(\"Build\");                          // group subsequent rules\n";
+		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // nested + description\n";
+		cf << "    mf << PHONY(\"install\");                       // declare phony by name\n";
+		cf << "    mf.title       = \"My Project\";\n";
+		cf << "    mf.description = \"Project summary for AGENTS.md\";\n";
+		cf << "    mf.preamble    = \"CFLAGS ?= -O2\\n\";           // raw make injected near top\n";
+		cf << "\n";
+		cf << "    // Path helpers: stem, basename, change_ext, join_path, get_ext\n";
+		cf << "    // Cross-platform file opener: open_file(\"report.pdf\")\n";
+		cf << "    mf.generate();                                // emit makefile + AGENTS.md\n";
+		cf << "    return 0;\n";
+		cf << "}\n";
+		cf << "```\n\n";
+		cf << "**Full DSL reference** (fetch for details / edge cases):\n\n";
+		cf << "- <https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/include/makexxfile.hpp>\n";
+		cf << "- <https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/CLAUDE.md>\n\n";
 
 		std::set<std::string> inputfiles_list;
 		for(auto itr = nodes.begin(); itr != nodes.end(); itr++) {
@@ -944,6 +981,21 @@ class Makefile {
 				cf << "- `" << itm << "`\n";
 			cf << "\n";
 		}
+
+		// Build a flat set of phony target names (matches what's emitted in
+		// the makefile's .PHONY: line), so we can annotate them per-target.
+		std::set<std::string> phony_set;
+		for(auto const &cmd : commands) {
+			if(cmd->phony_all) {
+				auto trange = rule_target.equal_range(cmd.get());
+				for(auto j = trange.first; j != trange.second; j++)
+					phony_set.insert(j->second);
+			}
+			for(auto const &t : cmd->phony_targets)
+				phony_set.insert(t);
+		}
+		for(auto const &t : mf_phony_targets)
+			phony_set.insert(t);
 
 		bool has_ungrouped = false;
 		for(auto &itm : help_menu)
@@ -963,10 +1015,21 @@ class Makefile {
 					if(!deps.empty()) deps += ", ";
 					deps += "`" + j->second + "`";
 				}
+				std::string tool_str;
+				for(auto const &t : target_rule[itm.target]->tools) {
+					if(!tool_str.empty()) tool_str += ", ";
+					tool_str += "`" + t + "`";
+				}
 				out << "- `make " << itm.target << "`";
+				if(phony_set.count(itm.target))
+					out << " (phony)";
 				if(!deps.empty())
 					out << " (from " << deps << ")";
-				out << " \xe2\x80\x94 " << flat_desc << "\n";
+				if(!tool_str.empty())
+					out << " (uses " << tool_str << ")";
+				if(!flat_desc.empty())
+					out << " \xe2\x80\x94 " << flat_desc;
+				out << "\n";
 			}
 		};
 
@@ -989,13 +1052,15 @@ class Makefile {
 		}
 
 		cf << "## Built-in targets\n\n";
-		cf << "- `make all` — Build all final targets\n";
+		cf << "- `make all` — Build everything marked `FINAL`\n";
 		cf << "- `make full_clean` — Remove all generated files\n";
-		cf << "- `make soft_clean` — Remove generated files (except retained)\n";
-		cf << "- `make list` — List all tracked files\n";
-		cf << "- `make help` — Show help\n";
+		cf << "- `make soft_clean` — Remove generated files except those marked `RETAIN`\n";
+		cf << "- `make list` — List all files makexx tracks (inputs + intermediates + final + temp)\n";
+		cf << "- `make list_input` — List input files (sources not produced by any rule)\n";
+		cf << "- `make list_unknown` — List files in the directory that makexx doesn't know about\n";
+		cf << "- `make help` — Same target list as above with brackets / grouping\n";
 		if(graph)
-			cf << "- `make makefile_graph.pdf` — Generate dependency graph (requires Graphviz)\n";
+			cf << "- `make makefile_graph.pdf` — Render dependency graph as PDF (requires Graphviz)\n";
 		cf << "\n";
 		cf.close();
 	}
