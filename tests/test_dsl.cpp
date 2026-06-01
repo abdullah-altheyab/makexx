@@ -312,6 +312,40 @@ static void test_agents_md() {
     CHECK_CONTAINS(content, "make list_unknown");
 }
 
+static void test_desc() {
+    current_test = "test_desc";
+    TempDir td;
+    Makefile mf;
+    // Makefile-level DESC.
+    mf << DESC("dept_a_prices.csv", "Annual price forecasts for the next 10 years.");
+    // Rule-level DESC (colocated with the rule that consumes the file).
+    mf.add("forecast.t", "geology_wells.t")
+        << HELP("run forecast") << DESC("geology_wells.t", "Well inventory from the geology team.")
+        << "process $< > $@";
+    // DESC on a target file (output) — describes the artifact contents.
+    mf.add("priced.t", "dept_a_prices.csv")
+        << HELP("apply prices") << DESC("priced.t", "Tab-separated table: well_id, year, price.")
+        << "price $< > $@";
+    // DESC on an un-HELP'd intermediate.
+    mf.add("aux.t", "dept_a_prices.csv")
+        << DESC("aux.t", "Intermediate normalisation table.")
+        << "normalize $< > $@";
+    mf.generate();
+    auto content = read_file("AGENTS.md");
+    // Inputs section: DESC inline.
+    auto inputs_pos = content.find("## Input files");
+    auto targets_pos = content.find("## Targets");
+    auto inputs_block = content.substr(inputs_pos, targets_pos - inputs_pos);
+    CHECK_CONTAINS(inputs_block, "`dept_a_prices.csv`");
+    CHECK_CONTAINS(inputs_block, "Annual price forecasts for the next 10 years.");
+    CHECK_CONTAINS(inputs_block, "`geology_wells.t`");
+    CHECK_CONTAINS(inputs_block, "Well inventory from the geology team.");
+    // Target listing: DESC as indented sub-bullet, distinct from HELP.
+    CHECK_CONTAINS(content, "- File: Tab-separated table: well_id, year, price.");
+    // Intermediate listing: DESC appended.
+    CHECK_CONTAINS(content, "`aux.t`: Intermediate normalisation table.");
+}
+
 static void test_open_file() {
     current_test = "test_open_file";
     TempDir td;
@@ -518,6 +552,7 @@ int main() {
     test_user_phony();
     test_open_file();
     test_tool();
+    test_desc();
     test_agents_md();
     test_mf_phony_and_retain();
     test_preamble();

@@ -27,6 +27,8 @@
 //                                                            with `/` → used literally
 //   r << HELP("description")               — shown by 'make help' and makexx -i
 //   r << HELP("group", "description")      — with explicit group override
+//   r << DESC("file","what it is") / mf << DESC(...) — describe a file (typically an
+//                                            input); shown next to it in AGENTS.md
 //
 // Menu groups:
 //   r << MENU("Forecasting")               — set group for a single rule
@@ -160,6 +162,7 @@ class Rule {
 	std::set<std::string> retain_files;
 	std::set<std::string> phony_targets;
 	std::set<std::string> tools;
+	std::map<std::string, std::string> file_descriptions;
 	bool retain_targets;
 	bool phony_all;
 	target_type type;
@@ -388,6 +391,20 @@ class HELP { // add help to the menu
 	HELP(std::string group, std::string help) : help(help), group(group) {};
 };
 
+// Describe a file (input, intermediate, or output) — what it is, where it
+// comes from, how it's refreshed, etc. Shown in AGENTS.md next to the file
+// name. Usable in either scope:
+//   mf << DESC("input.txt", "annual price forecasts for the next 10 years");
+//   rule << DESC("input.txt", "...");  // colocated with the rule that consumes it
+// Both forms feed the same map; the rule-level form has no extra semantics
+// beyond letting you write the description next to the consuming rule.
+class DESC {
+  public:
+	std::string file;
+	std::string description;
+	DESC(std::string file, std::string description) : file(file), description(description) {};
+};
+
 class MENU { // set menu group for a rule or for subsequent rules (on Makefile)
   public:
 	std::string group;
@@ -437,6 +454,10 @@ inline Rule &operator<<(Rule &a, TOOL t) {
 		a.tools.insert(x);
 	return a;
 }
+inline Rule &operator<<(Rule &a, DESC d) {
+	a.file_descriptions[d.file] = d.description;
+	return a;
+}
 
 inline Rule &operator<<(Rule &a, HELP t) {
 	a.help_lines.push_back(t.help);
@@ -465,6 +486,7 @@ class Makefile {
 	std::vector<std::string> help_group_order;
 	std::set<std::string> soft_clean_retain_nodes;
 	std::set<std::string> mf_phony_targets;
+	std::map<std::string, std::string> mf_file_descriptions;
 	std::string current_help_group;
 	std::set<std::string> folded_groups;
 	std::map<std::string, std::string> group_descriptions;
@@ -950,6 +972,7 @@ class Makefile {
 		cf << "                                                  //   isn't a file the recipe creates\n";
 		cf << "                                                  //   (install, clean_*, list_*, etc.)\n";
 		cf << "    r << HELP(\"description shown in make help\");\n";
+		cf << "    r << DESC(\"input.txt\", \"what this file is\");  // also works as mf << DESC(...)\n";
 		cf << "    r << TEMP(\"scratch.tmp\");                     // cleaned by full_clean/soft_clean\n";
 		cf << "    r << RETAIN;                                  // exclude rule outputs from soft_clean\n";
 		cf << "    r << TOOL(\"g++\");                             // executable prereq, mtime-tracked\n";
@@ -977,10 +1000,21 @@ class Makefile {
 			if(target_rule.find(*itr) == target_rule.end())
 				inputfiles_list.insert(*itr);
 		}
+		// Combined file-description map: makefile-level entries plus any
+		// declared on individual rules. Rule-level wins on conflict.
+		std::map<std::string, std::string> all_file_desc = mf_file_descriptions;
+		for(auto const &cmd : commands)
+			for(auto const &kv : cmd->file_descriptions)
+				all_file_desc[kv.first] = kv.second;
 		if(!inputfiles_list.empty()) {
 			cf << "## Input files\n\n";
-			for(auto &itm : inputfiles_list)
-				cf << "- `" << itm << "`\n";
+			for(auto &itm : inputfiles_list) {
+				cf << "- `" << itm << "`";
+				auto it = all_file_desc.find(itm);
+				if(it != all_file_desc.end())
+					cf << " \xe2\x80\x94 " << it->second;
+				cf << "\n";
+			}
 			cf << "\n";
 		}
 
@@ -1032,6 +1066,12 @@ class Makefile {
 				if(!flat_desc.empty())
 					out << " \xe2\x80\x94 " << flat_desc;
 				out << "\n";
+				// File-level description (DESC) for the target — describes
+				// the artifact (contents/format), distinct from HELP which
+				// describes what the rule does.
+				auto desc_it = all_file_desc.find(itm.target);
+				if(desc_it != all_file_desc.end())
+					out << "  - File: " << desc_it->second << "\n";
 			}
 		};
 
@@ -1090,6 +1130,12 @@ class Makefile {
 				cf << "- " << tlist;
 				if(!deps.empty()) cf << " (from " << deps << ")";
 				cf << "\n";
+				// If any of this rule's targets has a DESC, append it.
+				for(auto j = trange.first; j != trange.second; j++) {
+					auto desc_it = all_file_desc.find(j->second);
+					if(desc_it != all_file_desc.end())
+						cf << "  - `" << j->second << "`: " << desc_it->second << "\n";
+				}
 			}
 			cf << "\n";
 		}
@@ -1179,6 +1225,13 @@ class Makefile {
 		if(!r.retain_targets)
 			for(auto const &f : r.filenames)
 				soft_clean_retain_nodes.insert(f);
+		return *this;
+	}
+
+	// `mf << DESC("file", "description")` registers a free-text description
+	// for a file (typically an input), shown next to it in AGENTS.md.
+	Makefile& operator<<(DESC d) {
+		mf_file_descriptions[d.file] = d.description;
 		return *this;
 	}
 

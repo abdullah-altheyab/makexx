@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Makefile DSL
+
+- **`<< DESC("file", "description")`** — describe a file (input, intermediate, or output) — what it is, its format, where it comes from. The description is rendered next to the file name in AGENTS.md so any agent reading the project gets the provenance / schema / contact in the same place as the file path. Works in either scope (`mf << DESC(...)` or `rule << DESC(...)`, colocated with the consuming/producing rule); rule-level wins on conflict. Three render sites: inline in `## Input files`; as a `- File: …` sub-bullet under each target row in `## Targets` so the file-level annotation is visually distinct from the rule's `HELP()`; and as a `` `name`: … `` sub-bullet in `## Intermediate targets`
+
 ### AGENTS.md
 
 - **Fix:** corrected the upstream link from the placeholder `ab-10/makexx` to the real repository
