@@ -55,142 +55,36 @@ make help       # list all targets with descriptions
 
 ## Where it shines
 
-**Mode switching.** Toggle entire pipeline branches with `#define` flags at the top of `makefile.cpp`, or pass them from the command line:
+**C++ as the configuration language.** Loops, classes, `#define` flags, headers — no new DSL. Generate many parameterized rules from data, toggle whole branches with `#define`, keep parameters in a `config.hpp` that's auto-tracked by `-MMD`:
 
 ```cpp
-#define TRIAL   // use 2 iterations instead of 500
+struct Run { string name, grid, solver; int iter; };
+for (auto& r : runs)
+    mf.add(r.name + ".out", r.grid)
+        << ("runsim --solver=" + r.solver + " --iter=" + to_string(r.iter) + " $< > $@");
 ```
 
-```bash
-makexx -DTRIAL          # same as #define TRIAL in the file
-makexx -Diterations=50  # override a value
-```
+Override from the command line with `makexx -DTRIAL` or `makexx -Diterations=50`.
 
-**Parameterized rules.** Use C++ loops and data structures to generate many related rules concisely:
+**Self-documenting pipelines.** Add `HELP()` and group with `MENU()`. `make help` renders titles, descriptions, groups, and brackets for multi-target rules. The same data feeds `makexx -i` and `AGENTS.md`.
 
 ```cpp
-for (auto& survey : surveys) {
-    mf.add(survey.prefix + "_result.bin", survey.prefix + "_input.bin")
-        << ("atprocess --mode=" + survey.mode + " $< > $@");
-}
+mf.title = "Seismic Pipeline";
+mf << MENU("Processing", "Run the data pipeline");
+mf.add("filtered.bin", "raw.segy") << HELP("Apply bandpass filter") << "atbpfilt $< $@";
+mf << MENU("Processing/QC");                                   // parent header auto-created
+mf.add("report.pdf", "filtered.bin") << HELP("Generate QC report") << "qcplot $< $@";
 ```
 
-**Domain modeling.** Define C++ classes that carry your pipeline parameters — no config file format to learn:
+**AI agent context.** `mf.generate()` writes an `AGENTS.md` summarizing the project — description, inputs, targets per group — that any AI coding agent (Claude Code, Cursor, Copilot) reads to help modify `makefile.cpp` in domain terms.
 
-```cpp
-struct Simulation { string name, grid, solver; int iterations; };
+**Interactive mode (`makexx -i`).** A TUI for browsing and running targets: `/` to search and filter, Space to multi-select, `d` to dry-run, `?` to show dependencies, `r` to refresh after editing `makefile.cpp` (cursor / fold / select / search are preserved across the reload). `q` quits; Esc dismisses; double-Esc quits when nothing is active.
 
-for (auto& s : runs) {
-    mf.add(s.name + ".out", s.grid)
-        << ("runsim --solver=" + s.solver + " --iter=" + to_string(s.iterations) + " $< > $@");
-}
-```
+**Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project.
 
-**Config separation.** Keep parameters in a `config.hpp` to keep `makefile.cpp` focused on rules. makexx automatically tracks the dependency — editing `config.hpp` and running `make` regenerates the makefile:
+**Helpful errors.** When `make` fails, `makexx` parses the error and points back to the matching `mf.add(...)` line in your `makefile.cpp` — no more chasing the generated makefile.
 
-```cpp
-// config.hpp
-#define TRIAL true
-int iterations = TRIAL ? 10 : 5000;
-vector<Run> runs = {{"baseline", "grid.dat", "--viscosity=1.0"}, ...};
-```
-
-```cpp
-// makefile.cpp
-#include "makefile.hpp"
-#include "config.hpp"
-```
-
-**Self-documenting pipelines.** Add descriptions and organize targets into groups:
-
-```cpp
-mf.title = "Seismic Pipeline v2";
-
-mf << MENU("Processing", "Run the data pipeline");   // group with a description
-mf.add("filtered.bin", "raw.segy")
-    << HELP("Apply bandpass filter")
-    << "atbpfilt $< $@";
-
-mf << MENU("Processing/QC");           // nested via "/" — parent headers are auto-created
-mf.add("report.pdf", "filtered.bin")
-    << HELP("Generate QC report") << "qcplot $< $@";
-
-// Single rule in a group — use MENU inline:
-mf.add("backup.tar", "filtered.bin")
-    << MENU("Archive") << HELP("Archive raw data") << "tar cf $@ $<";
-```
-
-Then `make help` prints:
-
-```
-Seismic Pipeline v2
-
-Processing: — Run the data pipeline
-  filtered.bin ─── Apply bandpass filter
-
-  QC:
-    report.pdf ─── Generate QC report
-
-Archive:
-    backup.tar ─── Archive raw data
-
-Built-in:
-           all ─── Build all final targets
-    full_clean ─── Remove all generated files
-          help ─── Show this help
-           ...
-```
-
-**AI agent context.** `generate()` writes an `AGENTS.md` alongside the makefile — a plain-English summary of the project for AI coding agents (Claude Code, Cursor, Copilot, etc.):
-
-```cpp
-mf.description = "Manages a family genealogy database. Generates SVG "
-    "tree visualizations from a SQLite database using Graphviz.";
-mf.generate();  // writes makefile + .makexx_menu + AGENTS.md
-```
-
-The generated `AGENTS.md` lists the project description, input files, and all targets with dependencies organized by group — so an AI agent can understand your project and help modify `makefile.cpp` in domain terms.
-
-```cpp
-mf.context = false;                  // disable AGENTS.md generation
-mf.context_filename = "CLAUDE.md";   // use a different filename
-```
-
-**Interactive mode.** Run `makexx -i` for a terminal UI:
-
-- ↑↓, PgUp/PgDn, Home/End to navigate; Tab/Shift+Tab to jump between groups
-- ←→ to fold/unfold groups; ← on an already-folded group propagates the fold to its parent
-- Enter to run, `d` to dry-run preview (`make -n`), `?` to show dependencies
-- `/` to search and filter (Ctrl+Backspace clears the query; matches under folded parents still surface)
-- Space to multi-select targets (`●`), `x` to deselect all, Enter runs all selected in sequence
-- `r` to refresh — rerun `makexx -c` and reload the menu in place. Cursor, fold, multi-select, and search filter are preserved
-- Green **Done.** / red **Failed.** exit status after each run
-- Recently run targets appear in a **Recent** group at the top
-- `q` quits. Esc dismisses whatever is active (search / etc.); when nothing is active, a second Esc within 2 s exits — single Esc is no longer a quit, to stop muscle-memory exits
-
-**Cross-project tool tracking.** Use `<< TOOL("prog")` to declare an external executable as a prerequisite — its mtime is tracked (so rebuilding it triggers downstream rebuilds), but it's not added to `$^`. Bare names are resolved via `$(shell command -v ...)` at make time; paths containing `/` are used literally — perfect for tools built in a sibling project.
-
-**Helpful errors.** When `make` fails, `makexx` parses the error for the failing target and prints a compiler-style annotation pointing back to the matching `mf.add(...)` line in your `makefile.cpp` — closes the loop where errors used to reference the *generated* makefile that you don't write.
-
-**Helper functions.** Path manipulation utilities available in your `makefile.cpp`:
-
-```cpp
-stem("dir/file.cpp")                    // "file"
-basename("dir/file.cpp")               // "file.cpp"
-change_ext("file.cpp", ".o")           // "file.o"
-change_ext("file.cpp", {".o", ".d"})   // {"file.o", "file.d"}
-get_ext("file.cpp")                    // "cpp"
-join_path("obj", "file.o")             // "obj/file.o"
-open_file("report.pdf")                // shell snippet that hands the file to whichever
-                                        //   OS opener is available at make time
-                                        //   (wslview, xdg-open, open, start)
-```
-
----
-
-## Why GNU make as the backend?
-
-The generated `makefile` is a plain text file. On most HPC clusters, `make` is the only build tool guaranteed to be available. No Python environment, no container, no package manager — `makexx` generates the file once on your workstation, and `make` runs it anywhere.
+**Helper functions.** `stem()`, `basename()`, `change_ext()`, `join_path()`, `get_ext()`, plus `open_file("report.pdf")` for cross-platform file opening (wslview / xdg-open / open / start, picked at make time).
 
 ---
 
