@@ -273,6 +273,11 @@ static void test_agents_md() {
     mf << MENU("Build", "Compilation");
     mf.add("main.o", "main.cpp") << HELP("compile main") << TOOL("g++") << "g++ -c $< -o $@";
     mf.add("install", "main.o") << PHONY << HELP("install") << "cp $< /usr/local/bin/";
+    // Nested group exposed in the heading.
+    mf << MENU("Build/Tests");
+    mf.add("unit.run", "main.o") << HELP("run unit tests") << "./unit";
+    // Un-HELP'd intermediate rule — should appear in the Intermediate section.
+    mf.add("scratch.dat", "main.cpp") << "preprocess $< > $@";
     mf.generate();
     auto content = read_file("AGENTS.md");
     // Build system intro + corrected URL.
@@ -285,10 +290,23 @@ static void test_agents_md() {
     CHECK_CONTAINS(content, "DSL quick reference");
     CHECK_CONTAINS(content, "auto& r = mf.add");
     CHECK_CONTAINS(content, "open_file(\"report.pdf\")");
+    // PHONY rule-of-thumb in the cheat sheet (eval-driven addition).
+    CHECK_CONTAINS(content, "REQUIRED whenever the target name");
     // Phony flag on the install target.
     CHECK_CONTAINS(content, "`make install` (phony)");
     // Tool dep on the compile target.
     CHECK_CONTAINS(content, "(uses `g++`)");
+    // Nested group heading uses full slash-path + extra `#`.
+    CHECK_CONTAINS(content, "#### Build/Tests");
+    // Intermediate-targets section lists un-HELP'd user rules with deps.
+    CHECK_CONTAINS(content, "## Intermediate targets");
+    CHECK_CONTAINS(content, "`scratch.dat` (from `main.cpp`)");
+    // Built-in `help` rule is auto-added without HELP() — must be filtered
+    // out of the Intermediate section so it doesn't double-list.
+    auto interm_pos = content.find("## Intermediate targets");
+    auto builtin_pos = content.find("## Built-in targets");
+    auto interm_block = content.substr(interm_pos, builtin_pos - interm_pos);
+    CHECK_NOT_CONTAINS(interm_block, "`help`");
     // Complete built-in target list.
     CHECK_CONTAINS(content, "make list_input");
     CHECK_CONTAINS(content, "make list_unknown");
@@ -366,8 +384,9 @@ static void test_nested_groups_emit_parents() {
     auto context = read_file("AGENTS.md");
     CHECK_CONTAINS(makefile, "echo 'Processing:';");
     CHECK_CONTAINS(makefile, "echo '  QC:';");
+    // AGENTS.md uses heading-level + full slash-path (no leaf-only indent).
     CHECK_CONTAINS(context, "### Processing");
-    CHECK_CONTAINS(context, "  ### QC");
+    CHECK_CONTAINS(context, "#### Processing/QC");
 }
 
 static void test_temp_in_full_clean() {

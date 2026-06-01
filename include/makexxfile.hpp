@@ -946,7 +946,9 @@ class Makefile {
 		cf << "    auto& r = mf.add(\"output.o\", \"input.cpp\");   // or {tgt1,tgt2}, {src1,src2}\n";
 		cf << "    r << \"g++ -c $< -o $@\";                      // append commands ($<, $@, $^)\n";
 		cf << "    r << FINAL;                                   // included in `make all`\n";
-		cf << "    r << PHONY;                                   // non-file target (install, etc.)\n";
+		cf << "    r << PHONY;                                   // REQUIRED whenever the target name\n";
+		cf << "                                                  //   isn't a file the recipe creates\n";
+		cf << "                                                  //   (install, clean_*, list_*, etc.)\n";
 		cf << "    r << HELP(\"description shown in make help\");\n";
 		cf << "    r << TEMP(\"scratch.tmp\");                     // cleaned by full_clean/soft_clean\n";
 		cf << "    r << RETAIN;                                  // exclude rule outputs from soft_clean\n";
@@ -1037,17 +1039,58 @@ class Makefile {
 		if(has_ungrouped)
 			write_entries(cf, "");
 		for(auto &grp : help_group_order) {
-			std::string display_name = grp;
-			auto slash = grp.rfind('/');
-			if(slash != std::string::npos)
-				display_name = grp.substr(slash + 1);
+			// Encode hierarchy two ways: heading level (more `#`s for deeper
+			// groups) and the full slash-path in the heading text. The
+			// earlier "indented `### Leaf`" form read as a stray indent.
 			int depth = std::count(grp.begin(), grp.end(), '/');
-			std::string gindent(depth * 2, ' ');
-			cf << gindent << "### " << display_name << "\n\n";
+			std::string hashes(3 + depth, '#');
+			cf << hashes << " " << grp << "\n\n";
 			auto dit = group_descriptions.find(grp);
 			if(dit != group_descriptions.end())
-				cf << gindent << "_" << dit->second << "_\n\n";
+				cf << "_" << dit->second << "_\n\n";
 			write_entries(cf, grp);
+			cf << "\n";
+		}
+
+		// Targets without HELP() — typically internal/glue rules whose names
+		// appear in other rules' dep lists. Listed so the dependency graph
+		// the workflow user reads is complete; otherwise a "(from
+		// `bodd_forecast.t`)" annotation can look orphaned.
+		std::vector<Rule *> unlabeled;
+		std::set<std::string> const builtin_names = {
+			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"
+		};
+		for(auto const &cmd : commands) {
+			if(!cmd->help_lines.empty()) continue;
+			Rule *r = cmd.get();
+			auto trange = rule_target.equal_range(r);
+			if(trange.first == trange.second) continue;
+			bool is_builtin = false;
+			for(auto j = trange.first; j != trange.second; j++)
+				if(builtin_names.count(j->second)) { is_builtin = true; break; }
+			if(is_builtin) continue;
+			unlabeled.push_back(r);
+		}
+		if(!unlabeled.empty()) {
+			cf << "## Intermediate targets\n\n";
+			cf << "_Rules without a `HELP()` description — typically internal / glue steps. Listed so the dependency graph stays complete (a `(from X)` annotation above might point to one of these)._\n\n";
+			for(auto *r : unlabeled) {
+				auto trange = rule_target.equal_range(r);
+				std::string tlist;
+				for(auto j = trange.first; j != trange.second; j++) {
+					if(!tlist.empty()) tlist += ", ";
+					tlist += "`" + j->second + "`";
+				}
+				std::string deps;
+				auto srange = rule_source.equal_range(r);
+				for(auto j = srange.first; j != srange.second; j++) {
+					if(!deps.empty()) deps += ", ";
+					deps += "`" + j->second + "`";
+				}
+				cf << "- " << tlist;
+				if(!deps.empty()) cf << " (from " << deps << ")";
+				cf << "\n";
+			}
 			cf << "\n";
 		}
 

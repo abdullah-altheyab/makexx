@@ -9,6 +9,9 @@
 - **Inline DSL quick reference:** AGENTS.md now embeds a compact, self-contained DSL cheat sheet covering the common call shapes (rule + flags + menu + settings + helpers). Lets offline / sandboxed / no-web-fetch agents make routine edits (add a rule, mark phony, add to a group) without having to fetch the upstream reference. The raw-URL links to the full reference are kept as a "go here for edge cases" fallback
 - **Target annotations:** phony rules now show `(phony)` and rules with `<< TOOL(...)` show `(uses ...)`, alongside the existing `(from ...)` source-deps annotation
 - **Built-in target list completed:** added `list_input` and `list_unknown`; tightened wording on the rest
+- **Intermediate-targets section:** AGENTS.md now lists rules without a `HELP()` description (typically internal / glue steps) so the dependency graph the workflow user reads is complete. Without this, a `(from foo.t)` annotation pointing at an un-`HELP`'d rule looked orphaned. Built-in phony targets like `help` are filtered so they don't double-list
+- **Nested group headings:** changed `### Leaf` (indented for depth) to `#### Parent/Child` — heading level encodes depth, the slash-path in the heading text makes the nesting unambiguous. The leaf-only indented form had been misread as a stray indent in eval testing
+- **Clearer PHONY annotation in the embedded cheat sheet:** spelled out that `PHONY` is REQUIRED for any target whose name isn't a file the recipe creates (`install`, `clean_*`, `list_*`). Without this, developer agents writing a new phony rule had to guess and were inconsistent
 
 ## v0.3.1
 
