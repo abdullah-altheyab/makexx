@@ -4,7 +4,7 @@
 
 ### Makefile DSL
 
-- **`<< DESC("file", "description")`** — describe a file (input, intermediate, or output) — what it is, its format, where it comes from. The description is rendered next to the file name in AGENTS.md so any agent reading the project gets the provenance / schema / contact in the same place as the file path. Works in either scope (`mf << DESC(...)` or `rule << DESC(...)`, colocated with the consuming/producing rule); rule-level wins on conflict. Three render sites: inline in `## Input files`; as a `- File: …` sub-bullet under each target row in `## Targets` so the file-level annotation is visually distinct from the rule's `HELP()`; and as a `` `name`: … `` sub-bullet in `## Intermediate targets`
+- **`<< DESC("file", "description")`** — describe a file (input, intermediate, or output) — what it is, its format, where it comes from. The description is rendered next to the file name in AGENTS.md so any agent reading the project gets the provenance / schema / contact in the same place as the file path. Works in either scope (`mf << DESC(...)` or `rule << DESC(...)`, colocated with the consuming/producing rule). Multiple DESC calls for the same file **accumulate** — joined with a space — so you can layer annotations across scopes (e.g. a base description at the makefile level + a contact line added later, or schema notes split across declarations). Order is mf-level first, then rule-level in command-insertion order. Three render sites: inline in `## Input files`; as a `- File: …` sub-bullet under each target row in `## Targets` so the file-level annotation is visually distinct from the rule's `HELP()`; and as a `` `name`: … `` sub-bullet in `## Intermediate targets`
 
 ### AGENTS.md
 

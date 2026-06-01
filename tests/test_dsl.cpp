@@ -346,6 +346,29 @@ static void test_desc() {
     CHECK_CONTAINS(content, "`aux.t`: Intermediate normalisation table.");
 }
 
+static void test_desc_accumulates() {
+    current_test = "test_desc_accumulates";
+    TempDir td;
+    Makefile mf;
+    // mf-level DESC: base annotation.
+    mf << DESC("shared.csv", "Quarterly NPV scenarios from finance.");
+    // A second mf-level DESC for the same file: should append.
+    mf << DESC("shared.csv", "Contact: finance-quant@company.");
+    // Rule-level DESC for the same file: should append after mf-level.
+    mf.add("model.t", "shared.csv")
+        << HELP("build model")
+        << DESC("shared.csv", "Schema: scenario, year, npv.")
+        << "model $< > $@";
+    mf.generate();
+    auto content = read_file("AGENTS.md");
+    auto inputs_pos = content.find("## Input files");
+    auto targets_pos = content.find("## Targets");
+    auto inputs_block = content.substr(inputs_pos, targets_pos - inputs_pos);
+    // All three fragments must appear, joined by spaces.
+    CHECK_CONTAINS(inputs_block,
+        "Quarterly NPV scenarios from finance. Contact: finance-quant@company. Schema: scenario, year, npv.");
+}
+
 static void test_open_file() {
     current_test = "test_open_file";
     TempDir td;
@@ -553,6 +576,7 @@ int main() {
     test_open_file();
     test_tool();
     test_desc();
+    test_desc_accumulates();
     test_agents_md();
     test_mf_phony_and_retain();
     test_preamble();

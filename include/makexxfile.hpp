@@ -396,8 +396,11 @@ class HELP { // add help to the menu
 // name. Usable in either scope:
 //   mf << DESC("input.txt", "annual price forecasts for the next 10 years");
 //   rule << DESC("input.txt", "...");  // colocated with the rule that consumes it
-// Both forms feed the same map; the rule-level form has no extra semantics
-// beyond letting you write the description next to the consuming rule.
+// Multiple DESC calls for the same file ACCUMULATE — they're joined with a
+// space — so you can layer annotations across scopes (e.g. an mf-level
+// "what is it" + a rule-level "how this rule uses it", or schema notes
+// + a contact line in separate DESCs). Order: mf-level first, then
+// rule-level in command-insertion order.
 class DESC {
   public:
 	std::string file;
@@ -455,7 +458,9 @@ inline Rule &operator<<(Rule &a, TOOL t) {
 	return a;
 }
 inline Rule &operator<<(Rule &a, DESC d) {
-	a.file_descriptions[d.file] = d.description;
+	auto &existing = a.file_descriptions[d.file];
+	if(existing.empty()) existing = d.description;
+	else existing += " " + d.description;
 	return a;
 }
 
@@ -972,7 +977,9 @@ class Makefile {
 		cf << "                                                  //   isn't a file the recipe creates\n";
 		cf << "                                                  //   (install, clean_*, list_*, etc.)\n";
 		cf << "    r << HELP(\"description shown in make help\");\n";
-		cf << "    r << DESC(\"input.txt\", \"what this file is\");  // also works as mf << DESC(...)\n";
+		cf << "    r << DESC(\"input.txt\", \"what this file is\");  // also mf << DESC(...);\n";
+		cf << "                                                  //   multiple DESC for the same file\n";
+		cf << "                                                  //   accumulate (joined with a space)\n";
 		cf << "    r << TEMP(\"scratch.tmp\");                     // cleaned by full_clean/soft_clean\n";
 		cf << "    r << RETAIN;                                  // exclude rule outputs from soft_clean\n";
 		cf << "    r << TOOL(\"g++\");                             // executable prereq, mtime-tracked\n";
@@ -1000,12 +1007,17 @@ class Makefile {
 			if(target_rule.find(*itr) == target_rule.end())
 				inputfiles_list.insert(*itr);
 		}
-		// Combined file-description map: makefile-level entries plus any
-		// declared on individual rules. Rule-level wins on conflict.
+		// Combined file-description map. Multiple DESC calls accumulate
+		// (joined with a space) across scopes too: mf-level annotations
+		// come first, then rule-level descriptions in command-insertion
+		// order.
 		std::map<std::string, std::string> all_file_desc = mf_file_descriptions;
 		for(auto const &cmd : commands)
-			for(auto const &kv : cmd->file_descriptions)
-				all_file_desc[kv.first] = kv.second;
+			for(auto const &kv : cmd->file_descriptions) {
+				auto &existing = all_file_desc[kv.first];
+				if(existing.empty()) existing = kv.second;
+				else existing += " " + kv.second;
+			}
 		if(!inputfiles_list.empty()) {
 			cf << "## Input files\n\n";
 			for(auto &itm : inputfiles_list) {
@@ -1230,8 +1242,11 @@ class Makefile {
 
 	// `mf << DESC("file", "description")` registers a free-text description
 	// for a file (typically an input), shown next to it in AGENTS.md.
+	// Multiple calls for the same file accumulate (joined with a space).
 	Makefile& operator<<(DESC d) {
-		mf_file_descriptions[d.file] = d.description;
+		auto &existing = mf_file_descriptions[d.file];
+		if(existing.empty()) existing = d.description;
+		else existing += " " + d.description;
 		return *this;
 	}
 
