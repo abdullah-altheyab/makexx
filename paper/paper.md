@@ -44,7 +44,7 @@ The API centers on a `Makefile` class with an `add()` method for declaring rules
 
 ```cpp
 Makefile mf;
-mf.set_current_menu("Processing");
+mf << MENU("Processing");
 mf.add("result.bin", "input.dat")
     << FINAL << HELP("Run simulation")
     << "simulate --input $< --output $@";

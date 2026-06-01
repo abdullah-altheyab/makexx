@@ -159,12 +159,18 @@ mf.context_filename = "CLAUDE.md";   // use a different filename
 **Interactive mode.** Run `makexx -i` for a terminal UI:
 
 - ↑↓, PgUp/PgDn, Home/End to navigate; Tab/Shift+Tab to jump between groups
-- ←→ to fold/unfold groups; `▲`/`▼` scroll indicators
+- ←→ to fold/unfold groups; ← on an already-folded group propagates the fold to its parent
 - Enter to run, `d` to dry-run preview (`make -n`), `?` to show dependencies
-- `/` to search and filter targets by name or description
+- `/` to search and filter (Ctrl+Backspace clears the query; matches under folded parents still surface)
 - Space to multi-select targets (`●`), `x` to deselect all, Enter runs all selected in sequence
+- `r` to refresh — rerun `makexx -c` and reload the menu in place. Cursor, fold, multi-select, and search filter are preserved
 - Green **Done.** / red **Failed.** exit status after each run
 - Recently run targets appear in a **Recent** group at the top
+- `q` quits. Esc dismisses whatever is active (search / etc.); when nothing is active, a second Esc within 2 s exits — single Esc is no longer a quit, to stop muscle-memory exits
+
+**Cross-project tool tracking.** Use `<< TOOL("prog")` to declare an external executable as a prerequisite — its mtime is tracked (so rebuilding it triggers downstream rebuilds), but it's not added to `$^`. Bare names are resolved via `$(shell command -v ...)` at make time; paths containing `/` are used literally — perfect for tools built in a sibling project.
+
+**Helpful errors.** When `make` fails, `makexx` parses the error for the failing target and prints a compiler-style annotation pointing back to the matching `mf.add(...)` line in your `makefile.cpp` — closes the loop where errors used to reference the *generated* makefile that you don't write.
 
 **Helper functions.** Path manipulation utilities available in your `makefile.cpp`:
 
@@ -175,6 +181,9 @@ change_ext("file.cpp", ".o")           // "file.o"
 change_ext("file.cpp", {".o", ".d"})   // {"file.o", "file.d"}
 get_ext("file.cpp")                    // "cpp"
 join_path("obj", "file.o")             // "obj/file.o"
+open_file("report.pdf")                // shell snippet that hands the file to whichever
+                                        //   OS opener is available at make time
+                                        //   (wslview, xdg-open, open, start)
 ```
 
 ---
@@ -284,6 +293,9 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   r << TEMP("scratch.tmp");                     // cleaned by full_clean / soft_clean
   r << RETAIN;                                  // exclude all of rule's outputs from soft_clean
   r << RETAIN("file.bin");                      // selective; also RETAIN("a","b") or RETAIN({"a","b"})
+  r << TOOL("prog");                            // external executable: mtime-tracked prereq
+                                                //   not in `$^`. Bare name → command -v lookup;
+                                                //   path with '/' → literal. Variadic too.
   mf << MENU("Build");                          // group subsequent rules
   mf << MENU("Build/Tests", "unit tests");      // nested group + description
   mf << PHONY("install");                       // declare phony at the makefile level
@@ -299,6 +311,8 @@ Helpers (free functions):
   change_ext("file.cpp", ".o")          → "file.o"
   join_path("obj", "file.o")            → "obj/file.o"
   get_ext("file.cpp")                   → "cpp"
+  open_file("report.pdf")               → shell snippet that hands the file to the OS opener
+                                            available at make time (wslview, xdg-open, open, start)
 
 Inside command strings use the standard GNU make automatics `$<`, `$@`, `$^`.
 

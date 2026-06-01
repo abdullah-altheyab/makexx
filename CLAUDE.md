@@ -76,6 +76,9 @@ rule << INPUT;    // source file marker
 rule << TEMP({"tmp1", "tmp2"});     // cleaned by full_clean and soft_clean
 rule << BYPRODUCT("byproduct.log"); // cleaned by full_clean and soft_clean
 rule << TARGET("manual_output");    // hidden/non-reproducible target
+rule << TOOL("prog1");               // external executable: mtime-tracked prereq, not in `$^`
+                                     // bare name → resolved via $(shell command -v ...);
+                                     // path with '/' → used literally. variadic + braced too.
 rule << HELP("builds the thing");   // shown by 'make help'
 rule << HELP("Deploy", "deploy it"); // with explicit group
 
@@ -133,6 +136,9 @@ change_ext("file.cpp", ".o")           // "file.o" — replace file extension
 change_ext("file.cpp", {".o", ".d"})   // {"file.o", "file.d"} — same file, multiple extensions
 join_path("obj", "file.o")             // "obj/file.o" — join directory and filename
 get_ext("file.cpp")                    // "cpp" — file extension without dot
+open_file("report.pdf")                // shell snippet that hands the file to whichever
+                                        //   opener is available at make time
+                                        //   (wslview → xdg-open → open → start)
 replace_all(str, from, to)             // string replacement
 to_upper(str) / to_lower(str)          // case conversion
 ```
@@ -159,11 +165,13 @@ The file is generated entirely from data the `Makefile` class already holds — 
 
 `makexx -i` launches a terminal UI for selecting and running targets. It reads the `.makexx_menu` file generated alongside the makefile. POSIX only.
 
-Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom, Tab/Shift+Tab jump between groups, ←→ fold/unfold groups, Enter to run, `d` dry-run preview (`make -n`), `?` show dependencies, `/` to search, Space to multi-select, `x` deselect all, q/Esc to quit. After running a target, a green **Done.** or red **Failed.** indicates the exit status.
+Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom, Tab/Shift+Tab jump between groups, ←→ fold/unfold groups, Enter to run, `d` dry-run preview (`make -n`), `?` show dependencies, `/` to search, Space to multi-select, `x` deselect all, `r` to refresh (rerun `makexx -c` and reload the menu), `q` to quit, Esc to dismiss whatever is active (or to quit when nothing is — requires a second Esc within 2 s). After running a target, a green **Done.** or red **Failed.** indicates the exit status. Ctrl+C / Ctrl+Z / Ctrl+\ are intercepted so they don't terminate the TUI.
 
-**Nested groups:** parent group headers (e.g. `Processing` for a `Processing/QC` rule) are auto-created and rendered as section headers above their children, indented by depth. Folding a parent collapses all of its descendants.
+**Nested groups:** parent group headers (e.g. `Processing` for a `Processing/QC` rule) are auto-created and rendered as section headers above their children, indented by depth. Folding a parent collapses all of its descendants. Pressing ← on an already-folded group propagates the fold up to its parent.
 
-**Search:** Press `/` to enter search mode. Type to filter targets by name or description (case-insensitive). Backspace removes characters. Enter locks the filter and returns to normal navigation. Esc clears the filter. Groups with no matching entries are hidden; folded groups auto-expand when a filter is active.
+**Search:** Press `/` to enter search mode. Type to filter targets by name or description (case-insensitive). Backspace removes characters; **Ctrl+Backspace** clears the whole query while staying in search mode. Enter locks the filter and returns to normal navigation. Esc clears the filter. Matches under folded parent groups still surface — the parent's fold state doesn't hide search results.
+
+**Refresh (`r`):** rerun `makexx -c` (which regenerates the menu file from the current `makefile.cpp`) and reload the menu in place. Cursor (by target name), fold state (by group name — explicit unfolds survive even when the rule declares `FOLDED`), multi-select, and search filter are all preserved across the reload. Compile errors are shown; in-memory state is kept intact so you can fix and try again.
 
 **Viewport scrolling:** When the menu is taller than the terminal, the view scrolls to keep the selected item visible. `▲`/`▼` indicators show when content extends above or below. Long descriptions are word-wrapped to fit the terminal width. The terminal size is re-read each frame so resizing works live.
 
