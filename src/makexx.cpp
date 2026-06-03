@@ -7,6 +7,8 @@
 #include <map>
 #include <set>
 #include <chrono>
+#include <ctime>
+#include <algorithm>
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #endif
@@ -157,6 +159,127 @@ int build_graph_html() {
 
 int run_cmd(string cmd) {
 	return system(cmd.c_str());
+}
+
+// --- `makexx --stats`: read-time aggregation of the .makexx_hits log ---------
+// The log is raw, append-only per-rule events (epoch \t rule \t target \t
+// duration_ms) written when mf.profile is on. We aggregate here (no
+// pre-summarized state on disk), so any view/window stays possible.
+namespace stats {
+	static string human_ms(long long ms) {
+		char b[32];
+		if(ms < 1000)        snprintf(b, sizeof b, "%lldms", ms);
+		else if(ms < 60000)  snprintf(b, sizeof b, "%.1fs", ms / 1000.0);
+		else {
+			long long s = ms / 1000;
+			snprintf(b, sizeof b, "%lldm %02llds", s / 60, s % 60);
+		}
+		return b;
+	}
+	static string ago(long secs) {
+		char b[32];
+		if(secs < 0)       return "just now";
+		if(secs < 60)      snprintf(b, sizeof b, "%lds ago", secs);
+		else if(secs < 3600)   snprintf(b, sizeof b, "%ldm ago", secs / 60);
+		else if(secs < 86400)  snprintf(b, sizeof b, "%ldh ago", secs / 3600);
+		else               snprintf(b, sizeof b, "%ldd ago", secs / 86400);
+		return b;
+	}
+	static string ymd(long epoch) {
+		time_t t = (time_t)epoch;
+		struct tm tmv;
+		localtime_r(&t, &tmv);
+		char b[16];
+		strftime(b, sizeof b, "%Y-%m-%d", &tmv);
+		return b;
+	}
+}
+
+int show_stats() {
+	std::ifstream f(".makexx_hits");
+	if(!f.is_open()) {
+		std::cerr << "error: .makexx_hits not found. Enable timing with "
+		             "`mf.profile = true;` in makefile.cpp, then run some targets." << endl;
+		return 1;
+	}
+	struct Stat { long count = 0; long long total = 0; long last = 0; std::vector<long long> durs; };
+	std::map<string, Stat> agg;
+	long total_runs = 0, win_first = 0, win_last = 0;
+	long long grand_total = 0;
+	string line;
+	while(std::getline(f, line)) {
+		// epoch \t kind \t target \t dur_ms
+		size_t a = line.find('\t');
+		if(a == string::npos) continue;
+		size_t b = line.find('\t', a + 1);
+		if(b == string::npos) continue;
+		size_t c = line.find('\t', b + 1);
+		if(c == string::npos) continue;
+		long epoch = atol(line.substr(0, a).c_str());
+		string target = line.substr(b + 1, c - b - 1);
+		long long dur = atoll(line.substr(c + 1).c_str());
+		auto &s = agg[target];
+		s.count++; s.total += dur; s.durs.push_back(dur);
+		if(epoch > s.last) s.last = epoch;
+		total_runs++; grand_total += dur;
+		if(win_first == 0 || epoch < win_first) win_first = epoch;
+		if(epoch > win_last) win_last = epoch;
+	}
+	if(agg.empty()) {
+		cout << "No timing events recorded yet in .makexx_hits." << endl;
+		return 0;
+	}
+
+	std::vector<std::pair<string, Stat>> rows(agg.begin(), agg.end());
+	std::sort(rows.begin(), rows.end(), [](auto const &x, auto const &y) {
+		return x.second.total > y.second.total;   // bottleneck-first
+	});
+
+	long now = (long)time(nullptr);
+	long span_days = win_last > win_first ? (win_last - win_first) / 86400 : 0;
+	cout << "\033[1mmakexx usage stats\033[0m  \033[2m(.makexx_hits, sorted by total time)\033[0m\n";
+	cout << "  " << total_runs << " runs across " << rows.size() << " targets · since "
+	     << stats::ymd(win_first) << " (" << span_days << "d) · "
+	     << stats::human_ms(grand_total) << " total tracked\n\n";
+
+	size_t w = 6;
+	for(auto const &r : rows) w = std::max(w, r.first.size());
+	printf("  %-*s  %6s  %10s  %10s  %10s\n", (int)w, "TARGET", "RUNS", "LAST", "TOTAL", "MEDIAN");
+	for(auto &r : rows) {
+		auto &s = r.second;
+		std::sort(s.durs.begin(), s.durs.end());
+		long long med = s.durs[s.durs.size() / 2];
+		printf("  %-*s  %6ld  %10s  %10s  %10s\n", (int)w, r.first.c_str(), s.count,
+		       stats::ago(now - s.last).c_str(), stats::human_ms(s.total).c_str(),
+		       stats::human_ms(med).c_str());
+	}
+
+	// Cross-reference the menu (all known targets) to surface ones with no
+	// recorded runs — review candidates for "is this still used?".
+	std::ifstream mf(".makexx_menu");
+	if(mf.is_open()) {
+		std::vector<string> never;
+		string ml;
+		while(std::getline(mf, ml)) {
+			size_t t1 = ml.find('\t');
+			if(t1 == string::npos) continue;
+			string col0 = ml.substr(0, t1);
+			if(col0 == "!group" || col0 == "!desc" || col0 == "Built-in") continue;
+			size_t t2 = ml.find('\t', t1 + 1);
+			string target = ml.substr(t1 + 1, (t2 == string::npos ? ml.size() : t2) - t1 - 1);
+			if(target.empty() || target[0] == '=') continue;   // skip multi-target continuations
+			if(!agg.count(target)) never.push_back(target);
+		}
+		std::sort(never.begin(), never.end());
+		never.erase(std::unique(never.begin(), never.end()), never.end());
+		if(!never.empty()) {
+			cout << "\n\033[2mNever recorded (in menu, 0 runs — review candidates):\033[0m\n  ";
+			for(size_t i = 0; i < never.size(); i++)
+				cout << never[i] << (i + 1 < never.size() ? ", " : "");
+			cout << "\n";
+		}
+	}
+	return 0;
 }
 
 // Run `make`, stream its output through to the user, and on failure parse
@@ -1079,6 +1202,7 @@ int main(int argc, char **argv) {
 				<< "  -i              Interactive target selector (TUI)\n"
 				<< "  -Dname[=value]  Define preprocessor macro for makefile.cpp\n"
 				<< "  --build-graph   Assemble standalone makefile_graph.html from .makexx_graph.json\n"
+				<< "  --stats         Show per-rule usage/timing from .makexx_hits (needs mf.profile)\n"
 				<< "  -h, --help      Show this help\n"
 				<< "  --version       Show version\n\n"
 				<< "All other flags are forwarded to make.\n";
@@ -1093,6 +1217,11 @@ int main(int argc, char **argv) {
 			// .makexx_graph.json. No compile, no make. Invoked by the
 			// generated `makefile_graph.html` rule.
 			return build_graph_html();
+		}
+		if(strcmp(argv[i], "--stats") == 0) {
+			// Read-only: aggregate the .makexx_hits usage/timing log. No
+			// compile, no make.
+			return show_stats();
 		}
 	}
 	bool update_makefile_hpp = false;

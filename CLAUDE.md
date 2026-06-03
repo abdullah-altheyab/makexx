@@ -54,6 +54,7 @@ The `.makexx_*` prefix means plain `ls` hides them, so `list_unknown` ignores th
 | `-i` | Interactive target selector (TUI with arrow keys, foldable groups, search) |
 | `-Dname=value` | Define a C++ preprocessor macro, forwarded to the compiler when compiling `makefile.cpp` |
 | `--build-graph` | Assemble the standalone `makefile_graph.html` from `.makexx_graph.json` and exit (no compile, no `make`). Invoked by the generated `makefile_graph.html` rule; normally you run `make graph` rather than this directly |
+| `--stats` | Read the `.makexx_hits` usage/timing log (written when `mf.profile = true`) and print per-rule run counts, last-run, total and median time — sorted by total time (bottleneck first) — plus menu targets with zero recorded runs. Read-only; no compile, no `make` |
 | `-h`, `--help` | Show usage help |
 | `--version` | Show version |
 
@@ -181,7 +182,7 @@ The target column is the literal `$@`, so the log joins cleanly to graph nodes a
 - `.makexx_hits` is **never** removed by `full_clean`/`soft_clean` (it's accumulated history); the `.makexx_prof/` temp dir is cleaned by `full_clean`. Both are gitignored and excluded from `list_unknown`.
 - Off by default — it adds two process spawns + a temp file per built target.
 
-This log is intended to be consumed later by a `makexx --stats` report and by heat-coloring in the interactive graph; both are just readers of the same raw events.
+`makexx --stats` reads this log and prints a per-rule table — run count, last-run (relative), total time, median — sorted by total time so the bottleneck is on top, plus a "never recorded" list of menu targets with zero runs (review/deletion candidates). It aggregates entirely at read time. Heat-coloring in the interactive graph is the other planned reader of the same raw events.
 
 ### AI agent context file (AGENTS.md)
 

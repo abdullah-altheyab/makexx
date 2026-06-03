@@ -1212,6 +1212,41 @@ class Makefile {
 			cf << "- `make graph` — Open the interactive dependency graph (standalone HTML) in a browser\n";
 		}
 		cf << "\n";
+
+		// When profiling is on, hand agents the breadcrumbs to estimate build
+		// time themselves: where the data is, its exact schema, the join key,
+		// and the procedure. We document the data and how to use it, not just
+		// the project shape — the analysis stays agent-side.
+		if(profile) {
+			cf << "## Usage & timing data\n\n";
+			cf << "This project records how long each rule takes (`mf.profile` is on). On every "
+			      "successful build, one tab-separated row is appended to the append-only "
+			      "**`.makexx_hits`** log (it accumulates across runs):\n\n";
+			cf << "`epoch_seconds <TAB> rule <TAB> target <TAB> duration_ms` — one row per rule execution. Columns:\n\n";
+			cf << "- `epoch_seconds` — when the rule finished (Unix time)\n";
+			cf << "- the literal word `rule`\n";
+			cf << "- `target` — the built target. **This is the same string as the targets listed above"
+			   << (graph ? " and as the node ids in `.makexx_graph.json`" : "")
+			   << "** — use it to join timing data to the dependency graph.\n";
+			cf << "- `duration_ms` — wall-clock run time of that rule, in milliseconds\n";
+			cf << "\nOnly successful runs are logged (a failed recipe never reaches the log line).\n\n";
+			cf << "### Estimating how long a target takes to build\n\n";
+			cf << "1. Find the target's dependency closure (the rules that must run to produce it) from "
+			      "the **Targets** section above"
+			   << (graph ? " or from `.makexx_graph.json` (machine-readable nodes + edges)" : "")
+			   << ".\n";
+			cf << "2. For each of those rules, take the **median** `duration_ms` of its rows in "
+			      "`.makexx_hits` (median, not mean — early runs are cold-cache outliers).\n";
+			cf << "3. **Sum** the medians for a serial (`make` / `-j1`) build, or take the **critical "
+			      "path** (longest time-weighted chain through the dependency graph) for a parallel "
+			      "(`make -j`) build. Report the two as a range.\n";
+			cf << "4. Rules with **no rows** in the log have no data — report them as unknown, don't guess. "
+			      "Confidence ≈ the fraction of the closure that has history.\n";
+			cf << "5. For an *incremental* estimate (only what's currently out of date), run "
+			      "`make -n <target>` to see which rules would actually execute, and sum just those.\n";
+			cf << "\nCaveat: under `make -j` rule timings overlap, so the sum overestimates parallel "
+			      "wall time — the critical path is the better parallel estimate.\n\n";
+		}
 		cf.close();
 	}
 

@@ -82,6 +82,8 @@ mf.add("report.pdf", "filtered.bin") << HELP("Generate QC report") << "qcplot $<
 
 **Interactive dependency graph.** With `mf.generate_with_graph()`, `make graph` opens a **single self-contained `makefile_graph.html`** in your browser — no server, no network, works offline. The Cytoscape/dagre viewer lays the build DAG out left-to-right, colours nodes by kind (input / intermediate / final / phony / tool), folds each `MENU` group, searches by name / `HELP` / `DESC`, and shows details on hover. The static Graphviz `make makefile_graph.pdf` is still there for a shareable artifact.
 
+**Usage & timing data.** Set `mf.profile = true` and makexx logs how long each rule takes to an append-only `.makexx_hits` on every run. `makexx --stats` reads it back as a per-rule table — runs, last-used, total and median time, sorted so the **bottleneck is on top** — plus the targets nobody has run (review/deletion candidates). Local, append-only, no server: build-scan insight for a plain Makefile.
+
 **Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project.
 
 **Helpful errors.** When `make` fails, `makexx` parses the error and points back to the matching `mf.add(...)` line in your `makefile.cpp` — no more chasing the generated makefile.
