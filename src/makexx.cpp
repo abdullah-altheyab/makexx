@@ -48,6 +48,14 @@ using std::vector;
 
 #include "makexxfile_embed.hpp"
 #include "starter_embed.hpp"
+// Embedded interactive dependency-graph viewer assets (vendored Cytoscape
+// stack + our viewer template). Assembled into a standalone HTML file by
+// build_graph_html().
+#include "graph_dagre_js_embed.hpp"
+#include "graph_cytoscape_js_embed.hpp"
+#include "graph_cytoscape_dagre_js_embed.hpp"
+#include "graph_expand_collapse_js_embed.hpp"
+#include "graph_viewer_html_embed.hpp"
 #include <cstring>
 #include <cerrno>
 #include <cassert>
@@ -95,6 +103,48 @@ char *read_file(char const *file) {
 	fclose(f);
 	string[fsize] = 0;
 	return string;
+}
+
+// Assemble the standalone interactive dependency-graph HTML: inline the
+// embedded Cytoscape stack + this project's `.makexx_graph.json` into the
+// viewer template, producing a single self-contained, offline file. The
+// JSON is written by mf.generate_with_graph() in the user's makefile.cpp.
+int build_graph_html() {
+	if(!exists(".makexx_graph.json")) {
+		std::cerr << "error: .makexx_graph.json not found. Enable the graph by calling "
+		             "mf.generate_with_graph() in makefile.cpp, then run makexx -c." << endl;
+		return 1;
+	}
+	std::ifstream jf(".makexx_graph.json");
+	std::stringstream jbuf;
+	jbuf << jf.rdbuf();
+	string data = jbuf.str();
+
+	// Load order matters: dagre defines window.dagre, which the UMD
+	// cytoscape-dagre adapter reads at evaluation time; the expand/collapse
+	// extension is last. Separating semicolons guard against a lib whose
+	// final statement isn't terminated.
+	string libs;
+	libs += graph_dagre_js;            libs += "\n;\n";
+	libs += graph_cytoscape_js;        libs += "\n;\n";
+	libs += graph_cytoscape_dagre_js;  libs += "\n;\n";
+	libs += graph_expand_collapse_js;  libs += "\n;\n";
+
+	string html = graph_viewer_html;
+	auto p = html.find("/*__MAKEXX_GRAPH_LIBS__*/");
+	if(p != string::npos)
+		html.replace(p, strlen("/*__MAKEXX_GRAPH_LIBS__*/"), libs);
+
+	auto s = html.find("/*makexx-data-start*/");
+	auto e = html.find("/*makexx-data-end*/");
+	if(s != string::npos && e != string::npos && e >= s) {
+		e += strlen("/*makexx-data-end*/");
+		html.replace(s, e - s, data);
+	}
+
+	write_file("makefile_graph.html", html.c_str(), (int)html.size());
+	cout << "Wrote makefile_graph.html (" << (html.size() / 1024) << " KB)" << endl;
+	return 0;
 }
 
 int run_cmd(string cmd) {
@@ -1020,6 +1070,7 @@ int main(int argc, char **argv) {
 				<< "  -v              Verbose output\n"
 				<< "  -i              Interactive target selector (TUI)\n"
 				<< "  -Dname[=value]  Define preprocessor macro for makefile.cpp\n"
+				<< "  --build-graph   Assemble standalone makefile_graph.html from .makexx_graph.json\n"
 				<< "  -h, --help      Show this help\n"
 				<< "  --version       Show version\n\n"
 				<< "All other flags are forwarded to make.\n";
@@ -1028,6 +1079,12 @@ int main(int argc, char **argv) {
 		if(strcmp(argv[i], "--version") == 0) {
 			cout << "makexx " << MAKEXX_VERSION << endl;
 			return 0;
+		}
+		if(strcmp(argv[i], "--build-graph") == 0) {
+			// Standalone mode: assemble makefile_graph.html from the existing
+			// .makexx_graph.json. No compile, no make. Invoked by the
+			// generated `makefile_graph.html` rule.
+			return build_graph_html();
 		}
 	}
 	bool update_makefile_hpp = false;

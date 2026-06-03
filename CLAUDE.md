@@ -16,7 +16,7 @@ cmake --install build   # installs to /usr/local/bin by default
 
 Output binary: `build/makexx`
 
-**How the embed works:** `include/makexxfile.hpp` and `src/starter.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `starter_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required.
+**How the embed works:** `include/makexxfile.hpp` and `src/starter.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `starter_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required. The same embed step also bakes in the interactive-graph viewer assets under `assets/` (the vendored Cytoscape/dagre/expand-collapse stack and `assets/graph_viewer.html`) so `makexx --build-graph` can assemble a single self-contained HTML graph offline.
 
 ## How makexx works at runtime
 
@@ -44,6 +44,7 @@ When `makexx` is invoked in a user's project directory:
 | `-v` | Verbose output |
 | `-i` | Interactive target selector (TUI with arrow keys, foldable groups, search) |
 | `-Dname=value` | Define a C++ preprocessor macro, forwarded to the compiler when compiling `makefile.cpp` |
+| `--build-graph` | Assemble the standalone `makefile_graph.html` from `.makexx_graph.json` and exit (no compile, no `make`). Invoked by the generated `makefile_graph.html` rule; normally you run `make graph` rather than this directly |
 | `-h`, `--help` | Show usage help |
 | `--version` | Show version |
 
@@ -124,7 +125,10 @@ mf.context = false;                          // disable AGENTS.md generation
 mf.context_filename = "CLAUDE.md";           // override output filename (default "AGENTS.md")
 
 mf.generate();              // write the makefile + .makexx_menu + AGENTS.md
-mf.generate_with_graph();   // write the makefile + .makexx_menu + AGENTS.md + makefile_graph.gv (Graphviz DOT)
+mf.generate_with_graph();   // also write makefile_graph.gv (Graphviz DOT) + .makexx_graph.json,
+                            //   and add a `graph` target. `make graph` assembles a standalone
+                            //   interactive makefile_graph.html and opens it; `make makefile_graph.pdf`
+                            //   still renders the static Graphviz PDF.
 ```
 
 ### Helper functions
@@ -234,6 +238,8 @@ include/makexxfile.hpp        — the Makefile DSL header (source of truth, embe
 src/starter.cpp               — starter makefile.cpp written to new project directories (source of truth, embedded at build time)
 CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
+assets/graph_viewer.html      — interactive graph viewer template (placeholders filled by `makexx --build-graph`)
+assets/vendor/                — vendored Cytoscape.js + dagre + cytoscape-dagre + expand-collapse (embedded, kept offline)
 examples/compile/             — example: multi-target C++ project build
 examples/portfolio_analytics/ — example: domain-specific workflow with config separation
 examples/family_tree/         — example: genealogy workflow with AI context generation

@@ -80,6 +80,8 @@ mf.add("report.pdf", "filtered.bin") << HELP("Generate QC report") << "qcplot $<
 
 **Interactive mode (`makexx -i`).** A TUI for browsing and running targets: `/` to search and filter, Space to multi-select, `d` to dry-run, `?` to show dependencies, `r` to refresh after editing `makefile.cpp` (cursor / fold / select / search are preserved across the reload). `q` quits; Esc dismisses; double-Esc quits when nothing is active. Targets without a `HELP()` are tucked into a folded **Undocumented** group — browse or `/`-search it to find rules you haven't documented yet.
 
+**Interactive dependency graph.** With `mf.generate_with_graph()`, `make graph` opens a **single self-contained `makefile_graph.html`** in your browser — no server, no network, works offline. The Cytoscape/dagre viewer lays the build DAG out left-to-right, colours nodes by kind (input / intermediate / final / phony / tool), folds each `MENU` group, searches by name / `HELP` / `DESC`, and shows details on hover. The static Graphviz `make makefile_graph.pdf` is still there for a shareable artifact.
+
 **Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project.
 
 **Helpful errors.** When `make` fails, `makexx` parses the error and points back to the matching `mf.add(...)` line in your `makefile.cpp` — no more chasing the generated makefile.
@@ -138,7 +140,7 @@ sudo cp makexx /usr/local/bin/
 
 ## Optional dependencies
 
-- [Graphviz](https://graphviz.org/) — needed only if you use `generate_with_graph()` to visualize your dependency graph as a PDF. Install with `apt install graphviz`, `brew install graphviz`, or `choco install graphviz`.
+- [Graphviz](https://graphviz.org/) — needed only for the static PDF graph (`make makefile_graph.pdf`). The interactive HTML graph (`make graph`) needs nothing — the viewer is self-contained and offline. Install with `apt install graphviz`, `brew install graphviz`, or `choco install graphviz`.
 
 ---
 

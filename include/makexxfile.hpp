@@ -622,8 +622,10 @@ class Makefile {
 		builtin("list_unknown", "List untracked files in directory");
 		builtin("list_input",   "List input files");
 		builtin("help",         "Show this help");
-		if(graph)
-			builtin("makefile_graph.pdf", "Generate dependency graph (requires Graphviz)");
+		if(graph) {
+			builtin("makefile_graph.pdf", "Generate dependency graph PDF (requires Graphviz)");
+			builtin("graph", "Open the interactive dependency graph in a browser");
+		}
 		f << "@" + script;
 	}
 
@@ -749,6 +751,7 @@ class Makefile {
 		std::set<std::string> byprods_list;
 		std::set<std::string> hidden_targets_list;
 		std::set<std::string> phony_targets = {"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"};
+		if(graph) phony_targets.insert("graph");
 		// Collect user-marked phony targets so they appear in .PHONY and
 		// skip the ### GENERATING decoration. `rule << PHONY` marks all
 		// of the rule's targets; `rule << PHONY("name")` marks only named
@@ -949,8 +952,17 @@ class Makefile {
 		myfile << makefile;
 		if(graph) {
 			generate_graph();
+			write_graph_json();
 			myfile << "\nmakefile_graph.pdf : makefile_graph.gv\n";
 			myfile << "\tdot -v -Tpdf makefile_graph.gv -o makefile_graph.pdf\n";
+			// Standalone interactive HTML graph: `makexx --build-graph`
+			// inlines the embedded Cytoscape viewer + this run's
+			// .makexx_graph.json into a single self-contained file; `make
+			// graph` builds it and opens it in the browser.
+			myfile << "makefile_graph.html : .makexx_graph.json\n";
+			myfile << "\tmakexx --build-graph\n";
+			myfile << "graph : makefile_graph.html\n";
+			myfile << "\t@" << open_file("makefile_graph.html") << "\n";
 		}
 		myfile.close();
 		write_menu_file(graph);
@@ -1146,8 +1158,10 @@ class Makefile {
 		cf << "- `make list_input` — List input files (sources not produced by any rule)\n";
 		cf << "- `make list_unknown` — List files in the directory that makexx doesn't know about\n";
 		cf << "- `make help` — Same target list as above with brackets / grouping\n";
-		if(graph)
+		if(graph) {
 			cf << "- `make makefile_graph.pdf` — Render dependency graph as PDF (requires Graphviz)\n";
+			cf << "- `make graph` — Open the interactive dependency graph (standalone HTML) in a browser\n";
+		}
 		cf << "\n";
 		cf.close();
 	}
@@ -1248,8 +1262,10 @@ class Makefile {
 		write_builtin("list_unknown", "List untracked files in directory");
 		write_builtin("list_input",   "List input files");
 		write_builtin("help",         "Show this help");
-		if(graph)
-			write_builtin("makefile_graph.pdf", "Generate dependency graph (requires Graphviz)");
+		if(graph) {
+			write_builtin("makefile_graph.pdf", "Generate dependency graph PDF (requires Graphviz)");
+			write_builtin("graph", "Open the interactive dependency graph in a browser");
+		}
 		mf.close();
 	}
 
@@ -1294,6 +1310,136 @@ class Makefile {
 		if(existing.empty()) existing = d.description;
 		else existing += " " + d.description;
 		return *this;
+	}
+
+	static std::string json_escape(std::string const &s) {
+		std::string o;
+		o.reserve(s.size() + 8);
+		for(unsigned char c : s) {
+			switch(c) {
+				case '"':  o += "\\\""; break;
+				case '\\': o += "\\\\"; break;
+				case '\n': o += "\\n";  break;
+				case '\r': o += "\\r";  break;
+				case '\t': o += "\\t";  break;
+				default:
+					if(c < 0x20) {
+						std::ostringstream h;
+						h << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int)c;
+						o += h.str();
+					} else {
+						o += (char)c;
+					}
+			}
+		}
+		return o;
+	}
+
+	// Dump the dependency graph as JSON (nodes + edges with type / group /
+	// HELP / DESC metadata) for the standalone interactive viewer. `makexx
+	// --build-graph` inlines this into makefile_graph.html. Kept separate
+	// from the Graphviz `.gv` so both the static PDF and the interactive
+	// HTML stay available.
+	void write_graph_json() {
+		std::set<std::string> phony_set;
+		for(auto const &cmd : commands) {
+			if(cmd->phony_all) {
+				auto tr = rule_target.equal_range(cmd.get());
+				for(auto j = tr.first; j != tr.second; j++) phony_set.insert(j->second);
+			}
+			for(auto const &t : cmd->phony_targets) phony_set.insert(t);
+		}
+		for(auto const &t : mf_phony_targets) phony_set.insert(t);
+
+		std::set<std::string> final_set;
+		for(auto const &cmd : commands) {
+			if(cmd->type != FINAL) continue;
+			auto tr = rule_target.equal_range(cmd.get());
+			for(auto j = tr.first; j != tr.second; j++) final_set.insert(j->second);
+		}
+
+		// `help` is a real rule (others like all/clean are raw makefile
+		// text), so filter the built-in target names out of the graph.
+		static const std::set<std::string> builtin_names = {
+			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"
+		};
+
+		auto file_desc = combined_file_descriptions();
+		auto node_type = [&](std::string const &n) -> std::string {
+			if(phony_set.count(n)) return "phony";
+			if(final_set.count(n)) return "final";
+			if(target_rule.find(n) != target_rule.end()) return "intermediate";
+			return "input";
+		};
+		auto node_group = [&](std::string const &n) -> std::string {
+			auto it = target_rule.find(n);
+			return it != target_rule.end() ? it->second->help_group : std::string();
+		};
+		auto node_help = [&](std::string const &n) -> std::string {
+			auto it = target_rule.find(n);
+			if(it == target_rule.end()) return "";
+			std::string h;
+			for(auto const &l : it->second->help_lines) {
+				if(!h.empty()) h += " ";
+				h += l;
+			}
+			return h;
+		};
+
+		std::ofstream j(".makexx_graph.json");
+		j << "{\"title\":\"" << json_escape(title) << "\","
+		  << "\"description\":\"" << json_escape(description) << "\",\"nodes\":[";
+		bool first = true;
+		std::set<std::string> emitted;
+		for(auto const &n : nodes) {
+			if(hidden_nodes.count(n)) continue;
+			if(builtin_names.count(n)) continue;
+			emitted.insert(n);
+			if(!first) j << ","; first = false;
+			std::string desc;
+			auto dit = file_desc.find(n);
+			if(dit != file_desc.end()) desc = dit->second;
+			j << "{\"id\":\"" << json_escape(n) << "\","
+			  << "\"label\":\"" << json_escape(n) << "\","
+			  << "\"ext\":\"" << json_escape(get_ext(n)) << "\","
+			  << "\"type\":\"" << node_type(n) << "\","
+			  << "\"group\":\"" << json_escape(node_group(n)) << "\","
+			  << "\"help\":\"" << json_escape(node_help(n)) << "\","
+			  << "\"desc\":\"" << json_escape(desc) << "\"}";
+		}
+		// External-tool prereqs (`<< TOOL(...)`) aren't in `nodes`; surface
+		// them as their own typed nodes so tool dependencies are visible.
+		std::set<std::string> tool_nodes;
+		for(auto const &cmd : commands)
+			for(auto const &t : cmd->tools) tool_nodes.insert(t);
+		for(auto const &t : tool_nodes) {
+			if(emitted.count(t)) continue;
+			if(!first) j << ","; first = false;
+			j << "{\"id\":\"" << json_escape(t) << "\",\"label\":\"" << json_escape(t)
+			  << "\",\"ext\":\"\",\"type\":\"tool\",\"group\":\"\",\"help\":\"\",\"desc\":\"\"}";
+		}
+		j << "],\"edges\":[";
+		first = true;
+		for(auto const &cmd : commands) {
+			auto sr = rule_source.equal_range(cmd.get());
+			auto tr = rule_target.equal_range(cmd.get());
+			for(auto ti = tr.first; ti != tr.second; ti++) {
+				if(hidden_nodes.count(ti->second) || builtin_names.count(ti->second)) continue;
+				for(auto si = sr.first; si != sr.second; si++) {
+					if(hidden_nodes.count(si->second) || builtin_names.count(si->second)) continue;
+					if(!first) j << ","; first = false;
+					j << "{\"source\":\"" << json_escape(si->second)
+					  << "\",\"target\":\"" << json_escape(ti->second) << "\"}";
+				}
+				for(auto const &tool : cmd->tools) {
+					if(!first) j << ","; first = false;
+					j << "{\"source\":\"" << json_escape(tool)
+					  << "\",\"target\":\"" << json_escape(ti->second) << "\",\"tool\":true}";
+				}
+			}
+		}
+		j << "]}";
+		j.close();
 	}
 
 	void generate_graph(std::string filename = "makefile_graph.gv") {

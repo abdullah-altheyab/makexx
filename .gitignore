@@ -23,6 +23,8 @@ makefile_gen
 makefile_gen.exe
 makefile_graph.gv
 makefile_graph.pdf
+makefile_graph.html
+.makexx_graph.json
 makefile_nodes.txt
 makefile_tmp.txt
 .makexx_menu

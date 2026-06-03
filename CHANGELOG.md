@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Interactive dependency graph
+
+- **New: standalone, interactive dependency graph in the browser.** `mf.generate_with_graph()` now also emits `.makexx_graph.json` (the dependency DAG with per-node type / group / `HELP` / `DESC` / `TOOL` metadata), and the generated makefile gains a `graph` target. `make graph` assembles a **single self-contained `makefile_graph.html`** — the Cytoscape.js + dagre stack and the data are inlined, so it needs no server and no network (works offline / in sandboxed / HPC environments) — and opens it via the existing cross-platform opener. The viewer lays the DAG out left-to-right, colours nodes by type (input / intermediate / final / phony / tool), draws each `MENU` group as a foldable box (Fold all / Unfold all, or click a group), supports `/`-search across name / HELP / DESC, and shows HELP/DESC on hover. The Graphviz `makefile_graph.pdf` path is unchanged and still available — the HTML is for exploration, the PDF for a static shareable artifact. Assembly is done by a new internal `makexx --build-graph` (reads `.makexx_graph.json`, inlines the embedded viewer). Adds ~700 KB to the `makexx` binary for the vendored Cytoscape stack
+
 ### Interactive mode
 
 - **Targets without `HELP()` are now reachable in `makexx -i`.** They're collected into a folded **Undocumented** group (sorted just above the built-ins) so they don't clutter the default view but can be browsed (Tab to the group, → to unfold) and found via `/` search, which surfaces matches even under folded parents. Previously these rules were dropped from `.makexx_menu` entirely, so the TUI couldn't see them. Built-in targets are excluded, multi-target rules list each target individually, and a `<< DESC(...)` annotation is shown as the entry's description when present. `make help` output is unchanged — undocumented targets stay out of it

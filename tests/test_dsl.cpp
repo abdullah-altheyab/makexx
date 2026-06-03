@@ -246,6 +246,35 @@ static void test_undocumented_group() {
     CHECK_NOT_CONTAINS(help_rule, "'parse.o'");
 }
 
+static void test_graph_json() {
+    current_test = "test_graph_json";
+    TempDir td;
+    Makefile mf;
+    mf.title = "GT";
+    mf << MENU("Build");
+    mf.add("app", "app.o") << FINAL << HELP("the app") << TOOL("g++") << "g++ $< -o $@";
+    mf.add("app.o", "app.cpp") << "g++ -c $< -o $@";
+    mf << DESC("app.cpp", "entry point");
+    mf.generate_with_graph();
+    auto j = read_file(".makexx_graph.json");
+    CHECK_CONTAINS(j, "\"title\":\"GT\"");
+    CHECK_CONTAINS(j, "\"id\":\"app\"");
+    CHECK_CONTAINS(j, "\"type\":\"final\"");
+    CHECK_CONTAINS(j, "\"group\":\"Build\"");
+    CHECK_CONTAINS(j, "\"id\":\"app.cpp\"");           // source not produced -> input
+    CHECK_CONTAINS(j, "\"type\":\"input\"");
+    CHECK_CONTAINS(j, "\"desc\":\"entry point\"");
+    CHECK_CONTAINS(j, "\"type\":\"tool\"");            // g++ surfaced as a tool node
+    CHECK_CONTAINS(j, "\"tool\":true");                // and a tool edge
+    CHECK_CONTAINS(j, "{\"source\":\"app.o\",\"target\":\"app\"}");
+    CHECK_NOT_CONTAINS(j, "\"id\":\"help\"");          // built-in rule excluded
+    // Makefile wiring: html target + graph phony, both reach makexx.
+    auto mk = read_file("makefile");
+    CHECK_CONTAINS(mk, "makefile_graph.html : .makexx_graph.json");
+    CHECK_CONTAINS(mk, "makexx --build-graph");
+    CHECK_CONTAINS(mk, "graph : makefile_graph.html");
+}
+
 static void test_preamble() {
     current_test = "test_preamble";
     TempDir td;
@@ -615,6 +644,7 @@ int main() {
     test_help();
     test_menu_order_matches_help();
     test_undocumented_group();
+    test_graph_json();
     test_user_phony();
     test_open_file();
     test_tool();

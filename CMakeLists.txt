@@ -28,10 +28,40 @@ add_custom_command(
     COMMENT "Embedding src/starter.cpp"
 )
 
+# Interactive dependency-graph viewer assets: the vendored Cytoscape stack
+# plus our viewer template are embedded as string literals so `makexx
+# --build-graph` can assemble a standalone, offline, single-file HTML graph.
+set(GRAPH_ASSETS
+    "graph_dagre_js|assets/vendor/dagre.min.js"
+    "graph_cytoscape_js|assets/vendor/cytoscape.min.js"
+    "graph_cytoscape_dagre_js|assets/vendor/cytoscape-dagre.min.js"
+    "graph_expand_collapse_js|assets/vendor/cytoscape-expand-collapse.min.js"
+    "graph_viewer_html|assets/graph_viewer.html"
+)
+set(GRAPH_EMBED_HEADERS)
+foreach(spec IN LISTS GRAPH_ASSETS)
+    string(REPLACE "|" ";" parts "${spec}")
+    list(GET parts 0 gvar)
+    list(GET parts 1 grel)
+    set(gout ${CMAKE_BINARY_DIR}/${gvar}_embed.hpp)
+    add_custom_command(
+        OUTPUT  ${gout}
+        COMMAND ${CMAKE_COMMAND}
+                    -DINPUT=${CMAKE_SOURCE_DIR}/${grel}
+                    -DOUTPUT=${gout}
+                    -DVAR=${gvar}
+                    -P ${EMBED_SCRIPT}
+        DEPENDS ${CMAKE_SOURCE_DIR}/${grel}
+        COMMENT "Embedding ${grel}"
+    )
+    list(APPEND GRAPH_EMBED_HEADERS ${gout})
+endforeach()
+
 add_executable(makexx
     src/makexx.cpp
     ${CMAKE_BINARY_DIR}/makexxfile_embed.hpp
     ${CMAKE_BINARY_DIR}/starter_embed.hpp
+    ${GRAPH_EMBED_HEADERS}
 )
 target_include_directories(makexx PRIVATE
     ${CMAKE_SOURCE_DIR}/include
