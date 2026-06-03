@@ -94,6 +94,7 @@ mf << RETAIN("artifact.bin");            // same forms as the per-rule version
 
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
+mf.profile = true;  // log per-rule run time to .makexx_hits on each run (off by default)
 mf.preamble = "CFLAGS ?= -O2\n";    // raw make injected near top of generated makefile
 
 // Help organization
@@ -154,6 +155,24 @@ The generated makefile always includes `.PHONY` and the built-in targets: `all`,
 The `### GENERATING` decoration is suppressed for phony/built-in targets.
 
 On Windows, the `<<` operator automatically replaces `/` with `\` in shell commands.
+
+### Usage / timing data (`mf.profile`)
+
+Setting `mf.profile = true` wraps each non-built-in rule's recipe with lightweight timing instrumentation. On every successful run it appends one tab-separated event to an append-only `.makexx_hits` log:
+
+```
+<epoch_seconds>	rule	<target>	<duration_ms>
+```
+
+The target column is the literal `$@`, so the log joins cleanly to graph nodes and any future analysis. This is the raw, source-of-truth event stream — **aggregation (counts, last-used, hot/cold, time windows) happens at read time**, not at write time, so every metric stays open. Design notes:
+
+- A millisecond clock is selected once at make parse time into `$(MXX_NOW)` — GNU `date +%s%N`, else `python3`, else whole-second `date +%s000` — so it works on Linux and macOS.
+- Each recipe line stays its own shell (no `.ONESHELL`); the wrappers just bracket the recipe via a per-target temp file under `.makexx_prof/`. Make's fail-fast / per-line semantics are unchanged. A **failed** recipe doesn't reach the trailing log line, so only successful runs are recorded.
+- Under `make -j`, per-rule wall times are real but **don't sum** to elapsed time — treat the data as a relative ranking, not a budget.
+- `.makexx_hits` is **never** removed by `full_clean`/`soft_clean` (it's accumulated history); the `.makexx_prof/` temp dir is cleaned by `full_clean`. Both are gitignored and excluded from `list_unknown`.
+- Off by default — it adds two process spawns + a temp file per built target.
+
+This log is intended to be consumed later by a `makexx --stats` report and by heat-coloring in the interactive graph; both are just readers of the same raw events.
 
 ### AI agent context file (AGENTS.md)
 

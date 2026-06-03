@@ -275,6 +275,48 @@ static void test_graph_json() {
     CHECK_CONTAINS(mk, "graph : makefile_graph.html");
 }
 
+static void test_profile() {
+    current_test = "test_profile";
+    TempDir td;
+    Makefile mf;
+    mf.profile = true;
+    mf.add("out.bin", "in.dat") << FINAL << HELP("build out") << "cp $< $@";
+    mf.add("mid.o", "in.dat") << "cp $< $@";
+    mf.generate();
+    auto mk = read_file("makefile");
+    // A millisecond clock is selected once, at parse time.
+    CHECK_CONTAINS(mk, "MXX_NOW :=");
+    // Recipes are wrapped: per-target start stamp + a raw event appended to
+    // the log, keyed by the literal $@.
+    CHECK_CONTAINS(mk, ".makexx_prof/$(subst /,_,$@).t0");
+    CHECK_CONTAINS(mk, "printf '%s\\trule\\t%s\\t%s\\n'");
+    CHECK_CONTAINS(mk, ">> .makexx_hits");
+    // Exactly the two user rules are instrumented — built-ins like `help`
+    // are not (else this would be 3+).
+    size_t n = 0, p = 0;
+    while((p = mk.find(">> .makexx_hits", p)) != std::string::npos) { n++; p += 3; }
+    CHECK_EQ(n == 2, true);
+    // History survives cleaning: the temp dir is removed, the log is not.
+    CHECK_CONTAINS(mk, "rm -rf .makexx_prof");
+    CHECK_NOT_CONTAINS(mk, "rm -f \".makexx_hits\"");
+}
+
+static void test_profile_off_by_default() {
+    current_test = "test_profile_off_by_default";
+    TempDir td;
+    Makefile mf;
+    mf.add("o.bin", "i.dat") << "cp $< $@";
+    mf.generate();
+    auto mk = read_file("makefile");
+    // No instrumentation when profiling is off. (The .makexx_hits / .makexx_prof
+    // names still appear in the list_unknown ignore list — that's intentional
+    // and harmless — so assert on the actual wrapping instead.)
+    CHECK_NOT_CONTAINS(mk, "MXX_NOW");
+    CHECK_NOT_CONTAINS(mk, ">> .makexx_hits");
+    CHECK_NOT_CONTAINS(mk, ".t0");
+    CHECK_NOT_CONTAINS(mk, "rm -rf .makexx_prof");
+}
+
 static void test_preamble() {
     current_test = "test_preamble";
     TempDir td;
@@ -645,6 +687,8 @@ int main() {
     test_menu_order_matches_help();
     test_undocumented_group();
     test_graph_json();
+    test_profile();
+    test_profile_off_by_default();
     test_user_phony();
     test_open_file();
     test_tool();

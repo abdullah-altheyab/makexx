@@ -30,6 +30,8 @@ makefile_tmp.txt
 .makexx_menu
 .makexx_history
 .makexx_deps
+.makexx_hits
+.makexx_prof/
 tmp_makexx.cpp
 tmp_makexx
 tmp_makexx.exe

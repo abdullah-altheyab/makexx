@@ -49,6 +49,7 @@
 //   mf.context_filename = "CLAUDE.md"      — override output filename
 //   mf.silent = true                       — prefix commands with @ in makefile
 //   mf.echo = false                        — suppress ### GENERATING decoration
+//   mf.profile = true                      — log per-rule run time to .makexx_hits (usage/timing data)
 //   mf.preamble = "CFLAGS ?= -O2\n"        — raw text injected near top of generated makefile
 //                                            (for vars, include, vpath, .SUFFIXES, etc.)
 //   mf.on_softclean_retain("file")         — exclude from soft_clean
@@ -660,6 +661,14 @@ class Makefile {
 	bool silent;
 	bool echo;
 	bool context;
+	// When true, each non-built-in rule's recipe is wrapped with timing
+	// instrumentation that appends a raw event (epoch, "rule", target,
+	// duration_ms) to the append-only `.makexx_hits` log on every successful
+	// run. The log is the source of truth for usage/timing analysis
+	// (`makexx --stats`, graph heat-coloring); aggregation happens at read
+	// time. Off by default — it adds two process spawns + a temp file per
+	// built target.
+	bool profile;
 	std::string context_filename;
 	std::string title;
 	std::string description;
@@ -693,6 +702,7 @@ class Makefile {
 		silent = false;
 		echo = true;
 		context = true;
+		profile = false;
 		context_filename = "AGENTS.md";
 		title = "";
 	};
@@ -784,6 +794,16 @@ class Makefile {
 			myfile << preamble;
 			if(preamble.back() != '\n') myfile << '\n';
 		}
+		if(profile) {
+			// Pick a millisecond-epoch clock once, at make parse time, that
+			// works across GNU (date +%s%N) and BSD/macOS (no %N) — fall back
+			// to python3, then to whole-second resolution. The chosen command
+			// string becomes $(MXX_NOW), used by the per-rule timing wrappers.
+			myfile << "MXX_NOW := $(shell if date +%s%N 2>/dev/null | grep -q N; then "
+			          "command -v python3 >/dev/null 2>&1 && "
+			          "echo \"python3 -c 'import time;print(int(time.time()*1000))'\" || "
+			          "echo 'date +%s000'; else echo 'date +%s%N|cut -c1-13'; fi)" << std::endl;
+		}
 		myfile << ".PHONY:";
 		for(auto const &p : phony_targets) myfile << " " << p;
 		myfile << std::endl;
@@ -826,6 +846,25 @@ class Makefile {
 							makefile += "$(shell command -v " + tool + " 2>/dev/null) ";
 					}
 					makefile += "\n";
+					// Per-rule timing instrumentation (mf.profile). Wrap the
+					// recipe: stamp the start to a per-target temp before the
+					// recipe, append a raw event (epoch, "rule", target,
+					// duration_ms) to .makexx_hits after it. Keyed by the
+					// literal $@ so the log joins cleanly to graph nodes /
+					// --stats. Skips built-ins and recipe-less rules. Each
+					// recipe line stays its own shell (no .ONESHELL), so make's
+					// fail-fast / per-line semantics are unchanged; a failed
+					// recipe simply doesn't reach the trailing log line.
+					static const std::set<std::string> builtin_names = {
+						"all", "full_clean", "soft_clean", "list",
+						"list_unknown", "list_input", "help", "graph"};
+					bool instrument = profile && !command->commands.empty();
+					if(instrument)
+						for(auto &i : to_list)
+							if(builtin_names.count(i)) { instrument = false; break; }
+					if(instrument)
+						makefile += "\t@mkdir -p .makexx_prof && $(MXX_NOW) > "
+						            "'.makexx_prof/$(subst /,_,$@).t0'\n";
 					bool is_phony = false;
 					for(auto &i : to_list)
 						if(phony_targets.count(i)) { is_phony = true; break; }
@@ -845,6 +884,11 @@ class Makefile {
 						makefile += command->formatted("\t@") + "\n";
 					else
 						makefile += command->formatted("\t") + "\n";
+					if(instrument)
+						makefile += "\t@_e=$$($(MXX_NOW)); "
+						            "_s=$$(cat '.makexx_prof/$(subst /,_,$@).t0' 2>/dev/null||echo $$_e); "
+						            "printf '%s\\trule\\t%s\\t%s\\n' \"$$(date +%s)\" '$@' \"$$((_e-_s))\" "
+						            ">> .makexx_hits; rm -f '.makexx_prof/$(subst /,_,$@).t0'\n";
 					for(auto tmp : command->temp_files) {
 						temps_list.insert(tmp);
 					}
@@ -869,6 +913,11 @@ class Makefile {
 		myfile << "all : " << to_string(defaultmake_list) << std::endl;
         {
             myfile << "full_clean: \n"<<std::endl;
+            // The .makexx_prof temp dir is timing scratch; remove it. The
+            // .makexx_hits log is deliberately NOT cleaned — it's accumulated
+            // usage history and must survive cleans to be useful.
+            if(profile)
+                myfile << "\trm -rf .makexx_prof\n";
             for(auto &itm : processed_nodes){
                 myfile << "\trm -f \"" << itm << "\"\n";
             }
@@ -920,7 +969,7 @@ class Makefile {
 		myfile << "\t@echo \"Unknown Files in Directory:\"\n";
 		std::string u_command = "\t@ls --ignore={\"makefile.cpp\",\"makefile.hpp\",\"makefile_gen\",makefile,makefile_graph.*"
 						   ",\"*.*@\",\"*.dbf\",\"*.prj\",\"*.shx\",\"*.cpg\",\"*.aux\",\"*.lt\",\"*.acn\",\"*.bbl\",\"*.blg\",\"*.glo\",\"*ist\",\"*.log\""
-						   ",\"*.toc\",\"*.sbl\",\"*.out\",\"makefile_tmp.txt\",\"makefile_nodes.txt\",\"tmp_makexx.cpp\",\"tmp_makexx\",\"err_makexx.txt\"}>makefile_tmp.txt\n"
+						   ",\"*.toc\",\"*.sbl\",\"*.out\",\"makefile_tmp.txt\",\"makefile_nodes.txt\",\"tmp_makexx.cpp\",\"tmp_makexx\",\"err_makexx.txt\",\".makexx_hits\",\".makexx_prof\"}>makefile_tmp.txt\n"
 						   ;
 		u_command += "\t@grep -xv -f makefile_nodes.txt makefile_tmp.txt | sed 's/^/\t/'\n\trm -f makefile_tmp.txt";
 		std::ofstream exception_file("makefile_nodes.txt");
