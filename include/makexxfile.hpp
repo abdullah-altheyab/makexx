@@ -967,12 +967,12 @@ class Makefile {
 		for(auto &itm : defaultmake_list)
 			myfile << "\t@echo \"\t" + itm + "\"\n";
 		myfile << "\t@echo \"Unknown Files in Directory:\"\n";
-		std::string u_command = "\t@ls --ignore={\"makefile.cpp\",\"makefile.hpp\",\"makefile_gen\",makefile,makefile_graph.*"
+		std::string u_command = "\t@ls --ignore={\"makefile.cpp\",\"makefile.hpp\",\".makexx_gen\",makefile,makefile_graph.*"
 						   ",\"*.*@\",\"*.dbf\",\"*.prj\",\"*.shx\",\"*.cpg\",\"*.aux\",\"*.lt\",\"*.acn\",\"*.bbl\",\"*.blg\",\"*.glo\",\"*ist\",\"*.log\""
-						   ",\"*.toc\",\"*.sbl\",\"*.out\",\"makefile_tmp.txt\",\"makefile_nodes.txt\",\"tmp_makexx.cpp\",\"tmp_makexx\",\"err_makexx.txt\",\".makexx_hits\",\".makexx_prof\"}>makefile_tmp.txt\n"
+						   ",\"*.toc\",\"*.sbl\",\"*.out\",\".makexx_lsdir\",\".makexx_nodes\",\".makexx_probe.cpp\",\".makexx_probe\",\".makexx_err\",\".makexx_hits\",\".makexx_prof\"}>.makexx_lsdir\n"
 						   ;
-		u_command += "\t@grep -xv -f makefile_nodes.txt makefile_tmp.txt | sed 's/^/\t/'\n\trm -f makefile_tmp.txt";
-		std::ofstream exception_file("makefile_nodes.txt");
+		u_command += "\t@grep -xv -f .makexx_nodes .makexx_lsdir | sed 's/^/\t/'\n\trm -f .makexx_lsdir";
+		std::ofstream exception_file(".makexx_nodes");
 		auto write_exception = [&](std::string const &itm) { exception_file << itm << "\n"; };
 		{
 			for(auto &itm : inputfiles_list)

@@ -1139,9 +1139,9 @@ int main(int argc, char **argv) {
 	if(verbose)
 		cout << "SYSTEM:" << runsys << endl;
 	if(is_windows) {
-		run_cmd("del tmp_makexx.cpp tmp_makexx tmp_makexx.exe err_makexx.txt makefile_gen");
+		run_cmd("del .makexx_probe.cpp .makexx_probe .makexx_probe.exe .makexx_err .makexx_gen");
 	} else {
-		run_cmd("rm -f tmp_makexx.cpp tmp_makexx tmp_makexx.exe err_makexx.txt makefile_gen");
+		run_cmd("rm -f .makexx_probe.cpp .makexx_probe .makexx_probe.exe .makexx_err .makexx_gen");
 	}
 
 	// Respect CXX env var; otherwise probe candidates in order.
@@ -1156,11 +1156,11 @@ int main(int argc, char **argv) {
 	if(verbose)
 		cout << "SEARCHING FOR A COMPILER:" << endl;
 	string small_prog = "int main(){}";
-	write_file("tmp_makexx.cpp", small_prog.c_str(), small_prog.size());
+	write_file(".makexx_probe.cpp", small_prog.c_str(), small_prog.size());
 	int compiler_id = 0;
 	while(true) {
-		run_cmd(compilers[compiler_id] + " -std=c++17 tmp_makexx.cpp -o tmp_makexx 2>err_makexx.txt");
-		if(exists("tmp_makexx") || exists("tmp_makexx.exe")) {
+		run_cmd(compilers[compiler_id] + " -std=c++17 .makexx_probe.cpp -o .makexx_probe 2>.makexx_err");
+		if(exists(".makexx_probe") || exists(".makexx_probe.exe")) {
 			break;
 		}
 		compiler_id++;
@@ -1174,8 +1174,8 @@ int main(int argc, char **argv) {
 	}
 	if(verbose)
 		cout << compilers[compiler_id] << " is used." << endl;
-	run_cmd(compilers[compiler_id] + " -std=c++17 -MMD -MF .makexx_deps -MT makefile" + define_flags + " makefile.cpp -o makefile_gen");
-	if(!exists("makefile_gen") && !exists("makefile_gen.exe")) {
+	run_cmd(compilers[compiler_id] + " -std=c++17 -MMD -MF .makexx_deps -MT makefile" + define_flags + " makefile.cpp -o .makexx_gen");
+	if(!exists(".makexx_gen") && !exists(".makexx_gen.exe")) {
 		std::cerr << "error: failed to compile makefile.cpp" << endl;
 		return -1;
 	}
@@ -1191,15 +1191,15 @@ int main(int argc, char **argv) {
 	}
 	if(verbose)
 		cout << "Generating makefile.." << endl;
-	int gen_ret = run_cmd(is_windows ? "makefile_gen.exe" : "./makefile_gen");
+	int gen_ret = run_cmd(is_windows ? ".makexx_gen.exe" : "./.makexx_gen");
 	if(gen_ret != 0) {
-		std::cerr << "error: makefile_gen exited with code " << gen_ret << endl;
+		std::cerr << "error: .makexx_gen exited with code " << gen_ret << endl;
 		return -1;
 	}
 	if(is_windows) {
-		run_cmd("del tmp_makexx.cpp tmp_makexx tmp_makexx.exe err_makexx.txt makefile_gen");
+		run_cmd("del .makexx_probe.cpp .makexx_probe .makexx_probe.exe .makexx_err .makexx_gen");
 	} else {
-		run_cmd("rm -f tmp_makexx.cpp tmp_makexx tmp_makexx.exe err_makexx.txt makefile_gen");
+		run_cmd("rm -f .makexx_probe.cpp .makexx_probe .makexx_probe.exe .makexx_err .makexx_gen");
 	}
 #ifndef _WIN32
 	if(interactive)

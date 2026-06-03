@@ -25,14 +25,23 @@ When `makexx` is invoked in a user's project directory:
 1. Extracts `makefile.hpp` from the embedded hex blob (skips if already present, unless `-u`)
 2. Creates `makefile.cpp` from the embedded example template (only if it doesn't exist yet)
 3. Selects a C++ compiler: uses `CXX` env var if set, otherwise probes `g++`, `clang++`, `icpx`, `icpc` in order
-4. Compiles `makefile.cpp` → `makefile_gen` executable
-5. Runs `makefile_gen` which calls `mf.generate()` to produce `makefile`, `.makexx_menu`, and `AGENTS.md`
+4. Compiles `makefile.cpp` → `.makexx_gen` executable
+5. Runs `.makexx_gen` which calls `mf.generate()` to produce `makefile`, `.makexx_menu`, and `AGENTS.md`
 6. Runs `make` with any extra args passed to `makexx` (except `-u`, `-f`, `-c`, `-i`)
-7. Cleans up temp files (`tmp_makexx*`, `err_makexx.txt`, `makefile_gen`)
+7. Cleans up scratch files (`.makexx_probe*`, `.makexx_err`, `.makexx_gen`)
 
 **Makefile protection:** makexx checks whether an existing `makefile` starts with the header `# This is an automatically generated makefile via makexx.`. If not, it refuses to overwrite it unless `-f` is passed.
 
 **Auto-regeneration:** The generated makefile includes a rule `makefile: makefile.cpp makefile.hpp` that reruns `makexx -c`. If the user edits `makefile.cpp` and runs `make`, GNU make detects the makefile is out of date, regenerates it, restarts, and then builds the requested targets using the new rules. makexx compiles `makefile.cpp` with `-MMD -MF .makexx_deps -MT makefile`, so any headers included by `makefile.cpp` (e.g., a `config.hpp`) are automatically tracked as dependencies via `-include .makexx_deps` in the generated makefile.
+
+## Generated-file naming convention
+
+Two tiers, and **all new generated files must follow this rule**:
+
+- **Visible artifacts** (the deliverables the user edits, opens, or keeps) are named plainly, no dot prefix: `makefile`, `makefile.cpp`, `makefile.hpp`, `makefile_graph.{gv,pdf,html}`, `AGENTS.md` (name configurable via `mf.context_filename`).
+- **Everything makexx writes for its own bookkeeping** — state *and* scratch — is a hidden, namespaced `.makexx_*` dotfile. State: `.makexx_menu`, `.makexx_history`, `.makexx_deps`, `.makexx_hits`, `.makexx_graph.json`, `.makexx_prof/`. Scratch (created/deleted within a run): `.makexx_gen` (compiled generator), `.makexx_probe[.cpp]` (compiler probe), `.makexx_err` (probe stderr), `.makexx_nodes` + `.makexx_lsdir` (`list_unknown` working files).
+
+The `.makexx_*` prefix means plain `ls` hides them, so `list_unknown` ignores them for free. When adding a new generated file, pick the tier and name accordingly — don't introduce a third style.
 
 ## CLI flags
 

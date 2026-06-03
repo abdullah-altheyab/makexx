@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Internal file naming — consistency cleanup
+
+- **All makexx-internal files now use a single `.makexx_*` convention.** The scratch files that had drifted into other styles are renamed: `makefile_gen` → `.makexx_gen`, `tmp_makexx*` → `.makexx_probe*`, `err_makexx.txt` → `.makexx_err`, `makefile_nodes.txt` → `.makexx_nodes`, `makefile_tmp.txt` → `.makexx_lsdir`. The rule is now: visible artifacts (`makefile`, `makefile.cpp/.hpp`, `makefile_graph.{gv,pdf,html}`, `AGENTS.md`) are named plainly; everything makexx writes for its own bookkeeping is a hidden `.makexx_*` dotfile. Side benefit: because plain `ls` hides dotfiles, `list_unknown` no longer needs to special-case them. Existing projects may have stale old-named files lying around — harmless and gitignored; a fresh run cleans up under the new names.
+
 ### Usage / timing data collection
 
 - **New `mf.profile = true`** instruments each non-built-in rule's recipe to record how long it takes, appending a raw tab-separated event — `epoch · rule · target · duration_ms` — to an append-only **`.makexx_hits`** log on every successful run. This is the data-collection foundation for makefile maintenance/utilization questions ("when did I last build this", "how often", "which step is the bottleneck", "what's safe to delete"). The log keeps **raw events keyed by the literal `$@`** so aggregation (counts, last-used, hot/cold, time windows) happens at read time and every metric stays open; it's designed to be consumed by a future `makexx --stats` and by heat-coloring in the interactive graph. A millisecond clock is selected once at parse time into `$(MXX_NOW)` (GNU `date +%s%N` → `python3` → whole-second fallback) so it works on Linux and macOS. Each recipe line stays its own shell (no `.ONESHELL`), so make's semantics are unchanged; failed recipes aren't logged, and under `make -j` per-rule times are a relative ranking (they don't sum to wall time). `.makexx_hits` survives `clean` (it's history); the `.makexx_prof/` temp dir is cleaned. Off by default (adds two process spawns + a temp file per built target)
