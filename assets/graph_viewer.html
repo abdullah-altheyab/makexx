@@ -10,6 +10,10 @@
     --input:#10b981; --interm:#58a6ff; --final:#f59e0b; --phony:#a78bfa; --tool:#22d3ee;
   }
   * { box-sizing:border-box; }
+  /* Keep the `hidden` attribute authoritative: a plain `#id { display:flex }`
+     rule outranks the UA `[hidden]` style, which would otherwise leave the
+     full-viewport #empty overlay visible and eat every mouse/wheel event. */
+  [hidden] { display:none !important; }
   html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
     font:13px/1.4 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
   #bar { position:fixed; top:0; left:0; right:0; height:46px; display:flex; align-items:center;
