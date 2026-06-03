@@ -130,6 +130,14 @@ int build_graph_html() {
 	libs += graph_cytoscape_dagre_js;  libs += "\n;\n";
 	libs += graph_expand_collapse_js;  libs += "\n;\n";
 
+	// An inline <script> is terminated by the first literal "</script" the HTML
+	// parser sees, regardless of JS context. The vendored libs and the JSON
+	// only ever contain it inside string literals, where "<\/script" decodes
+	// identically — so escape it to keep the inline blocks intact even if a
+	// future lib update introduces the sequence.
+	libs = replace_all(libs, "</script", "<\\/script");
+	data = replace_all(data, "</script", "<\\/script");
+
 	string html = graph_viewer_html;
 	auto p = html.find("/*__MAKEXX_GRAPH_LIBS__*/");
 	if(p != string::npos)
