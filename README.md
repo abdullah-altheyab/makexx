@@ -78,7 +78,7 @@ mf.add("report.pdf", "filtered.bin") << HELP("Generate QC report") << "qcplot $<
 
 **AI agent context.** `mf.generate()` writes an `AGENTS.md` summarizing the project — description, inputs, targets per group — that any AI coding agent (Claude Code, Cursor, Copilot) reads to help modify `makefile.cpp` in domain terms.
 
-**Interactive mode (`makexx -i`).** A TUI for browsing and running targets: `/` to search and filter, Space to multi-select, `d` to dry-run, `?` to show dependencies, `r` to refresh after editing `makefile.cpp` (cursor / fold / select / search are preserved across the reload). `q` quits; Esc dismisses; double-Esc quits when nothing is active.
+**Interactive mode (`makexx -i`).** A TUI for browsing and running targets: `/` to search and filter, Space to multi-select, `d` to dry-run, `?` to show dependencies, `r` to refresh after editing `makefile.cpp` (cursor / fold / select / search are preserved across the reload). `q` quits; Esc dismisses; double-Esc quits when nothing is active. Targets without a `HELP()` are tucked into a folded **Undocumented** group — browse or `/`-search it to find rules you haven't documented yet.
 
 **Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project.
 

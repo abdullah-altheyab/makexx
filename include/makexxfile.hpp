@@ -1017,13 +1017,7 @@ class Makefile {
 		// (joined with a space) across scopes too: mf-level annotations
 		// come first, then rule-level descriptions in command-insertion
 		// order.
-		std::map<std::string, std::string> all_file_desc = mf_file_descriptions;
-		for(auto const &cmd : commands)
-			for(auto const &kv : cmd->file_descriptions) {
-				auto &existing = all_file_desc[kv.first];
-				if(existing.empty()) existing = kv.second;
-				else existing += " " + kv.second;
-			}
+		std::map<std::string, std::string> all_file_desc = combined_file_descriptions();
 		if(!inputfiles_list.empty()) {
 			cf << "## Input files\n\n";
 			for(auto &itm : inputfiles_list) {
@@ -1114,21 +1108,7 @@ class Makefile {
 		// appear in other rules' dep lists. Listed so the dependency graph
 		// the workflow user reads is complete; otherwise a "(from
 		// `bodd_forecast.t`)" annotation can look orphaned.
-		std::vector<Rule *> unlabeled;
-		std::set<std::string> const builtin_names = {
-			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"
-		};
-		for(auto const &cmd : commands) {
-			if(!cmd->help_lines.empty()) continue;
-			Rule *r = cmd.get();
-			auto trange = rule_target.equal_range(r);
-			if(trange.first == trange.second) continue;
-			bool is_builtin = false;
-			for(auto j = trange.first; j != trange.second; j++)
-				if(builtin_names.count(j->second)) { is_builtin = true; break; }
-			if(is_builtin) continue;
-			unlabeled.push_back(r);
-		}
+		std::vector<Rule *> unlabeled = collect_undocumented_rules();
 		if(!unlabeled.empty()) {
 			cf << "## Intermediate targets\n\n";
 			cf << "_Rules without a `HELP()` description — typically internal / glue steps. Listed so the dependency graph stays complete (a `(from X)` annotation above might point to one of these)._\n\n";
@@ -1172,6 +1152,44 @@ class Makefile {
 		cf.close();
 	}
 
+	// Combined file-description map: makefile-level DESC annotations first,
+	// then per-rule DESC in command-insertion order (accumulated, space-
+	// joined). Shared by the AGENTS.md and menu writers so both surface the
+	// same DESC text.
+	std::map<std::string, std::string> combined_file_descriptions() {
+		std::map<std::string, std::string> all = mf_file_descriptions;
+		for(auto const &cmd : commands)
+			for(auto const &kv : cmd->file_descriptions) {
+				auto &existing = all[kv.first];
+				if(existing.empty()) existing = kv.second;
+				else existing += " " + kv.second;
+			}
+		return all;
+	}
+
+	// Rules with no HELP() — typically internal / glue steps whose names show
+	// up in other rules' dep lists. Excludes the built-in targets (which are
+	// surfaced separately). Shared by the AGENTS.md "Intermediate targets"
+	// section and the menu file's folded "Undocumented" group.
+	std::vector<Rule *> collect_undocumented_rules() {
+		static const std::set<std::string> builtin_names = {
+			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"
+		};
+		std::vector<Rule *> out;
+		for(auto const &cmd : commands) {
+			if(!cmd->help_lines.empty()) continue;
+			Rule *r = cmd.get();
+			auto trange = rule_target.equal_range(r);
+			if(trange.first == trange.second) continue;
+			bool is_builtin = false;
+			for(auto j = trange.first; j != trange.second; j++)
+				if(builtin_names.count(j->second)) { is_builtin = true; break; }
+			if(is_builtin) continue;
+			out.push_back(r);
+		}
+		return out;
+	}
+
 	void write_menu_file(bool graph) {
 		std::ofstream mf(".makexx_menu");
 		// Declare groups in canonical order (matching `make help`) so the
@@ -1196,6 +1214,28 @@ class Makefile {
 			}
 			std::string desc = replace_all(itm.description, "\n", "|");
 			mf << group_prefix(itm.group) << "\t" << itm.target << "\t" << desc << "\n";
+		}
+		// Targets without HELP() — collected into a folded "Undocumented"
+		// group so they don't clutter the default view but stay browsable
+		// (Tab to it, → to unfold) and findable via `/` search, which
+		// surfaces matches even under folded parents. DESC text is shown as
+		// the description when available. Declared before the Built-in
+		// entries so it sorts above them in the TUI.
+		auto undoc = collect_undocumented_rules();
+		if(!undoc.empty()) {
+			auto file_desc = combined_file_descriptions();
+			mf << "!group\tUndocumented\t+\n";
+			mf << "!desc\tUndocumented\tRules without a HELP() description\n";
+			for(auto *r : undoc) {
+				auto trange = rule_target.equal_range(r);
+				for(auto j = trange.first; j != trange.second; j++) {
+					std::string desc;
+					auto it = file_desc.find(j->second);
+					if(it != file_desc.end())
+						desc = replace_all(it->second, "\n", "|");
+					mf << "Undocumented\t" << j->second << "\t" << desc << "\n";
+				}
+			}
 		}
 		std::string builtin_group = "Built-in";
 		auto write_builtin = [&](std::string name, std::string desc) {

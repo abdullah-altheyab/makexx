@@ -210,6 +210,42 @@ static void test_menu_order_matches_help() {
     CHECK_EQ(pos_utils < pos_gis, true);
 }
 
+static void test_undocumented_group() {
+    current_test = "test_undocumented_group";
+    TempDir td;
+    Makefile mf;
+    mf << MENU("Build");
+    mf.add("app", "app.o") << HELP("link the app") << "g++ $< -o $@";
+    mf.add("app.o", "app.cpp") << "g++ -c $< -o $@";          // no HELP
+    mf << DESC("parse.o", "tokenizer object");
+    mf.add("parse.o", "parse.cpp") << "g++ -c $< -o $@";      // no HELP, has DESC
+    mf.add({"a.out", "b.out"}, "data.in") << "split $<";      // multi-target, no HELP
+    mf.context = false;
+    mf.generate();
+    auto menu = read_file(".makexx_menu");
+    // Undocumented group declared folded ("+") and listed before Built-in.
+    CHECK_CONTAINS(menu, "!group\tUndocumented\t+");
+    CHECK_CONTAINS(menu, "Undocumented\tapp.o\t");
+    // Multi-target rules surface each target individually.
+    CHECK_CONTAINS(menu, "Undocumented\ta.out\t");
+    CHECK_CONTAINS(menu, "Undocumented\tb.out\t");
+    // DESC is used as the description when present.
+    CHECK_CONTAINS(menu, "Undocumented\tparse.o\ttokenizer object");
+    // The HELP'd target stays in its own group, not Undocumented.
+    CHECK_CONTAINS(menu, "Build\tapp\tlink the app");
+    CHECK_NOT_CONTAINS(menu, "Undocumented\tapp\t");
+    auto pos_undoc = menu.find("!group\tUndocumented");
+    auto pos_builtin = menu.find("Built-in\tall");
+    CHECK_EQ(pos_undoc < pos_builtin, true);
+
+    // Undocumented targets must NOT leak into `make help` output.
+    auto mk = read_file("makefile");
+    auto help_pos = mk.find("\nhelp:");
+    std::string help_rule = help_pos == std::string::npos ? mk : mk.substr(help_pos);
+    CHECK_NOT_CONTAINS(help_rule, "'app.o'");
+    CHECK_NOT_CONTAINS(help_rule, "'parse.o'");
+}
+
 static void test_preamble() {
     current_test = "test_preamble";
     TempDir td;
@@ -578,6 +614,7 @@ int main() {
     test_multi_source();
     test_help();
     test_menu_order_matches_help();
+    test_undocumented_group();
     test_user_phony();
     test_open_file();
     test_tool();

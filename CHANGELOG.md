@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Interactive mode
+
+- **Targets without `HELP()` are now reachable in `makexx -i`.** They're collected into a folded **Undocumented** group (sorted just above the built-ins) so they don't clutter the default view but can be browsed (Tab to the group, → to unfold) and found via `/` search, which surfaces matches even under folded parents. Previously these rules were dropped from `.makexx_menu` entirely, so the TUI couldn't see them. Built-in targets are excluded, multi-target rules list each target individually, and a `<< DESC(...)` annotation is shown as the entry's description when present. `make help` output is unchanged — undocumented targets stay out of it
+
 ### Generated makefile
 
 - **Fix:** `make` with no arguments now runs `all` as intended. The generated makefile now emits `.DEFAULT_GOAL := all` near the top so GNU make doesn't pick the `makefile: makefile.cpp makefile.hpp` regen rule as the default goal (which was the first non-special target and was overshadowing `all`). Auto-regen on `makefile.cpp` edits still fires before the build, as before. Users can override by setting `.DEFAULT_GOAL` in `mf.preamble`
