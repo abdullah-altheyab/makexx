@@ -1424,6 +1424,29 @@ class Makefile {
 	// --build-graph` inlines this into makefile_graph.html. Kept separate
 	// from the Graphviz `.gv` so both the static PDF and the interactive
 	// HTML stay available.
+	// Extract `#hashtag` facet tags from free text (HELP / DESC): `#` at a
+	// word boundary (start or after a non-alphanumeric char, so `C#` /
+	// `word#x` don't match) followed by one or more of `[A-Za-z0-9_-]`.
+	// Numbers-first is fine (`#42`). De-duplicated, first-seen order. The
+	// hashtag stays visible in the source HELP/DESC; this just also surfaces it.
+	static std::vector<std::string> extract_tags(std::string const &s) {
+		auto is_alnum = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); };
+		auto is_word  = [&](char c) { return is_alnum(c) || c == '_' || c == '-'; };
+		std::vector<std::string> out;
+		std::set<std::string> seen;
+		for(size_t i = 0; i < s.size(); i++) {
+			if(s[i] != '#') continue;
+			if(i > 0 && is_alnum(s[i - 1])) continue;   // word boundary before #
+			size_t k = i + 1;
+			while(k < s.size() && is_word(s[k])) k++;
+			if(k == i + 1) continue;                    // nothing after #
+			std::string tag = s.substr(i + 1, k - i - 1);
+			if(seen.insert(tag).second) out.push_back(tag);
+			i = k - 1;
+		}
+		return out;
+	}
+
 	void write_graph_json() {
 		std::set<std::string> phony_set;
 		for(auto const &cmd : commands) {
@@ -1469,6 +1492,29 @@ class Makefile {
 			}
 			return h;
 		};
+		// Tags for a node = hashtags from its rule's HELP plus hashtags from
+		// any DESC on that target/file. Cmds = the producing rule's recipe
+		// lines (verbatim — $@/$< not expanded) so a traced path can show what
+		// each step actually runs.
+		auto node_tags = [&](std::string const &n) -> std::vector<std::string> {
+			std::string text = node_help(n);
+			auto dit = file_desc.find(n);
+			if(dit != file_desc.end()) text += " " + dit->second;
+			return extract_tags(text);
+		};
+		auto node_cmds = [&](std::string const &n) -> std::vector<std::string> {
+			auto it = target_rule.find(n);
+			if(it == target_rule.end()) return {};
+			return it->second->commands;
+		};
+		auto json_arr = [&](std::vector<std::string> const &v) -> std::string {
+			std::string o;
+			for(size_t i = 0; i < v.size(); i++) {
+				if(i) o += ",";
+				o += "\"" + json_escape(v[i]) + "\"";
+			}
+			return o;
+		};
 
 		std::ofstream j(".makexx_graph.json");
 		j << "{\"title\":\"" << json_escape(title) << "\","
@@ -1489,7 +1535,9 @@ class Makefile {
 			  << "\"type\":\"" << node_type(n) << "\","
 			  << "\"group\":\"" << json_escape(node_group(n)) << "\","
 			  << "\"help\":\"" << json_escape(node_help(n)) << "\","
-			  << "\"desc\":\"" << json_escape(desc) << "\"}";
+			  << "\"desc\":\"" << json_escape(desc) << "\","
+			  << "\"tags\":[" << json_arr(node_tags(n)) << "],"
+			  << "\"cmds\":[" << json_arr(node_cmds(n)) << "]}";
 		}
 		// External-tool prereqs (`<< TOOL(...)`) aren't in `nodes`; surface
 		// them as their own typed nodes so tool dependencies are visible.
@@ -1500,7 +1548,8 @@ class Makefile {
 			if(emitted.count(t)) continue;
 			if(!first) j << ","; first = false;
 			j << "{\"id\":\"" << json_escape(t) << "\",\"label\":\"" << json_escape(t)
-			  << "\",\"ext\":\"\",\"type\":\"tool\",\"group\":\"\",\"help\":\"\",\"desc\":\"\"}";
+			  << "\",\"ext\":\"\",\"type\":\"tool\",\"group\":\"\",\"help\":\"\",\"desc\":\"\","
+			  << "\"tags\":[],\"cmds\":[]}";
 		}
 		j << "],\"edges\":[";
 		first = true;

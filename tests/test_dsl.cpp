@@ -275,6 +275,30 @@ static void test_graph_json() {
     CHECK_CONTAINS(mk, "graph : makefile_graph.html");
 }
 
+static void test_graph_tags_and_cmds() {
+    current_test = "test_graph_tags_and_cmds";
+    TempDir td;
+    Makefile mf;
+    mf << MENU("Forecast");
+    mf.add("alpha_forecast.bin", "data.csv")
+        << FINAL << HELP("forecast #alpha play (issue #42, not C#sharp)") << "run $< > $@";
+    mf << DESC("data.csv", "raw seismic from #geo dept");
+    mf.generate_with_graph();
+    auto j = read_file(".makexx_graph.json");
+    // HELP hashtags become tags on the rule's target; numbers-first ok; C# not matched.
+    CHECK_CONTAINS(j, "\"id\":\"alpha_forecast.bin\"");
+    CHECK_CONTAINS(j, "\"tags\":[\"alpha\",\"42\"]");
+    CHECK_NOT_CONTAINS(j, "\"sharp\"");          // C#sharp: # not at a word boundary
+    // DESC hashtag tags the input file node.
+    CHECK_CONTAINS(j, "\"tags\":[\"geo\"]");
+    // Recipe command text is emitted verbatim for path explanations.
+    CHECK_CONTAINS(j, "\"cmds\":[\"run $< > $@\"]");
+    // Input file has no recipe -> empty cmds.
+    auto p = j.find("\"id\":\"data.csv\"");
+    CHECK_EQ(p != std::string::npos, true);
+    CHECK_CONTAINS(j.substr(p), "\"cmds\":[]");
+}
+
 static void test_profile() {
     current_test = "test_profile";
     TempDir td;
@@ -687,6 +711,7 @@ int main() {
     test_menu_order_matches_help();
     test_undocumented_group();
     test_graph_json();
+    test_graph_tags_and_cmds();
     test_profile();
     test_profile_off_by_default();
     test_user_phony();

@@ -92,6 +92,11 @@ rule << TOOL("prog1");               // external executable: mtime-tracked prere
                                      // path with '/' → used literally. variadic + braced too.
 rule << HELP("builds the thing");   // shown by 'make help'
 rule << HELP("Deploy", "deploy it"); // with explicit group
+rule << HELP("forecast #alpha play"); // #hashtags in HELP/DESC become graph filter tags
+                                     //   (target gets the rule's tags; DESC tags a file).
+                                     //   #-tag = `#` at a word boundary + [A-Za-z0-9_-]+;
+                                     //   stays visible in help text. Used by the graph's
+                                     //   seed-filtering (see "Interactive dependency graph").
 
 rule << RETAIN;                          // exclude all of rule's targets from soft_clean
 rule << RETAIN("file");                  // selective: also RETAIN("a","b") or RETAIN({"a","b"})
