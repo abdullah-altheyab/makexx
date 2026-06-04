@@ -30,13 +30,13 @@
 //   r << DESC("file","what it is") / mf << DESC(...) — describe a file (typically an
 //                                            input); shown next to it in AGENTS.md
 //
-// Menu groups:
-//   r << MENU("Forecasting")               — set group for a single rule
-//   mf << MENU("Build")                    — set group for subsequent rules
-//   mf << MENU("Build/Tests")              — nested group via slash separator
-//   mf << MENU("Archive", FOLDED)          — set group, folded by default in makexx -i
-//   mf << MENU("Build", "Compile rules")   — set group with a description (shown in make help, AGENTS.md, TUI)
+// Menu groups (a rule joins a group ONLY via its own << MENU — not sticky):
+//   r << MENU("Forecasting")               — put this rule in a group
+//   r << MENU("Build/Tests")               — nested group via slash separator (parents auto-created)
+//   mf << MENU("Archive", FOLDED)          — DECLARE a group folded by default in makexx -i
+//   mf << MENU("Build", "Compile rules")   — DECLARE a group's description (make help, AGENTS.md, TUI)
 //   mf << MENU("Build", "Compile rules", FOLDED)  — description + folded
+//     (mf << MENU only declares description/folded; it does NOT group any rule)
 //
 // Makefile-level (apply by target name, independent of rules):
 //   mf << PHONY("install") / PHONY("a","b") / PHONY({"a","b"})  — declare phony targets
@@ -493,14 +493,16 @@ class Makefile {
 	std::set<std::string> soft_clean_retain_nodes;
 	std::set<std::string> mf_phony_targets;
 	std::map<std::string, std::string> mf_file_descriptions;
-	std::string current_help_group;
 	std::set<std::string> folded_groups;
 	std::map<std::string, std::string> group_descriptions;
 
 	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources) {
 		commands.push_back(std::make_unique<Rule>());
 		Rule *A = commands.back().get();
-		A->help_group = current_help_group;
+		// A rule's group comes ONLY from its own `<< MENU(...)` / `<< HELP("g",...)`.
+		// (There used to be a sticky `current_help_group` here that every later
+		// rule silently inherited — a stateful footgun that recolored unrelated
+		// rules. Removed: `mf << MENU(...)` now only declares a group.)
 		for(auto &s : sources) {
 			nodes.insert(s);
 			rule_source.insert({A, s});
@@ -684,16 +686,6 @@ class Makefile {
 
 	void define_menu(std::string group, group_display display) {
 		define_menu(group);
-		if(display == FOLDED) folded_groups.insert(group);
-	}
-
-	void set_current_menu(std::string group) {
-		current_help_group = group;
-		register_help_group(group);
-	}
-
-	void set_current_menu(std::string group, group_display display) {
-		set_current_menu(group);
 		if(display == FOLDED) folded_groups.insert(group);
 	}
 
@@ -1050,10 +1042,10 @@ class Makefile {
 		cf << "    r << TEMP(\"scratch.tmp\");                     // cleaned by full_clean/soft_clean\n";
 		cf << "    r << RETAIN;                                  // exclude rule outputs from soft_clean\n";
 		cf << "    r << TOOL(\"g++\");                             // executable prereq, mtime-tracked\n";
-		cf << "    r << MENU(\"Build\");                           // group this rule\n";
+		cf << "    r << MENU(\"Build\");                           // put this rule in a group\n";
+		cf << "    r << MENU(\"Build/Tests\");                     // nested group (parents auto-created)\n";
 		cf << "\n";
-		cf << "    mf << MENU(\"Build\");                          // group subsequent rules\n";
-		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // nested + description\n";
+		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // DECLARE a group description/FOLDED (groups no rule)\n";
 		cf << "    mf << PHONY(\"install\");                       // declare phony by name\n";
 		cf << "    mf.title       = \"My Project\";\n";
 		cf << "    mf.description = \"Project summary for AGENTS.md\";\n";
@@ -1353,11 +1345,15 @@ class Makefile {
 		mf.close();
 	}
 
+	// `mf << MENU("g")` / `MENU("g","desc")` / `MENU("g",FOLDED)` *declares* a
+	// group — registers it (for ordering) and records its description / folded
+	// state. It does NOT set a current group and does NOT affect any rule: a
+	// rule joins a group only via its own `<< MENU(...)` / `<< HELP("g",...)`.
 	Makefile& operator<<(MENU m) {
 		if(m.has_display)
-			set_current_menu(m.group, m.display);
+			define_menu(m.group, m.display);
 		else
-			set_current_menu(m.group);
+			define_menu(m.group);
 		if(!m.description.empty())
 			group_descriptions[m.group] = m.description;
 		return *this;

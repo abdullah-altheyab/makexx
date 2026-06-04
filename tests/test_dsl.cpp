@@ -210,12 +210,25 @@ static void test_menu_order_matches_help() {
     CHECK_EQ(pos_utils < pos_gis, true);
 }
 
+static void test_menu_not_sticky() {
+    current_test = "test_menu_not_sticky";
+    TempDir td;
+    Makefile mf;
+    mf << MENU("Build");                                  // declaration only — not sticky
+    mf.add("a.o", "a.cpp") << HELP("compile a") << "g++ -c $< -o $@";              // no << MENU
+    mf.add("b.o", "b.cpp") << MENU("Build") << HELP("compile b") << "g++ -c $< -o $@";
+    mf.generate();
+    auto menu = read_file(".makexx_menu");
+    CHECK_CONTAINS(menu, "Build\tb.o\tcompile b");         // joined Build explicitly
+    CHECK_NOT_CONTAINS(menu, "Build\ta.o");                // did NOT inherit Build
+}
+
 static void test_undocumented_group() {
     current_test = "test_undocumented_group";
     TempDir td;
     Makefile mf;
     mf << MENU("Build");
-    mf.add("app", "app.o") << HELP("link the app") << "g++ $< -o $@";
+    mf.add("app", "app.o") << MENU("Build") << HELP("link the app") << "g++ $< -o $@";
     mf.add("app.o", "app.cpp") << "g++ -c $< -o $@";          // no HELP
     mf << DESC("parse.o", "tokenizer object");
     mf.add("parse.o", "parse.cpp") << "g++ -c $< -o $@";      // no HELP, has DESC
@@ -252,7 +265,7 @@ static void test_graph_json() {
     Makefile mf;
     mf.title = "GT";
     mf << MENU("Build");
-    mf.add("app", "app.o") << FINAL << HELP("the app") << TOOL("g++") << "g++ $< -o $@";
+    mf.add("app", "app.o") << MENU("Build") << FINAL << HELP("the app") << TOOL("g++") << "g++ $< -o $@";
     mf.add("app.o", "app.cpp") << "g++ -c $< -o $@";
     mf << DESC("app.cpp", "entry point");
     mf.generate_with_graph();
@@ -724,6 +737,7 @@ int main() {
     test_multi_source();
     test_help();
     test_menu_order_matches_help();
+    test_menu_not_sticky();
     test_undocumented_group();
     test_graph_json();
     test_graph_tags_and_cmds();

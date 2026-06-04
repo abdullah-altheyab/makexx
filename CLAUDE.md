@@ -114,25 +114,24 @@ mf.preamble = "CFLAGS ?= -O2\n";    // raw make injected near top of generated m
 
 // Help organization
 mf.title = "My Project";       // printed at top of 'make help'
-// Single rule in a group — use MENU with <<
+
+// A rule joins a group ONLY via its own << MENU (no sticky/current group).
 mf.add("forecast.bin", "data.t")
     << MENU("Forecasting") << HELP("run forecast") << "forecast $< > $@";
+mf.add("a.o", "a.cpp") << MENU("Build") << HELP("compile a") << "g++ -c $< -o $@";
+mf.add("b.o", "b.cpp") << MENU("Build") << HELP("compile b") << "g++ -c $< -o $@";
+mf.add("t.bin", "a.o") << MENU("Build/Tests") << HELP("test"); // nested via slash; parents auto-created
+// rule << HELP("group", "desc") also sets the group for that single rule.
 
-// Many rules in a group — use mf << MENU (sets current group for subsequent rules)
-mf << MENU("Build");
-mf.add("a.o", "a.cpp") << HELP("compile a") << "g++ -c $< -o $@";
-mf.add("b.o", "b.cpp") << HELP("compile b") << "g++ -c $< -o $@";
-
-mf << MENU("Build/Tests");              // nested group via slash separator; parent groups are auto-created
-
-// Group with a description (shown in make help, AGENTS.md, and the TUI)
-mf << MENU("Processing", "Run the data pipeline");
+// `mf << MENU(...)` is a DECLARATION only — it registers a group's description
+// and/or folded state. It does NOT set a current group and does NOT affect any
+// rule. (It used to be sticky — every later rule silently inherited it — which
+// was an invisible footgun; that inheritance was removed.)
+mf << MENU("Processing", "Run the data pipeline");   // group description (help/AGENTS/TUI)
 mf << MENU("Processing/QC", "Quality control checks");
-
-// Switch to group and mark as folded in makexx -i
-mf << MENU("Archive", FOLDED);
-mf << MENU("Archive", "Old runs", FOLDED); // description + folded
-// HELP("group", "desc") overrides the group for a single rule
+mf << MENU("Archive", FOLDED);                       // folded by default in makexx -i
+mf << MENU("Archive", "Old runs", FOLDED);           // description + folded
+// rules then join with: mf.add(...) << MENU("Processing") / << MENU("Archive") / ...
 
 // AI agent context generation
 mf.description = "What this project does..."; // project description for AGENTS.md
@@ -228,6 +227,7 @@ The viewer is built around **trace-seeded filtering** — the answer to "the gra
 - **Seeds** = union of a name/pattern box (substring, or glob with `*` — e.g. `*_alpha_*`; **applies on Enter**, not per keystroke, so large graphs don't re-filter mid-typing), `#tag` chips (collected from hashtags in `HELP`/`DESC`), and **clicking nodes** (each click toggles that node in/out of the seed set). `/` focuses the seed box. A spinner shows while a filter/layout computes.
 - **Connect** = every node on a path *between* two seeds (`(seeds ∪ descendants) ∩ (seeds ∪ ancestors)`), so shared/untagged convergence nodes (e.g. a forecasting step fed by many instances) are pulled in automatically — they don't need a tag.
 - **Modifiers** — `↑ inputs` (extend upstream to source files; default on) and `↓ finals` (extend downstream to final targets; default off). A single seed + `↑ inputs` = provenance; a single seed + `↓ finals` = impact/blast-radius.
+- **Step-by-step expand** — click a node to select it, then **`+↑ parents`** / **`+↓ children`** reveals just one level of its immediate predecessors / successors, accumulating, so you can walk the graph hop by hop. (Distinct from `↑inputs`/`↓finals`, which jump all the way to the inputs/finals at once.)
 - **Seeds are outlined**; pulled-in intermediates are not. Hover shows type, `HELP`, `DESC`, `#tags`, and the rule's **commands** (the `cmds` array) so a traced path explains itself.
 - **`Filter` toggle** applies/suspends the filter *without* losing the seeds: off = the full graph with your seeds still highlighted (see them in context); on = the isolated connected subgraph. **`Clear`** wipes seeds and resets the toggles. Groups still fold via Fold/Unfold all.
 
@@ -256,7 +256,7 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 - **Domain classes** hold pipeline parameters; loops over them generate many related rules from a single template
 - **`_cont` macro** (`" \\\n"`) for readable multi-line shell commands in string literals
 - **Helper functions** return shell command fragments composed into rule commands
-- **`MENU()` per-rule** and **`mf << MENU()`** organize targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
+- **per-rule `<< MENU()`** organizes targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
 - **Incremental rule building**: `list_deposits`/`list_zones` hold a rule reference (`auto& list = mf.add(...)`) and append one `echo` command per deposit/zone in a loop
 
 ### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
@@ -264,7 +264,7 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealogy visualization) and demonstrates the AI agent context generation feature. Key patterns:
 
 - **`mf.description = "..."`** provides a project summary for the generated `AGENTS.md`
-- **`mf << MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
+- **per-rule `<< MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
 - **Incremental rule building**: the `push` rule is assembled by appending one `rsync` command per `(source, subdir)` pair from a `vector<pair<...>>` — adding a new path to deploy is one line of data, not a new shell line
 - **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call

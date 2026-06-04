@@ -70,10 +70,9 @@ Override from the command line with `makexx -DTRIAL` or `makexx -Diterations=50`
 
 ```cpp
 mf.title = "Seismic Pipeline";
-mf << MENU("Processing", "Run the data pipeline");
-mf.add("filtered.bin", "raw.segy") << HELP("Apply bandpass filter") << "atbpfilt $< $@";
-mf << MENU("Processing/QC");                                   // parent header auto-created
-mf.add("report.pdf", "filtered.bin") << HELP("Generate QC report") << "qcplot $< $@";
+mf.add("filtered.bin", "raw.segy") << MENU("Processing") << HELP("Apply bandpass filter") << "atbpfilt $< $@";
+mf.add("report.pdf", "filtered.bin") << MENU("Processing/QC") << HELP("Generate QC report") << "qcplot $< $@";  // parent auto-created
+mf << MENU("Processing", "Run the data pipeline");             // optional: declare a group description / FOLDED
 ```
 
 **AI agent context.** `mf.generate()` writes an `AGENTS.md` summarizing the project — description, inputs, targets per group — that any AI coding agent (Claude Code, Cursor, Copilot) reads to help modify `makefile.cpp` in domain terms.
@@ -203,8 +202,9 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   r << TOOL("prog");                            // external executable: mtime-tracked prereq
                                                 //   not in `$^`. Bare name → command -v lookup;
                                                 //   path with '/' → literal. Variadic too.
-  mf << MENU("Build");                          // group subsequent rules
-  mf << MENU("Build/Tests", "unit tests");      // nested group + description
+  r  << MENU("Build");                          // put THIS rule in a group (not sticky)
+  r  << MENU("Build/Tests");                    // nested group via slash separator
+  mf << MENU("Build/Tests", "unit tests");      // declare a group's description / FOLDED
   mf << PHONY("install");                       // declare phony at the makefile level
   mf << RETAIN("artifact.bin");                 // protect file from soft_clean
   mf.title = "My Project";

@@ -13,10 +13,10 @@ int main() {
     mf.title = "Simulation Workflow";
     mf.description = "Runs numerical simulations with configurable parameters.";
 
-    mf << MENU("Simulate");
     for (auto& r : runs) {
         string output = r.name + "_result.bin";
         mf.add(output, r.grid)
+            << MENU("Simulate")
             << FINAL
             << HELP("Run " + r.name + " simulation")
             << ("runsim --solver=" + solver
@@ -25,12 +25,12 @@ int main() {
                 + " $< > $@");
     }
 
-    mf << MENU("Reports");
     vector<string> all_results;
     for (auto& r : runs)
         all_results.push_back(r.name + "_result.bin");
 
     mf.add("summary.pdf", all_results)
+        << MENU("Reports")
         << FINAL
         << HELP("Generate comparison report")
         << "plot_results $^ > $@";
