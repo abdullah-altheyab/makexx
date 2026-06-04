@@ -219,6 +219,20 @@ Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom,
 
 **Multi-line descriptions:** Rules with multiple `HELP()` calls or descriptions that word-wrap display with box-drawing connectors (┌│└). Combined multi-target + multi-line descriptions use ┬│├ to connect both dimensions.
 
+## Interactive dependency graph
+
+`mf.generate_with_graph()` emits `.makexx_graph.json` (the DAG + per-node `type`/`group`/`HELP`/`DESC`/`tags`/`cmds`); `make graph` assembles a standalone, offline `makefile_graph.html` (Cytoscape.js + dagre, vendored and embedded) and opens it. The static Graphviz `make makefile_graph.pdf` remains available.
+
+The viewer is built around **trace-seeded filtering** — the answer to "the graph is a hairball because the same pipeline is instantiated N times" (e.g. per play / per region). You pick **seeds** and the viewer renders only the connected subgraph:
+
+- **Seeds** = union of a name/pattern box (substring, or glob with `*` — e.g. `*_alpha_*`), `#tag` chips (collected from hashtags in `HELP`/`DESC`), and **clicking nodes** (each click toggles that node in/out of the seed set). `/` focuses the seed box.
+- **Connect** = every node on a path *between* two seeds (`(seeds ∪ descendants) ∩ (seeds ∪ ancestors)`), so shared/untagged convergence nodes (e.g. a forecasting step fed by many instances) are pulled in automatically — they don't need a tag.
+- **Modifiers** — `↑ inputs` (extend upstream to source files; default on) and `↓ finals` (extend downstream to final targets; default off). A single seed + `↑ inputs` = provenance; a single seed + `↓ finals` = impact/blast-radius.
+- **Seeds are outlined**; pulled-in intermediates are not. Hover shows type, `HELP`, `DESC`, `#tags`, and the rule's **commands** (the `cmds` array) so a traced path explains itself.
+- **`Filter` toggle** applies/suspends the filter *without* losing the seeds: off = the full graph with your seeds still highlighted (see them in context); on = the isolated connected subgraph. **`Clear`** wipes seeds and resets the toggles. Groups still fold via Fold/Unfold all.
+
+Filtering re-runs the dagre layout on just the visible subset.
+
 ## Examples
 
 ### `examples/compile/makefile.cpp` — Large C++ project build
