@@ -28,10 +28,16 @@
     padding:6px 10px; cursor:pointer; white-space:nowrap; }
   button:hover { border-color:var(--interm); }
   .lbl { color:var(--muted); white-space:nowrap; }
-  #tags { display:flex; gap:6px; flex-wrap:wrap; }
+  #tags, #seeds { display:flex; gap:6px; flex-wrap:wrap; }
   .chip { font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line);
     background:var(--bg); color:var(--muted); cursor:pointer; }
   .chip.on { border-color:var(--interm); color:var(--fg); background:#13233a; }
+  .chip.seedchip { border-color:var(--seed); color:var(--fg); }
+  .exh { position:fixed; width:22px; height:22px; z-index:15; border-radius:50%;
+    background:var(--panel); border:1px solid var(--interm); color:var(--interm);
+    font:16px/20px sans-serif; text-align:center; cursor:pointer; user-select:none;
+    box-shadow:0 1px 6px #0007; }
+  .exh:hover { background:var(--interm); color:#0f1216; }
   .toggle { display:flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:pointer; }
   #legend { display:flex; gap:12px; margin-left:auto; color:var(--muted); flex-wrap:wrap; }
   #legend span { display:flex; align-items:center; gap:5px; white-space:nowrap; }
@@ -68,18 +74,19 @@
   </div>
   <div class="bar r2">
     <span class="lbl">Trace:</span>
-    <input id="seed" type="text" placeholder="seed by name / pattern (e.g. *_alpha_*) — press Enter  ·  or click nodes  ·  / to focus" autocomplete="off">
+    <input id="seed" type="text" placeholder="seed by name / pattern (e.g. *_alpha_*) — Enter  ·  dbl-click a node to seed  ·  / to focus" autocomplete="off">
+    <span id="seeds"></span>
     <span id="tags"></span>
     <label class="toggle"><input type="checkbox" id="toInputs" checked> ↑ inputs</label>
     <label class="toggle"><input type="checkbox" id="toFinals"> ↓ finals</label>
     <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
-    <button data-act="expandUp" title="Reveal one level of parents of the selected node">+↑ parents</button>
-    <button data-act="expandDown" title="Reveal one level of children of the selected node">+↓ children</button>
     <button data-act="clear" title="Clear seeds + expansions, show everything">Clear</button>
   </div>
 </div>
 <div id="cy"></div>
 <div id="busy" hidden></div>
+<div id="exUp" class="exh" hidden title="reveal parents (one level up)">+</div>
+<div id="exDown" class="exh" hidden title="reveal children (one level down)">+</div>
 <div id="tip" hidden></div>
 <div id="empty" hidden>No graph data.</div>
 
@@ -183,16 +190,15 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   function scheduleFilter() {
     BUSY.hidden = false;
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { applyFilter(); } finally { BUSY.hidden = true; }
+      try { applyFilter(); } finally { BUSY.hidden = true; placeHandles(); }
     }));
   }
-  // Reveal one level of parents (up) or children (down) of the selected
-  // node(s), accumulating, so you can walk the graph one hop at a time.
-  function expand(dir) {
-    const sel = cy.nodes(":selected").filter(isLeaf);
-    if (!sel.length) return;
-    const hop = (dir === "up") ? sel.incomers("node") : sel.outgoers("node");
-    sel.forEach(n => revealed.add(n.id()));
+  // Reveal one level of parents (up) or children (down) of a node,
+  // accumulating, so you can walk the graph one hop at a time.
+  function expand(node, dir) {
+    if (!node || node.hasClass("group")) return;
+    const hop = (dir === "up") ? node.incomers("node") : node.outgoers("node");
+    revealed.add(node.id());
     hop.forEach(n => revealed.add(n.id()));
     scheduleFilter();
   }
@@ -238,8 +244,36 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const toInputs = document.getElementById("toInputs");
   const toFinals = document.getElementById("toFinals");
   const filterOn = document.getElementById("filterOn");
-  const pinned = new Set();    // node ids the user clicked to seed
-  const revealed = new Set();  // node ids manually revealed via expand ↑/↓ (accumulates)
+  const pinned = new Set();    // seed node ids (added by double-click, or patterns/tags)
+  const revealed = new Set();  // node ids revealed via on-node ⊕ handles (accumulates)
+
+  // On-node ⊕ expand handles follow the selected node; left = parents, right = children.
+  const cyDiv = document.getElementById("cy");
+  const exUp = document.getElementById("exUp");
+  const exDown = document.getElementById("exDown");
+  const seedsBox = document.getElementById("seeds");
+  let selNode = null;
+  function placeHandles() {
+    if (!selNode || selNode.removed() || !selNode.visible()) { exUp.hidden = exDown.hidden = true; return; }
+    const bb = selNode.renderedBoundingBox();
+    const r = cyDiv.getBoundingClientRect();
+    const midY = r.top + (bb.y1 + bb.y2) / 2 - 11;
+    exUp.style.left   = (r.left + bb.x1 - 26) + "px"; exUp.style.top   = midY + "px"; exUp.hidden = false;
+    exDown.style.left = (r.left + bb.x2 + 4)  + "px"; exDown.style.top = midY + "px"; exDown.hidden = false;
+  }
+  exUp.onclick = () => expand(selNode, "up");
+  exDown.onclick = () => expand(selNode, "down");
+
+  // Cleanable list of pinned (double-clicked) seeds.
+  function renderSeedChips() {
+    seedsBox.innerHTML = "";
+    [...pinned].forEach(id => {
+      const c = document.createElement("button");
+      c.className = "chip on seedchip"; c.textContent = id + "  ×"; c.title = "remove this seed";
+      c.onclick = () => { pinned.delete(id); renderSeedChips(); scheduleFilter(); };
+      seedsBox.appendChild(c);
+    });
+  }
 
   function tokenToRegex(tok) {
     const esc = tok.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
@@ -328,15 +362,15 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (act === "fit") cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 });
     else if (act === "collapseAll") api.collapseAll();
     else if (act === "expandAll") api.expandAll();
-    else if (act === "expandUp") expand("up");
-    else if (act === "expandDown") expand("down");
     else if (act === "clear") {
       seedInput.value = "";
       activeTags.clear();
       pinned.clear();
       revealed.clear();
       [...tagsBox.children].forEach(c => c.classList.remove("on"));
+      renderSeedChips();
       toInputs.checked = true; toFinals.checked = false; filterOn.checked = true;
+      selNode = null; placeHandles();
       scheduleFilter();
     }
   });
@@ -363,14 +397,25 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   cy.on("mouseover", "node", e => showTip(e.target, e));
   cy.on("mousemove", "node", e => { if (!tip.hidden) showTip(e.target, e); });
   cy.on("mouseout", "node", () => { tip.hidden = true; });
-  // Click a node to toggle it as a seed.
+  // Single click = select (shows ⊕ expand handles). Double click = toggle seed.
+  let lastTapId = null, lastTapAt = 0;
   cy.on("tap", "node", e => {
-    if (e.target.hasClass("group")) return;
-    const id = e.target.id();
-    pinned.has(id) ? pinned.delete(id) : pinned.add(id);
-    scheduleFilter();
+    const n = e.target;
+    if (n.hasClass("group")) return;
+    const now = Date.now();
+    if (lastTapId === n.id() && now - lastTapAt < 350) {       // double click -> seed
+      const id = n.id();
+      pinned.has(id) ? pinned.delete(id) : pinned.add(id);
+      renderSeedChips(); scheduleFilter();
+      lastTapId = null; lastTapAt = 0; return;
+    }
+    lastTapId = n.id(); lastTapAt = now;
+    selNode = n; placeHandles();                               // single click -> select
   });
-  cy.on("tap", () => { tip.hidden = true; });
+  cy.on("tap", e => { tip.hidden = true; if (e.target === cy) { selNode = null; placeHandles(); } });
+  cy.on("pan zoom", placeHandles);
+  cy.on("position", "node", e => { if (selNode && e.target.id() === selNode.id()) placeHandles(); });
+  window.addEventListener("resize", placeHandles);
 
   applyFilter();   // initial view: full graph if small, "seed to begin" hint if big
 })();
