@@ -73,7 +73,9 @@
     <label class="toggle"><input type="checkbox" id="toInputs" checked> ↑ inputs</label>
     <label class="toggle"><input type="checkbox" id="toFinals"> ↓ finals</label>
     <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
-    <button data-act="clear" title="Clear seeds, show everything">Clear</button>
+    <button data-act="expandUp" title="Reveal one level of parents of the selected node">+↑ parents</button>
+    <button data-act="expandDown" title="Reveal one level of children of the selected node">+↓ children</button>
+    <button data-act="clear" title="Clear seeds + expansions, show everything">Clear</button>
   </div>
 </div>
 <div id="cy"></div>
@@ -184,6 +186,16 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       try { applyFilter(); } finally { BUSY.hidden = true; }
     }));
   }
+  // Reveal one level of parents (up) or children (down) of the selected
+  // node(s), accumulating, so you can walk the graph one hop at a time.
+  function expand(dir) {
+    const sel = cy.nodes(":selected").filter(isLeaf);
+    if (!sel.length) return;
+    const hop = (dir === "up") ? sel.incomers("node") : sel.outgoers("node");
+    sel.forEach(n => revealed.add(n.id()));
+    hop.forEach(n => revealed.add(n.id()));
+    scheduleFilter();
+  }
 
   const api = cy.expandCollapse({ layoutBy: dagreLayout, fisheye: false, animate: false, undoable: false, expandCollapseCascade: true });
 
@@ -226,7 +238,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const toInputs = document.getElementById("toInputs");
   const toFinals = document.getElementById("toFinals");
   const filterOn = document.getElementById("filterOn");
-  const pinned = new Set();   // node ids the user clicked to seed
+  const pinned = new Set();    // node ids the user clicked to seed
+  const revealed = new Set();  // node ids manually revealed via expand ↑/↓ (accumulates)
 
   function tokenToRegex(tok) {
     const esc = tok.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
@@ -263,6 +276,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       let vis = down.intersection(up);
       if (toInputs.checked) vis = vis.union(vis.predecessors().nodes());   // upstream to inputs
       if (toFinals.checked) vis = vis.union(vis.successors().nodes());     // downstream to finals
+      if (revealed.size) vis = vis.union(cy.nodes().filter(n => revealed.has(n.id())));  // manual expansions
       const ele = vis.union(vis.edgesWith(vis)).union(vis.ancestors());    // + edges + group boxes
       cy.elements().style("display", "none");
       ele.style("display", "element");
@@ -277,6 +291,15 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     // Not filtering (no seeds, or Filter off). A big graph can't be drawn
     // whole — show a hint and wait for a seed rather than hang dagre on it.
     if (big) {
+      // If the user has manually expanded a neighborhood, show that instead
+      // of the hint (lets exploration persist after clearing the seed text).
+      const rev = cy.nodes().filter(n => revealed.has(n.id()));
+      if (rev.length) {
+        const ele = rev.union(rev.edgesWith(rev)).union(rev.ancestors());
+        cy.elements().style("display", "none"); ele.style("display", "element");
+        hideHint(); relayout(); updateCount(rev.filter(isLeaf).length);
+        return;
+      }
       cy.elements().style("display", "none");
       showHint("Large graph — " + nLeaf + " targets, " + cy.edges().length + " deps. Too big to draw "
         + "whole; seed a filter to begin: type a name or pattern (e.g. *_alpha_*) in the Trace box, "
@@ -305,10 +328,13 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (act === "fit") cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 });
     else if (act === "collapseAll") api.collapseAll();
     else if (act === "expandAll") api.expandAll();
+    else if (act === "expandUp") expand("up");
+    else if (act === "expandDown") expand("down");
     else if (act === "clear") {
       seedInput.value = "";
       activeTags.clear();
       pinned.clear();
+      revealed.clear();
       [...tagsBox.children].forEach(c => c.classList.remove("on"));
       toInputs.checked = true; toFinals.checked = false; filterOn.checked = true;
       scheduleFilter();
