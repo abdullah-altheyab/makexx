@@ -225,7 +225,7 @@ Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom,
 
 The viewer is built around **trace-seeded filtering** — the answer to "the graph is a hairball because the same pipeline is instantiated N times" (e.g. per play / per region). You pick **seeds** and the viewer renders only the connected subgraph:
 
-- **Seeds** = union of a name/pattern box (substring, or glob with `*` — e.g. `*_alpha_*`), `#tag` chips (collected from hashtags in `HELP`/`DESC`), and **clicking nodes** (each click toggles that node in/out of the seed set). `/` focuses the seed box.
+- **Seeds** = union of a name/pattern box (substring, or glob with `*` — e.g. `*_alpha_*`; **applies on Enter**, not per keystroke, so large graphs don't re-filter mid-typing), `#tag` chips (collected from hashtags in `HELP`/`DESC`), and **clicking nodes** (each click toggles that node in/out of the seed set). `/` focuses the seed box. A spinner shows while a filter/layout computes.
 - **Connect** = every node on a path *between* two seeds (`(seeds ∪ descendants) ∩ (seeds ∪ ancestors)`), so shared/untagged convergence nodes (e.g. a forecasting step fed by many instances) are pulled in automatically — they don't need a tag.
 - **Modifiers** — `↑ inputs` (extend upstream to source files; default on) and `↓ finals` (extend downstream to final targets; default off). A single seed + `↑ inputs` = provenance; a single seed + `↓ finals` = impact/blast-radius.
 - **Seeds are outlined**; pulled-in intermediates are not. Hover shows type, `HELP`, `DESC`, `#tags`, and the rule's **commands** (the `cmds` array) so a traced path explains itself.
