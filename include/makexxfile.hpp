@@ -1521,10 +1521,10 @@ class Makefile {
 		  << "\"description\":\"" << json_escape(description) << "\",\"nodes\":[";
 		bool first = true;
 		std::set<std::string> emitted;
-		for(auto const &n : nodes) {
-			if(hidden_nodes.count(n)) continue;
-			if(builtin_names.count(n)) continue;
-			emitted.insert(n);
+		auto excluded = [&](std::string const &n) {
+			return hidden_nodes.count(n) || builtin_names.count(n);
+		};
+		auto emit_node = [&](std::string const &n) {
 			if(!first) j << ","; first = false;
 			std::string desc;
 			auto dit = file_desc.find(n);
@@ -1538,7 +1538,10 @@ class Makefile {
 			  << "\"desc\":\"" << json_escape(desc) << "\","
 			  << "\"tags\":[" << json_arr(node_tags(n)) << "],"
 			  << "\"cmds\":[" << json_arr(node_cmds(n)) << "]}";
-		}
+			emitted.insert(n);
+		};
+		for(auto const &n : nodes)
+			if(!excluded(n)) emit_node(n);
 		// External-tool prereqs (`<< TOOL(...)`) aren't in `nodes`; surface
 		// them as their own typed nodes so tool dependencies are visible.
 		std::set<std::string> tool_nodes;
@@ -1550,6 +1553,20 @@ class Makefile {
 			j << "{\"id\":\"" << json_escape(t) << "\",\"label\":\"" << json_escape(t)
 			  << "\",\"ext\":\"\",\"type\":\"tool\",\"group\":\"\",\"help\":\"\",\"desc\":\"\","
 			  << "\"tags\":[],\"cmds\":[]}";
+			emitted.insert(t);
+		}
+		// Some prereqs are wired via add_source and never entered `nodes`, so
+		// they show up only as edge endpoints. Emit them too — otherwise an
+		// edge would reference a nonexistent node and the viewer's graph
+		// library throws on load (blank page). This keeps edges and nodes
+		// consistent.
+		for(auto const &cmd : commands) {
+			auto sr = rule_source.equal_range(cmd.get());
+			auto tr = rule_target.equal_range(cmd.get());
+			for(auto si = sr.first; si != sr.second; si++)
+				if(!excluded(si->second) && !emitted.count(si->second)) emit_node(si->second);
+			for(auto ti = tr.first; ti != tr.second; ti++)
+				if(!excluded(ti->second) && !emitted.count(ti->second)) emit_node(ti->second);
 		}
 		j << "],\"edges\":[";
 		first = true;
@@ -1557,14 +1574,15 @@ class Makefile {
 			auto sr = rule_source.equal_range(cmd.get());
 			auto tr = rule_target.equal_range(cmd.get());
 			for(auto ti = tr.first; ti != tr.second; ti++) {
-				if(hidden_nodes.count(ti->second) || builtin_names.count(ti->second)) continue;
+				if(!emitted.count(ti->second)) continue;          // only edges between emitted nodes
 				for(auto si = sr.first; si != sr.second; si++) {
-					if(hidden_nodes.count(si->second) || builtin_names.count(si->second)) continue;
+					if(!emitted.count(si->second)) continue;
 					if(!first) j << ","; first = false;
 					j << "{\"source\":\"" << json_escape(si->second)
 					  << "\",\"target\":\"" << json_escape(ti->second) << "\"}";
 				}
 				for(auto const &tool : cmd->tools) {
+					if(!emitted.count(tool)) continue;
 					if(!first) j << ","; first = false;
 					j << "{\"source\":\"" << json_escape(tool)
 					  << "\",\"target\":\"" << json_escape(ti->second) << "\",\"tool\":true}";

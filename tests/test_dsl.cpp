@@ -299,6 +299,21 @@ static void test_graph_tags_and_cmds() {
     CHECK_CONTAINS(j.substr(p), "\"cmds\":[]");
 }
 
+static void test_graph_no_dangling_edges() {
+    current_test = "test_graph_no_dangling_edges";
+    TempDir td;
+    Makefile mf;
+    auto &r = mf.add("out.bin", "a.in");
+    r << FINAL << HELP("build it") << "build $^ > $@";
+    mf.add_source(r, "extra.in");   // wired as a prereq via add_source -> not in `nodes`
+    mf.generate_with_graph();
+    auto j = read_file(".makexx_graph.json");
+    // The edge endpoint must still be emitted as a node, else the edge is
+    // dangling and the viewer's graph library throws on load (blank page).
+    CHECK_CONTAINS(j, "\"id\":\"extra.in\"");
+    CHECK_CONTAINS(j, "{\"source\":\"extra.in\",\"target\":\"out.bin\"}");
+}
+
 static void test_profile() {
     current_test = "test_profile";
     TempDir td;
@@ -712,6 +727,7 @@ int main() {
     test_undocumented_group();
     test_graph_json();
     test_graph_tags_and_cmds();
+    test_graph_no_dangling_edges();
     test_profile();
     test_profile_off_by_default();
     test_user_phony();

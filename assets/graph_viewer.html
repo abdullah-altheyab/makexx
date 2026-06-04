@@ -163,8 +163,12 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.9 } },
       { selector: "edge.tool", style: { "line-style": "dashed", "line-color": "var(--tool)", "target-arrow-color": "var(--tool)" } }
     ],
-    layout: dagreLayout()
+    layout: { name: "null" }   // no layout at init — applyFilter() lays out only what's shown
   });
+  const BIG_NODES = 400, BIG_EDGES = 1200;   // above this, never draw the whole graph (dagre can't)
+  const EMPTY = document.getElementById("empty");
+  function showHint(msg) { EMPTY.textContent = msg; EMPTY.hidden = false; }
+  function hideHint() { EMPTY.hidden = true; }
 
   const api = cy.expandCollapse({ layoutBy: dagreLayout, fisheye: false, animate: false, undoable: false, expandCollapseCascade: true });
 
@@ -228,30 +232,47 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
 
   function applyFilter() {
     cy.nodes().removeClass("seed");
+    const nLeaf = cy.nodes().filter(isLeaf).length;
+    const big = nLeaf > BIG_NODES || cy.edges().length > BIG_EDGES;
     const seeds = seedActive()
       ? cy.nodes().filter(n => isLeaf(n) && isSeed(n, seedRegexes()))
       : cy.collection();
-    seeds.addClass("seed");                          // outline seeds always (even with filter off)
-    if (!seedActive() || !filterOn.checked) {        // full graph; seeds stay highlighted
-      cy.elements().style("display", "element");
-      relayout();
+    seeds.addClass("seed");                          // outline seeds always
+
+    // Apply the filter only when there are seeds and Filter is on.
+    if (seedActive() && filterOn.checked && seeds.length > 0) {
+      // "Connect the seeds": every node on a path between two seeds = nodes
+      // both downstream of some seed and upstream of some seed.
+      const down = seeds.union(seeds.successors().nodes());
+      const up   = seeds.union(seeds.predecessors().nodes());
+      let vis = down.intersection(up);
+      if (toInputs.checked) vis = vis.union(vis.predecessors().nodes());   // upstream to inputs
+      if (toFinals.checked) vis = vis.union(vis.successors().nodes());     // downstream to finals
+      const ele = vis.union(vis.edgesWith(vis)).union(vis.ancestors());    // + edges + group boxes
+      cy.elements().style("display", "none");
+      ele.style("display", "element");
+      hideHint(); relayout();
+      updateCount(vis.filter(isLeaf).length);
+      return;
+    }
+    // Seeds set but nothing matched.
+    if (seedActive() && filterOn.checked && seeds.length === 0) {
+      cy.elements().style("display", "none"); hideHint(); updateCount(0); return;
+    }
+    // Not filtering (no seeds, or Filter off). A big graph can't be drawn
+    // whole — show a hint and wait for a seed rather than hang dagre on it.
+    if (big) {
+      cy.elements().style("display", "none");
+      showHint("Large graph — " + nLeaf + " targets, " + cy.edges().length + " deps. Too big to draw "
+        + "whole; seed a filter to begin: type a name or pattern (e.g. *_alpha_*) in the Trace box, "
+        + "or pick a #tag." + (seedActive() && !filterOn.checked ? "  (Filter is currently off.)" : ""));
       updateCount(seedActive() ? (seeds.length + " seeds · filter off") : null);
       return;
     }
-    if (seeds.length === 0) { cy.elements().style("display", "none"); updateCount(0); return; }
-    // "Connect the seeds": every node on a path between two seeds = nodes that
-    // are both downstream of some seed and upstream of some seed.
-    const down = seeds.union(seeds.successors().nodes());
-    const up   = seeds.union(seeds.predecessors().nodes());
-    let vis = down.intersection(up);
-    if (toInputs.checked) vis = vis.union(vis.predecessors().nodes());   // extend upstream to inputs
-    if (toFinals.checked) vis = vis.union(vis.successors().nodes());     // extend downstream to finals
-    // keep connecting edges + the compound group boxes around visible nodes
-    const ele = vis.union(vis.edgesWith(vis)).union(vis.ancestors());
-    cy.elements().style("display", "none");
-    ele.style("display", "element");
-    relayout();
-    updateCount(vis.filter(isLeaf).length);
+    // Small graph: safe to draw everything (seeds stay highlighted).
+    cy.elements().style("display", "element");
+    hideHint(); relayout();
+    updateCount(seedActive() ? (seeds.length + " seeds · filter off") : null);
   }
 
   let seedTimer = null;
@@ -311,7 +332,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   });
   cy.on("tap", () => { tip.hidden = true; });
 
-  updateCount(null);
+  applyFilter();   // initial view: full graph if small, "seed to begin" hint if big
 })();
 </script>
 </body>
