@@ -8,7 +8,7 @@
   :root {
     --bg:#0f1216; --panel:#171c22; --line:#2a323c; --fg:#e6edf3; --muted:#8b949e;
     --input:#10b981; --interm:#58a6ff; --final:#f59e0b; --phony:#a78bfa; --tool:#22d3ee;
-    --seed:#ff3da6;   /* vivid magenta — distinct from every node type colour */
+    --seed:#ffe000;   /* yellow — seed highlight (chips); seed nodes use the same literal */
   }
   * { box-sizing:border-box; }
   /* Keep the `hidden` attribute authoritative against id rules that set display. */
@@ -23,21 +23,21 @@
   input[type=text] { background:var(--bg); color:var(--fg); border:1px solid var(--line);
     border-radius:6px; padding:6px 9px; outline:none; }
   #seed { flex:0 0 300px; }
-  input[type=text]:focus { border-color:var(--interm); }
+  input[type=text]:focus { border-color:#58a6ff; }
   button { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px;
     padding:6px 10px; cursor:pointer; white-space:nowrap; }
-  button:hover { border-color:var(--interm); }
+  button:hover { border-color:#58a6ff; }
   .lbl { color:var(--muted); white-space:nowrap; }
   #tags, #seeds { display:flex; gap:6px; flex-wrap:wrap; }
   .chip { font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line);
     background:var(--bg); color:var(--muted); cursor:pointer; }
-  .chip.on { border-color:var(--interm); color:var(--fg); background:#13233a; }
+  .chip.on { border-color:#58a6ff; color:var(--fg); background:#13233a; }
   .chip.seedchip { border-color:var(--seed); color:var(--fg); }
   .exh { position:fixed; width:22px; height:22px; z-index:15; border-radius:50%;
-    background:var(--panel); border:1px solid var(--interm); color:var(--interm);
+    background:var(--panel); border:1px solid #58a6ff; color:#58a6ff;
     font:16px/20px sans-serif; text-align:center; cursor:pointer; user-select:none;
     box-shadow:0 1px 6px #0007; }
-  .exh:hover { background:var(--interm); color:#0f1216; }
+  .exh:hover { background:#58a6ff; color:#0f1216; }
   .toggle { display:flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:pointer; }
   #legend { display:flex; gap:12px; margin-left:auto; color:var(--muted); flex-wrap:wrap; }
   #legend span { display:flex; align-items:center; gap:5px; white-space:nowrap; }
@@ -50,14 +50,14 @@
   #tip .t-meta { color:var(--muted); margin-top:2px; }
   #tip .t-help { margin-top:6px; }
   #tip .t-desc { margin-top:6px; color:var(--muted); font-style:italic; }
-  #tip .t-tags { margin-top:6px; color:var(--interm); }
+  #tip .t-tags { margin-top:6px; color:#58a6ff; }
   #tip .t-cmds { margin-top:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px;
     white-space:pre-wrap; word-break:break-all; color:#cdd9e5; background:#0c0f13; border-radius:6px;
     padding:6px 8px; border:1px solid var(--line); }
   #empty { position:fixed; inset:92px 0 0 0; display:flex; align-items:center; justify-content:center;
     color:var(--muted); padding:0 24px; text-align:center; }
   #busy { position:fixed; top:50%; left:50%; width:46px; height:46px; z-index:20;
-    margin:-23px 0 0 -23px; border:4px solid var(--line); border-top-color:var(--interm);
+    margin:-23px 0 0 -23px; border:4px solid var(--line); border-top-color:#58a6ff;
     border-radius:50%; animation:mxspin .8s linear infinite; }
   @keyframes mxspin { to { transform:rotate(360deg); } }
 </style>
@@ -160,25 +160,26 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         "shape": "round-rectangle", "width": "label", "height": "label",
         "padding": "7px", "background-color": "#30363d",
         "border-width": 1.5, "border-color": "#484f58" } },
-      { selector: "node.input",        style: { "border-color": "var(--input)",  "background-color": "#16241d" } },
-      { selector: "node.intermediate", style: { "border-color": "var(--interm)", "background-color": "#13233a" } },
-      { selector: "node.final",        style: { "border-color": "var(--final)",  "background-color": "#332208", "border-width": 2.5 } },
-      { selector: "node.phony",        style: { "border-color": "var(--phony)",  "background-color": "#241a3a" } },
-      { selector: "node.tool",         style: { "border-color": "var(--tool)",   "background-color": "#0c2a30" } },
+      { selector: "node.input",        style: { "border-color": "#10b981",  "background-color": "#16241d" } },
+      { selector: "node.intermediate", style: { "border-color": "#58a6ff", "background-color": "#13233a" } },
+      { selector: "node.final",        style: { "border-color": "#f59e0b",  "background-color": "#332208", "border-width": 2.5 } },
+      { selector: "node.phony",        style: { "border-color": "#a78bfa",  "background-color": "#241a3a" } },
+      { selector: "node.tool",         style: { "border-color": "#22d3ee",   "background-color": "#0c2a30" } },
       { selector: "node.group", style: {
         "label": "data(label)", "text-valign": "top", "text-halign": "center",
         "color": "#8b949e", "font-size": 12, "font-weight": "bold",
         "background-opacity": 1, "background-color": "#ffffff06",
         "border-color": "#3a424d", "border-width": 1, "border-style": "dashed",
         "padding": "16px", "text-margin-y": -2 } },
-      { selector: "node.seed", style: {
-        "border-color": "var(--seed)", "border-width": 4, "color": "#ffffff", "font-weight": "bold",
-        "overlay-color": "var(--seed)", "overlay-opacity": 0.35, "overlay-padding": 11,
+      { selector: "node.seed", style: {                              // literal colours — cytoscape doesn't resolve CSS var()
+        "border-color": "#ffe000", "border-width": 6,
+        "color": "#ffffff", "font-weight": "bold",
+        "overlay-color": "#ffe000", "overlay-opacity": 0.35, "overlay-padding": 12,
         "z-index": 9999 } },
       { selector: "edge", style: {
         "width": 1.4, "line-color": "#3a424d", "target-arrow-color": "#3a424d",
         "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.9 } },
-      { selector: "edge.tool", style: { "line-style": "dashed", "line-color": "var(--tool)", "target-arrow-color": "var(--tool)" } }
+      { selector: "edge.tool", style: { "line-style": "dashed", "line-color": "#22d3ee", "target-arrow-color": "#22d3ee" } }
     ],
     layout: { name: "null" }   // no layout at init — applyFilter() lays out only what's shown
   });
@@ -212,7 +213,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
 
   // --- Legend + counts ------------------------------------------------------
   const present = new Set(G.nodes.map(n => n.type || "intermediate"));
-  const colors = { input:"var(--input)", intermediate:"var(--interm)", final:"var(--final)", phony:"var(--phony)", tool:"var(--tool)" };
+  const colors = { input:"#10b981", intermediate:"#58a6ff", final:"#f59e0b", phony:"#a78bfa", tool:"#22d3ee" };
   const legend = document.getElementById("legend");
   for (const cls of ["input","intermediate","final","phony","tool"]) {
     if (!present.has(cls)) continue;
