@@ -8,7 +8,7 @@
   :root {
     --bg:#0f1216; --panel:#171c22; --line:#2a323c; --fg:#e6edf3; --muted:#8b949e;
     --input:#10b981; --interm:#58a6ff; --final:#f59e0b; --phony:#a78bfa; --tool:#22d3ee;
-    --seed:#ffffff;
+    --seed:#ff3da6;   /* vivid magenta — distinct from every node type colour */
   }
   * { box-sizing:border-box; }
   /* Keep the `hidden` attribute authoritative against id rules that set display. */
@@ -171,7 +171,10 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         "background-opacity": 1, "background-color": "#ffffff06",
         "border-color": "#3a424d", "border-width": 1, "border-style": "dashed",
         "padding": "16px", "text-margin-y": -2 } },
-      { selector: "node.seed", style: { "border-color": "var(--seed)", "border-width": 3 } },
+      { selector: "node.seed", style: {
+        "border-color": "var(--seed)", "border-width": 4, "color": "#ffffff", "font-weight": "bold",
+        "overlay-color": "var(--seed)", "overlay-opacity": 0.35, "overlay-padding": 11,
+        "z-index": 9999 } },
       { selector: "edge", style: {
         "width": 1.4, "line-color": "#3a424d", "target-arrow-color": "#3a424d",
         "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.9 } },
