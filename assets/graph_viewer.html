@@ -33,11 +33,11 @@
     background:var(--bg); color:var(--muted); cursor:pointer; }
   .chip.on { border-color:#58a6ff; color:var(--fg); background:#13233a; }
   .chip.seedchip { border-color:var(--seed); color:var(--fg); }
-  .exh { position:fixed; width:22px; height:22px; z-index:15; border-radius:50%;
-    background:var(--panel); border:1px solid #58a6ff; color:#58a6ff;
-    font:16px/20px sans-serif; text-align:center; cursor:pointer; user-select:none;
-    box-shadow:0 1px 6px #0007; }
-  .exh:hover { background:#58a6ff; color:#0f1216; }
+  #nodebar { position:fixed; z-index:15; display:flex; gap:2px; padding:3px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 2px 12px #000a; }
+  #nodebar button { font:11px/1 sans-serif; padding:4px 6px; min-width:26px; border-radius:5px;
+    border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
+  #nodebar button:hover { border-color:#58a6ff; color:#58a6ff; }
   .toggle { display:flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:pointer; }
   #legend { display:flex; gap:12px; margin-left:auto; color:var(--muted); flex-wrap:wrap; }
   #legend span { display:flex; align-items:center; gap:5px; white-space:nowrap; }
@@ -70,6 +70,7 @@
     <span id="title">dependency graph</span>
     <button data-act="fit" title="Fit to view">Fit</button>
     <button data-act="png" title="Download the current view as a PNG image">PNG</button>
+    <button data-act="unhide" title="Un-hide all manually hidden nodes">Unhide</button>
     <button data-act="collapseAll" title="Fold every group">Fold all</button>
     <button data-act="expandAll" title="Unfold every group">Unfold all</button>
     <span id="legend"></span>
@@ -78,10 +79,11 @@
   <div class="bar r2">
     <span class="lbl">Trace:</span>
     <input id="seed" type="text" placeholder="seed by name / pattern (e.g. *_alpha_*) — Enter  ·  dbl-click a node to seed  ·  / to focus" autocomplete="off">
+    <button data-act="clearSeed" title="clear the search box">✕</button>
     <span id="seeds"></span>
     <span id="tags"></span>
-    <label class="toggle"><input type="checkbox" id="toInputs"> ↑ inputs</label>
-    <label class="toggle"><input type="checkbox" id="toFinals"> ↓ finals</label>
+    <label class="toggle"><input type="checkbox" id="toInputs"> ← inputs</label>
+    <label class="toggle"><input type="checkbox" id="toFinals"> → finals</label>
     <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
     <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shows how they're related"><input type="checkbox" id="linkMode"> ↔ Link</label>
     <button data-act="clear" title="Clear seeds + expansions, show everything">Clear</button>
@@ -89,8 +91,15 @@
 </div>
 <div id="cy"></div>
 <div id="busy" hidden></div>
-<div id="exUp" class="exh" hidden title="reveal parents (one level up)">+</div>
-<div id="exDown" class="exh" hidden title="reveal children (one level down)">+</div>
+<div id="nodebar" hidden>
+  <button data-na="allUp"    title="reveal ALL upstream / parents (to inputs)">⇤</button>
+  <button data-na="exUp"     title="reveal parents — one level">←</button>
+  <button data-na="hideUp"   title="hide everything upstream">⊘←</button>
+  <button data-na="hideNode" title="hide this node">✕</button>
+  <button data-na="hideDown" title="hide everything downstream">⊘→</button>
+  <button data-na="exDown"   title="reveal children — one level">→</button>
+  <button data-na="allDown"  title="reveal ALL downstream / children (to finals)">⇥</button>
+</div>
 <div id="tip" hidden></div>
 <div id="empty" hidden>No graph data.</div>
 
@@ -200,13 +209,24 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       try { applyFilter(); } finally { BUSY.hidden = true; placeHandles(); }
     }));
   }
-  // Reveal one level of parents (up) or children (down) of a node,
-  // accumulating, so you can walk the graph one hop at a time.
-  function expand(node, dir) {
+  // Reveal nodes around `node` into the persistent `revealed` set.
+  // dir "up"/"down"; all=false → one level (incomers/outgoers), all=true →
+  // the whole cone to inputs/finals (predecessors/successors).
+  function reveal(node, dir, all) {
     if (!node || node.hasClass("group")) return;
-    const hop = (dir === "up") ? node.incomers("node") : node.outgoers("node");
+    const hop = dir === "up"
+      ? (all ? node.predecessors("node") : node.incomers("node"))
+      : (all ? node.successors("node")   : node.outgoers("node"));
     revealed.add(node.id());
     hop.forEach(n => revealed.add(n.id()));
+    scheduleFilter();
+  }
+  // Hide a node, or everything up/downstream of it (into the `hidden` set).
+  function hideAround(node, what) {
+    if (!node || node.hasClass("group")) return;
+    if (what === "node") hidden.add(node.id());
+    else (what === "up" ? node.predecessors("node") : node.successors("node"))
+           .forEach(n => hidden.add(n.id()));
     scheduleFilter();
   }
 
@@ -254,35 +274,44 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const linkMode = document.getElementById("linkMode");
   const pinned = new Set();    // seed node ids (added by double-click, or patterns/tags)
   const revealed = new Set();  // node ids revealed via on-node ⊕ handles (accumulates)
+  const hidden = new Set();    // node ids manually hidden (Hide / Hide ↑ / Hide ↓)
 
-  // On-node ⊕ expand handles follow the selected node; left = parents, right = children.
+  // On-node action bar (floats above the hovered/selected node).
   const cyDiv = document.getElementById("cy");
-  const exUp = document.getElementById("exUp");
-  const exDown = document.getElementById("exDown");
+  const nodebar = document.getElementById("nodebar");
   const seedsBox = document.getElementById("seeds");
   let selNode = null;
   function placeHandles() {
-    if (!selNode || selNode.removed() || !selNode.visible()) { exUp.hidden = exDown.hidden = true; return; }
+    if (!selNode || selNode.removed() || !selNode.visible()) { nodebar.hidden = true; return; }
+    nodebar.hidden = false;                         // unhide first so offsetWidth is measurable
     const bb = selNode.renderedBoundingBox();
     const r = cyDiv.getBoundingClientRect();
-    const midY = r.top + (bb.y1 + bb.y2) / 2 - 11;
-    exUp.style.left   = (r.left + bb.x1 - 26) + "px"; exUp.style.top   = midY + "px"; exUp.hidden = false;
-    exDown.style.left = (r.left + bb.x2 + 4)  + "px"; exDown.style.top = midY + "px"; exDown.hidden = false;
+    const cx = r.left + (bb.x1 + bb.x2) / 2 - nodebar.offsetWidth / 2;
+    nodebar.style.left = Math.max(4, Math.min(cx, window.innerWidth - nodebar.offsetWidth - 4)) + "px";
+    nodebar.style.top  = Math.max(46, r.top + bb.y1 - nodebar.offsetHeight - 8) + "px";
   }
-  exUp.onclick = () => expand(selNode, "up");
-  exDown.onclick = () => expand(selNode, "down");
-  // Handles appear on hover (transient, with a short delay so you can reach
-  // them) or are pinned by a single click. Hovering a handle keeps it open.
+  // Bar buttons (data-na = node action) act on the current selNode.
+  nodebar.addEventListener("click", e => {
+    const a = e.target && e.target.getAttribute && e.target.getAttribute("data-na");
+    if (!a || !selNode) return;
+    if (a === "exUp")        reveal(selNode, "up", false);
+    else if (a === "exDown") reveal(selNode, "down", false);
+    else if (a === "allUp")  reveal(selNode, "up", true);
+    else if (a === "allDown") reveal(selNode, "down", true);
+    else if (a === "hideUp")   hideAround(selNode, "up");
+    else if (a === "hideDown") hideAround(selNode, "down");
+    else if (a === "hideNode") hideAround(selNode, "node");
+  });
+  // The bar shows on hover (transient, short delay so it's reachable) or is
+  // pinned by a single click. Hovering the bar keeps it open.
   let stickyHandles = false, hideTimer = null;
   function scheduleHide() {
     if (stickyHandles) return;
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => { selNode = null; placeHandles(); }, 180);
+    hideTimer = setTimeout(() => { selNode = null; placeHandles(); }, 220);
   }
-  [exUp, exDown].forEach(h => {
-    h.addEventListener("mouseenter", () => clearTimeout(hideTimer));
-    h.addEventListener("mouseleave", scheduleHide);
-  });
+  nodebar.addEventListener("mouseenter", () => clearTimeout(hideTimer));
+  nodebar.addEventListener("mouseleave", scheduleHide);
 
   // Cleanable list of pinned (double-clicked) seeds.
   function renderSeedChips() {
@@ -321,6 +350,17 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       : cy.collection();
     seeds.addClass("seed");                          // outline seeds always
 
+    // Reveal `ele` (minus manually-hidden nodes and their edges), lay out, count.
+    // Seeds are never hidden — they're the anchors, so they always win.
+    const hideColl = cy.nodes().filter(n => hidden.has(n.id()) && !n.hasClass("seed"));
+    const show = (ele) => {
+      ele = ele.difference(hideColl).difference(hideColl.connectedEdges());
+      cy.elements().style("display", "none");
+      ele.style("display", "element");
+      hideHint(); relayout();
+      return ele;
+    };
+
     // Apply the filter only when there are seeds and Filter is on.
     if (seedActive() && filterOn.checked && seeds.length > 0) {
       if (linkMode.checked && seeds.length >= 2) {
@@ -335,9 +375,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
           const r = cy.elements().aStar({ root: anchor, goal: s, directed: false });
           if (r.found) ele = ele.union(r.path); else disc.push(s.id());
         });
-        ele = ele.union(ele.edgesWith(ele)).union(ele.ancestors());
-        cy.elements().style("display", "none"); ele.style("display", "element");
-        hideHint(); relayout();
+        ele = show(ele.union(ele.edgesWith(ele)).union(ele.ancestors()));
         updateCount(disc.length
           ? (ele.filter(isLeaf).length + " shown · not linked to first seed: " + disc.join(", "))
           : ele.filter(isLeaf).length);
@@ -351,11 +389,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       if (toInputs.checked) vis = vis.union(vis.predecessors().nodes());   // upstream to inputs
       if (toFinals.checked) vis = vis.union(vis.successors().nodes());     // downstream to finals
       if (revealed.size) vis = vis.union(cy.nodes().filter(n => revealed.has(n.id())));  // manual expansions
-      const ele = vis.union(vis.edgesWith(vis)).union(vis.ancestors());    // + edges + group boxes
-      cy.elements().style("display", "none");
-      ele.style("display", "element");
-      hideHint(); relayout();
-      updateCount(vis.filter(isLeaf).length);
+      const ele = show(vis.union(vis.edgesWith(vis)).union(vis.ancestors()));   // + edges + group boxes
+      updateCount(ele.filter(isLeaf).length);
       return;
     }
     // Seeds set but nothing matched.
@@ -369,9 +404,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       // of the hint (lets exploration persist after clearing the seed text).
       const rev = cy.nodes().filter(n => revealed.has(n.id()));
       if (rev.length) {
-        const ele = rev.union(rev.edgesWith(rev)).union(rev.ancestors());
-        cy.elements().style("display", "none"); ele.style("display", "element");
-        hideHint(); relayout(); updateCount(rev.filter(isLeaf).length);
+        const ele = show(rev.union(rev.edgesWith(rev)).union(rev.ancestors()));
+        updateCount(ele.filter(isLeaf).length);
         return;
       }
       cy.elements().style("display", "none");
@@ -381,10 +415,10 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       updateCount(seedActive() ? (seeds.length + " seeds · filter off") : null);
       return;
     }
-    // Small graph: safe to draw everything (seeds stay highlighted).
-    cy.elements().style("display", "element");
-    hideHint(); relayout();
-    updateCount(seedActive() ? (seeds.length + " seeds · filter off") : null);
+    // Small graph: safe to draw everything (seeds stay highlighted, hidden subtracted).
+    const ele = show(cy.elements());
+    updateCount(seedActive() ? (seeds.length + " seeds · filter off")
+                : (hidden.size ? ele.filter(isLeaf).length : null));
   }
 
   // Filter only on Enter — live per-keystroke filtering froze large graphs.
@@ -410,6 +444,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       a.download = ((G.title || "makefile_graph").replace(/[^A-Za-z0-9._-]+/g, "_")) + ".png";
       document.body.appendChild(a); a.click(); a.remove();
     }
+    else if (act === "clearSeed") { seedInput.value = ""; seedInput.focus(); scheduleFilter(); }
+    else if (act === "unhide") { hidden.clear(); scheduleFilter(); }
     else if (act === "collapseAll") api.collapseAll();
     else if (act === "expandAll") api.expandAll();
     else if (act === "clear") {
@@ -417,6 +453,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       activeTags.clear();
       pinned.clear();
       revealed.clear();
+      hidden.clear();
       [...tagsBox.children].forEach(c => c.classList.remove("on"));
       renderSeedChips();
       toInputs.checked = false; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;

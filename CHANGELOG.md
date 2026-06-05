@@ -5,6 +5,8 @@
 ### Interactive dependency graph
 
 - **PNG export.** A `PNG` toolbar button downloads the current (filtered/traced) view as a 2× PNG via cytoscape's `cy.png`, rendered on the current background. Captures the whole visible graph, not just the on-screen viewport.
+- **On-node action bar (hover).** Hovering a node pops a floating bar with seven actions: reveal one level / reveal all-the-way / hide — for each direction — plus hide this node. Arrows are **left/right** (← parents/upstream, → children/downstream) to match the left-to-right layout (the `← inputs` / `→ finals` toolbar toggles were relabelled to match). Hidden nodes are subtracted from every view (with a global **Unhide**); `Clear` resets them. **Seeds are never hidden** — they're the anchors, so a hide that would sweep one in leaves it visible.
+- **One-click clear of the search box** — an `✕` next to the Trace box empties just the name/pattern field (distinct from `Clear`, which resets all seeds/filters).
 
 ## v0.4.0
 
