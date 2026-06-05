@@ -1596,6 +1596,14 @@ class Makefile {
 				}
 			}
 		}
+		// Groups declared FOLDED via `MENU(..., FOLDED)` — so the graph's Menu
+		// browser can honor the same initial fold state as `makexx -i`.
+		j << "],\"folded_groups\":[";
+		bool gf = true;
+		for(auto const &g : folded_groups) {
+			if(!gf) j << ","; gf = false;
+			j << "\"" << json_escape(g) << "\"";
+		}
 		j << "]}";
 		j.close();
 	}

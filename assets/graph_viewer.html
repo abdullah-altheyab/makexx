@@ -68,6 +68,10 @@
   #picker .prow .pinbtn { font:10px/1 sans-serif; padding:3px 6px; border-radius:4px; flex:none;
     border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer; }
   #picker .prow .pinbtn.pinned { color:var(--seed); border-color:var(--seed); }
+  #picker .pgrp { font:600 11px/1.4 sans-serif; color:var(--muted); padding:5px 8px; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #picker .pgrp:hover { color:var(--fg); }
+  #picker .prow .mdesc { color:var(--muted); }
   .barchip { display:inline-flex; align-items:center; gap:0; }
   .barchip .barlbl { cursor:pointer; }
   .barchip .barx { cursor:pointer; margin-left:5px; opacity:.55; }
@@ -99,6 +103,7 @@
 <div id="bars">
   <div class="bar r1">
     <span id="title">dependency graph</span>
+    <button data-act="menu" title="Browse targets by group (like makexx -i) and pick seeds">Menu</button>
     <button data-act="fit" title="Fit to view">Fit</button>
     <button data-act="png" title="Download the current view as a PNG image">PNG</button>
     <button data-act="svg" title="Download the current view as a vector SVG">SVG</button>
@@ -119,6 +124,7 @@
     <label class="toggle"><input type="checkbox" id="toFinals"> → finals</label>
     <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
     <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shows how they're related"><input type="checkbox" id="linkMode"> ↔ Link</label>
+    <button data-act="reset" title="Reset expansions, hidden nodes &amp; modifiers — but keep the seeds">Reset</button>
     <button data-act="clear" title="Clear seeds + expansions, show everything">Clear</button>
   </div>
 </div>
@@ -478,6 +484,94 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     pcount.textContent = tags.length + " tags";
   }
 
+  // Menu-browser mode: targets organized by group, mirroring the `makexx -i`
+  // help menu. Foldable nested section headers, HELP text per target, search
+  // across name/description/group, and a folded "Undocumented" bucket for
+  // targets with no HELP. Click a target to toggle it as a seed.
+  const UNDOC = "__undoc__";              // sentinel fold key for Undocumented
+  // Undocumented folds by default; groups declared `MENU(..., FOLDED)` start
+  // folded too, mirroring the initial fold state of `makexx -i`.
+  const menuFolded = new Set([UNDOC, ...(G.folded_groups || [])]);
+  function openMenuBrowser() {
+    paddall.hidden = true; pback.hidden = true; pickBack = null; curRender = renderMenuList;
+    pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
+  }
+  function menuRow(n, depth) {
+    const on = pinned.has(n.id);
+    const row = document.createElement("div");
+    row.className = "prow" + (on ? " on" : "");
+    row.style.paddingLeft = (6 + depth * 12) + "px";
+    const lbl = document.createElement("span");
+    lbl.className = "plbl";
+    const help = (n.help || "").split("\n")[0];
+    lbl.innerHTML = (on ? "● " : "") + esc(n.id) + (help ? '<span class="mdesc"> — ' + esc(help) + "</span>" : "");
+    lbl.title = n.id + (n.help ? " — " + n.help : "");
+    row.appendChild(lbl);
+    row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); renderSeedChips(); renderMenuList(); scheduleFilter(); };
+    return row;
+  }
+  function menuHeader(key, label, depth, folded) {
+    const h = document.createElement("div");
+    h.className = "pgrp";
+    h.style.paddingLeft = (6 + depth * 12) + "px";
+    h.textContent = (folded ? "▸ " : "▾ ") + label;
+    h.onclick = () => { menuFolded.has(key) ? menuFolded.delete(key) : menuFolded.add(key); renderMenuList(); };
+    plist.appendChild(h);
+  }
+  function renderMenuList() {
+    const q = pfilter.value.trim().toLowerCase();
+    const searching = q.length > 0;
+    const match = n => !searching || n.id.toLowerCase().includes(q) ||
+      (n.help || "").toLowerCase().includes(q) || (n.group || "").toLowerCase().includes(q);
+    // Partition matched targets: documented under their group, the rest undoc.
+    const byGroup = new Map();             // group path ("" = ungrouped) -> nodes[]
+    const undoc = [];
+    let total = 0;
+    for (const n of G.nodes) {
+      if (!match(n)) continue;
+      total++;
+      if (n.help && n.help.length) {
+        const g = n.group || "";
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g).push(n);
+      } else undoc.push(n);
+    }
+    // Ancestor-closed, lexicographically sorted order (parents before children).
+    const allGroups = new Set();
+    for (const g of byGroup.keys()) {
+      if (!g) continue;
+      let pre = "";
+      for (const part of g.split("/")) { pre = pre ? pre + "/" + part : part; allGroups.add(pre); }
+    }
+    const ordered = [...allGroups].sort();
+    const anyAncestorFolded = path => {
+      if (searching) return false;
+      const parts = path.split("/"); let pre = "";
+      for (let i = 0; i < parts.length - 1; i++) { pre = pre ? pre + "/" + parts[i] : parts[i]; if (menuFolded.has(pre)) return true; }
+      return false;
+    };
+    ptitle.textContent = "menu — " + total;
+    plist.innerHTML = "";
+    // Ungrouped documented targets first (no header), like help's "Targets:".
+    (byGroup.get("") || []).forEach(n => plist.appendChild(menuRow(n, 0)));
+    // Grouped targets, with auto-created parent section headers.
+    for (const g of ordered) {
+      if (anyAncestorFolded(g)) continue;
+      const depth = g.split("/").length - 1;
+      const selfFolded = !searching && menuFolded.has(g);
+      menuHeader(g, g.split("/").pop(), depth, selfFolded);
+      if (selfFolded) continue;
+      (byGroup.get(g) || []).forEach(n => plist.appendChild(menuRow(n, depth + 1)));
+    }
+    // Undocumented (no HELP) at the bottom, folded by default — like the TUI.
+    if (undoc.length) {
+      const folded = !searching && menuFolded.has(UNDOC);
+      menuHeader(UNDOC, "Undocumented (" + undoc.length + ")", 0, folded);
+      if (!folded) undoc.forEach(n => plist.appendChild(menuRow(n, 1)));
+    }
+    pcount.textContent = total + " targets";
+  }
+
   pfilter.addEventListener("input", () => curRender());
   picker.addEventListener("click", e => {
     const pk = e.target.getAttribute && e.target.getAttribute("data-pk");
@@ -608,7 +702,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   document.getElementById("bars").addEventListener("click", e => {
     const act = e.target && e.target.getAttribute && e.target.getAttribute("data-act");
     if (!act) return;
-    if (act === "fit") cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 });
+    if (act === "menu") openMenuBrowser();
+    else if (act === "fit") cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 });
     else if (act === "png") {
       // Export the whole rendered (visible) graph at 2x, on the current background.
       const bg = getComputedStyle(document.body).backgroundColor || "#0f1216";
@@ -633,6 +728,16 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       revealed.clear();
       hidden.clear();
       renderSeedChips();
+      toInputs.checked = false; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
+      selNode = null; stickyHandles = false; placeHandles();
+      scheduleFilter();
+    }
+    else if (act === "reset") {
+      // Like Clear, but keeps the seeds (pattern box + pinned chips). Drops the
+      // accumulated step-by-step reveals, manual hides, and modifier toggles so
+      // you're back to the clean seed-filtered subgraph.
+      revealed.clear();
+      hidden.clear();
       toInputs.checked = false; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
       selNode = null; stickyHandles = false; placeHandles();
       scheduleFilter();
