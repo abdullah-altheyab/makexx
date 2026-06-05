@@ -327,6 +327,23 @@ static void test_graph_no_dangling_edges() {
     CHECK_CONTAINS(j, "{\"source\":\"extra.in\",\"target\":\"out.bin\"}");
 }
 
+static void test_graph_srcline() {
+    current_test = "test_graph_srcline";
+    TempDir td;
+    Makefile mf;
+    int ln = __builtin_LINE() + 1;   // the mf.add below is on the next line
+    mf.add("o.bin", "i.dat") << FINAL << HELP("build") << "cp $< $@";
+    mf.generate_with_graph();
+    auto j = read_file(".makexx_graph.json");
+    // The rule's node carries the makefile.cpp line of its mf.add(...) call.
+    CHECK_CONTAINS(j, "\"id\":\"o.bin\"");
+    CHECK_CONTAINS(j, "\"srcline\":" + std::to_string(ln));
+    // An input (no producing rule) has srcline 0.
+    auto p = j.find("\"id\":\"i.dat\"");
+    CHECK_EQ(p != std::string::npos, true);
+    CHECK_CONTAINS(j.substr(p), "\"srcline\":0");
+}
+
 static void test_profile() {
     current_test = "test_profile";
     TempDir td;
@@ -742,6 +759,7 @@ int main() {
     test_graph_json();
     test_graph_tags_and_cmds();
     test_graph_no_dangling_edges();
+    test_graph_srcline();
     test_profile();
     test_profile_off_by_default();
     test_user_phony();

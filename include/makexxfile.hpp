@@ -169,6 +169,7 @@ class Rule {
 	target_type type;
 	std::vector<std::string> help_lines;
 	std::string help_group;
+	int src_line = 0;            // line in makefile.cpp where mf.add(...) was called
 	Rule() {
 		type = OPTIONAL;
 		help_group = "";
@@ -496,9 +497,10 @@ class Makefile {
 	std::set<std::string> folded_groups;
 	std::map<std::string, std::string> group_descriptions;
 
-	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources) {
+	Rule &add_impl(std::vector<std::string> targets, std::vector<std::string> sources, int src_line = 0) {
 		commands.push_back(std::make_unique<Rule>());
 		Rule *A = commands.back().get();
+		A->src_line = src_line;
 		// A rule's group comes ONLY from its own `<< MENU(...)` / `<< HELP("g",...)`.
 		// (There used to be a sticky `current_help_group` here that every later
 		// rule silently inherited — a stateful footgun that recolored unrelated
@@ -714,16 +716,20 @@ class Makefile {
         }
     }
 
-	Rule &add(std::string target) { return add_impl({target}, {}); }
-	Rule &add(StringList targets) { return add_impl(targets, {}); }
-	Rule &add(std::string target, std::string source) { return add_impl({target}, {source}); }
-	Rule &add(std::string target, StringList sources) { return add_impl({target}, sources); }
-	Rule &add(std::string target, std::vector<std::string> sources) { return add_impl({target}, sources); }
-	Rule &add(StringList targets, std::string source) { return add_impl(targets, {source}); }
-	Rule &add(StringList targets, StringList sources) { return add_impl(targets, sources); }
-	Rule &add(StringList targets, std::vector<std::string> sources) { return add_impl(targets, sources); }
-	Rule &add(std::vector<std::string> targets, std::string source) { return add_impl(targets, {source}); }
-	Rule &add(std::vector<std::string> targets, std::vector<std::string> sources) { return add_impl(targets, sources); }
+	// `int _ln = __builtin_LINE()` captures the makefile.cpp line of the
+	// mf.add(...) call (gcc/clang extension, works as a default argument in
+	// C++17). Surfaced per node in the graph so the viewer can show where a
+	// rule is defined; for loop-generated rules it points at the template line.
+	Rule &add(std::string target, int _ln = __builtin_LINE()) { return add_impl({target}, {}, _ln); }
+	Rule &add(StringList targets, int _ln = __builtin_LINE()) { return add_impl(targets, {}, _ln); }
+	Rule &add(std::string target, std::string source, int _ln = __builtin_LINE()) { return add_impl({target}, {source}, _ln); }
+	Rule &add(std::string target, StringList sources, int _ln = __builtin_LINE()) { return add_impl({target}, sources, _ln); }
+	Rule &add(std::string target, std::vector<std::string> sources, int _ln = __builtin_LINE()) { return add_impl({target}, sources, _ln); }
+	Rule &add(StringList targets, std::string source, int _ln = __builtin_LINE()) { return add_impl(targets, {source}, _ln); }
+	Rule &add(StringList targets, StringList sources, int _ln = __builtin_LINE()) { return add_impl(targets, sources, _ln); }
+	Rule &add(StringList targets, std::vector<std::string> sources, int _ln = __builtin_LINE()) { return add_impl(targets, sources, _ln); }
+	Rule &add(std::vector<std::string> targets, std::string source, int _ln = __builtin_LINE()) { return add_impl(targets, {source}, _ln); }
+	Rule &add(std::vector<std::string> targets, std::vector<std::string> sources, int _ln = __builtin_LINE()) { return add_impl(targets, sources, _ln); }
 
 	void on_softclean_retain(std::string filename) {
         this->soft_clean_retain_nodes.insert(filename);
@@ -1503,6 +1509,10 @@ class Makefile {
 			if(it == target_rule.end()) return {};
 			return it->second->commands;
 		};
+		auto node_srcline = [&](std::string const &n) -> int {
+			auto it = target_rule.find(n);
+			return it != target_rule.end() ? it->second->src_line : 0;
+		};
 		auto json_arr = [&](std::vector<std::string> const &v) -> std::string {
 			std::string o;
 			for(size_t i = 0; i < v.size(); i++) {
@@ -1533,6 +1543,7 @@ class Makefile {
 			  << "\"help\":\"" << json_escape(node_help(n)) << "\","
 			  << "\"desc\":\"" << json_escape(desc) << "\","
 			  << "\"tags\":[" << json_arr(node_tags(n)) << "],"
+			  << "\"srcline\":" << node_srcline(n) << ","
 			  << "\"cmds\":[" << json_arr(node_cmds(n)) << "]}";
 			emitted.insert(n);
 		};
@@ -1548,7 +1559,7 @@ class Makefile {
 			if(!first) j << ","; first = false;
 			j << "{\"id\":\"" << json_escape(t) << "\",\"label\":\"" << json_escape(t)
 			  << "\",\"ext\":\"\",\"type\":\"tool\",\"group\":\"\",\"help\":\"\",\"desc\":\"\","
-			  << "\"tags\":[],\"cmds\":[]}";
+			  << "\"tags\":[],\"srcline\":0,\"cmds\":[]}";
 			emitted.insert(t);
 		}
 		// Some prereqs are wired via add_source and never entered `nodes`, so

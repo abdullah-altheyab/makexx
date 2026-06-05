@@ -54,6 +54,8 @@
   #tip .t-cmds { margin-top:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px;
     white-space:pre-wrap; word-break:break-all; color:#cdd9e5; background:#0c0f13; border-radius:6px;
     padding:6px 8px; border:1px solid var(--line); }
+  #tip .t-cmds .t-num { color:#6b7785; user-select:none; }
+  #tip .t-cmds .t-more { color:var(--muted); font-style:italic; }
   #empty { position:fixed; inset:92px 0 0 0; display:flex; align-items:center; justify-content:center;
     color:var(--muted); padding:0 24px; text-align:center; }
   #busy { position:fixed; top:50%; left:50%; width:46px; height:46px; z-index:20;
@@ -137,7 +139,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         id: n.id, label: n.label || n.id, parent,
         type: n.type || "intermediate", ext: n.ext || "",
         help: n.help || "", desc: n.desc || "",
-        tags: n.tags || [], cmds: n.cmds || []
+        tags: n.tags || [], cmds: n.cmds || [], srcline: n.srcline || 0
       },
       classes: n.type || "intermediate"
     });
@@ -419,13 +421,22 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   function showTip(node, ev) {
     if (node.hasClass("group")) { tip.hidden = true; return; }
     const d = node.data();
-    const meta = [d.type, d.ext ? "." + d.ext : null].filter(Boolean).join(" · ");
+    const meta = [d.type, d.ext ? "." + d.ext : null, d.srcline ? "makefile.cpp:" + d.srcline : null].filter(Boolean).join(" · ");
     let html = '<div class="t-name">' + esc(d.id) + "</div>";
     if (meta) html += '<div class="t-meta">' + esc(meta) + "</div>";
     if (d.help) html += '<div class="t-help">' + esc(d.help) + "</div>";
     if (d.desc) html += '<div class="t-desc">' + esc(d.desc) + "</div>";
     if (d.tags && d.tags.length) html += '<div class="t-tags">' + d.tags.map(t => "#" + esc(t)).join("  ") + "</div>";
-    if (d.cmds && d.cmds.length) html += '<div class="t-cmds">' + d.cmds.map(esc).join("\n") + "</div>";
+    if (d.cmds && d.cmds.length) {
+      const MAXCMDS = 8, MAXLEN = 110;
+      const lines = d.cmds.slice(0, MAXCMDS).map((c, i) => {
+        let one = c.replace(/\\\s*\n\s*/g, " ").replace(/\s+/g, " ").trim();   // collapse continuations / whitespace
+        if (one.length > MAXLEN) one = one.slice(0, MAXLEN - 1) + "…";
+        return '<span class="t-num">' + String(i + 1).padStart(2) + "</span> " + esc(one);
+      });
+      if (d.cmds.length > MAXCMDS) lines.push('<span class="t-more">… +' + (d.cmds.length - MAXCMDS) + " more</span>");
+      html += '<div class="t-cmds">' + lines.join("\n") + "</div>";
+    }
     tip.innerHTML = html;
     tip.hidden = false;
     const x = ev.originalEvent.clientX, y = ev.originalEvent.clientY;
