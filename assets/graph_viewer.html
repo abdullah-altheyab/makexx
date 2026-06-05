@@ -107,7 +107,8 @@
     <button data-act="fit" title="Fit to view">Fit</button>
     <button data-act="png" title="Download the current view as a PNG image">PNG</button>
     <button data-act="svg" title="Download the current view as a vector SVG">SVG</button>
-    <button data-act="save" title="Save the current graph state (seeds, hidden/revealed, toggles, theme) to a JSON file">Save</button>
+    <button data-act="save" title="Save the graph state — overwrites the last-saved file (or prompts if none yet)">Save</button>
+    <button data-act="saveAs" title="Save the graph state to a new file — choose name/location">Save As</button>
     <button data-act="load" title="Load a previously saved graph-state JSON file">Load</button>
     <button data-act="theme" title="Toggle light / dark background">☀ Light</button>
     <button data-act="unhide" title="Un-hide all manually hidden nodes">Unhide</button>
@@ -753,6 +754,52 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (!picker.hidden) curRender();             // refresh an open picker in place
     scheduleFilter();                            // re-apply + re-frame
   }
+  // Save targets: `Save As` always picks a fresh name/location; plain `Save`
+  // reuses the last one (overwriting it in place where the File System Access
+  // API is available, else re-downloading under the same name).
+  let stateHandle = null;          // FS Access API handle (Chromium) for in-place overwrite
+  let lastStateName = null;        // remembered name for the anchor-download fallback
+  const stateJSON = () => JSON.stringify(gatherState(), null, 2);
+  const defaultStateName = () => (G.title || "makefile_graph").replace(/[^A-Za-z0-9._-]+/g, "_") + ".state.json";
+  function downloadState(name) {
+    const blob = new Blob([stateJSON()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function writeHandle(h) {
+    const w = await h.createWritable();
+    await w.write(stateJSON());
+    await w.close();
+  }
+  async function saveStateAs() {
+    if (window.showSaveFilePicker) {                 // real OS "Save As" (Chromium)
+      try {
+        const h = await window.showSaveFilePicker({
+          suggestedName: lastStateName || defaultStateName(),
+          types: [{ description: "Graph state", accept: { "application/json": [".json"] } }],
+        });
+        await writeHandle(h);
+        stateHandle = h; lastStateName = h.name;
+      } catch (e) { if (e.name !== "AbortError") alert("Could not save: " + e.message); }
+      return;
+    }
+    const name = prompt("Save graph state as:", lastStateName || defaultStateName());  // fallback
+    if (name == null) return;
+    lastStateName = /\.json$/i.test(name) ? name : name + ".json";
+    downloadState(lastStateName);
+  }
+  async function saveState() {
+    if (stateHandle) {                               // overwrite the last-chosen file
+      try { await writeHandle(stateHandle); return; }
+      catch (e) { if (e.name === "AbortError") return; stateHandle = null; }   // lost access → reprompt
+    }
+    if (!window.showSaveFilePicker && lastStateName) { downloadState(lastStateName); return; }
+    return saveStateAs();
+  }
+
   const stateFile = document.getElementById("stateFile");
   stateFile.addEventListener("change", () => {
     const f = stateFile.files && stateFile.files[0];
@@ -787,12 +834,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       download(url, "svg");
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    else if (act === "save") {
-      const blob = new Blob([JSON.stringify(gatherState(), null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      download(url, "state.json");
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
+    else if (act === "save") saveState();
+    else if (act === "saveAs") saveStateAs();
     else if (act === "load") stateFile.click();
     else if (act === "theme") setTheme(theme === "dark" ? "light" : "dark");
     else if (act === "clearSeed") { seedInput.value = ""; seedInput.focus(); scheduleFilter(); }
