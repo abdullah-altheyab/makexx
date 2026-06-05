@@ -49,12 +49,23 @@
     border-radius:8px; box-shadow:0 6px 28px #000b; }
   #picker .ph { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); }
   #picker .ph .ptitle { font-weight:600; flex:1; }
+  #picker .ph .pback { font:11px/1 sans-serif; padding:3px 7px; border-radius:5px;
+    border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
+  #picker .ph .pback:hover { border-color:#58a6ff; color:#58a6ff; }
   #picker #pfilter { margin:8px 10px 4px; }
   #picker .plist { overflow:auto; padding:2px 6px; flex:1; }
-  #picker .prow { padding:4px 8px; border-radius:5px; cursor:pointer; font-family:ui-monospace,Menlo,Consolas,monospace;
-    font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #picker .prow { display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:5px; cursor:pointer;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; }
+  #picker .prow .plbl { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #picker .prow:hover { background:#1b2530; }
   #picker .prow.on { color:var(--seed); }
+  #picker .prow .pinbtn { font:10px/1 sans-serif; padding:3px 6px; border-radius:4px; flex:none;
+    border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer; }
+  #picker .prow .pinbtn.pinned { color:var(--seed); border-color:var(--seed); }
+  .barchip { display:inline-flex; align-items:center; gap:0; }
+  .barchip .barlbl { cursor:pointer; }
+  .barchip .barx { cursor:pointer; margin-left:5px; opacity:.55; }
+  .barchip .barx:hover { opacity:1; }
   #picker .pfoot { display:flex; align-items:center; gap:8px; padding:8px 10px; border-top:1px solid var(--line);
     color:var(--muted); }
   #cy { position:fixed; left:0; right:0; bottom:0; top:92px; }
@@ -116,7 +127,7 @@
 </div>
 <div id="tip" hidden></div>
 <div id="picker" hidden>
-  <div class="ph"><span class="ptitle"></span><button data-pk="close" title="close">✕</button></div>
+  <div class="ph"><button data-pk="back" class="pback" title="back to tags" hidden>← Back</button><span class="ptitle"></span><button data-pk="close" title="close">✕</button></div>
   <input id="pfilter" type="text" placeholder="filter…" autocomplete="off">
   <div class="plist"></div>
   <div class="pfoot"><button data-pk="addall">Add all shown</button><span class="pcount"></span></div>
@@ -263,7 +274,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     const s = document.createElement("span");
     s.innerHTML = '<i class="sw" style="background:' + colors[cls] + '"></i>' + cls;
     s.title = "list all " + cls + " targets to add";
-    s.onclick = () => openPicker(cls);
+    s.onclick = () => openNodePicker(cls, n => (n.type || "intermediate") === cls);
     legend.appendChild(s);
   }
   const isLeaf = n => !n.hasClass("group");
@@ -276,17 +287,34 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     document.getElementById("count").textContent = s;
   }
 
-  // --- Tag chips ------------------------------------------------------------
+  // --- Tags -----------------------------------------------------------------
+  // The toolbar shows ONE "Tags ▾" button, not a chip per tag (that would
+  // overflow). The browser is the single entry point: from it you either drill
+  // into a tag's node list, or pin a tag to the bar as a quick-access chip.
   const allTags = new Set();
   for (const n of G.nodes) for (const t of (n.tags || [])) allTags.add(t);
-  const activeTags = new Set();
+  const sortedTags = [...allTags].sort();
   const tagsBox = document.getElementById("tags");
-  [...allTags].sort().forEach(t => {
-    const b = document.createElement("button");
-    b.className = "chip"; b.textContent = "#" + t;
-    b.onclick = () => { b.classList.toggle("on"); activeTags.has(t) ? activeTags.delete(t) : activeTags.add(t); scheduleFilter(); };
-    tagsBox.appendChild(b);
-  });
+  const barTags = new Set();   // tags the user promoted to the toolbar
+  function renderTagChips() {
+    tagsBox.innerHTML = "";
+    if (!sortedTags.length) return;
+    const more = document.createElement("button");
+    more.className = "chip"; more.textContent = "Tags ▾ (" + sortedTags.length + ")";
+    more.title = "browse all tags"; more.onclick = openTagBrowser;
+    tagsBox.appendChild(more);
+    [...barTags].sort().forEach(t => {
+      const wrap = document.createElement("span"); wrap.className = "chip barchip";
+      const lbl = document.createElement("span"); lbl.className = "barlbl";
+      lbl.textContent = "#" + t; lbl.title = "list #" + t + " nodes to add";
+      lbl.onclick = () => openNodePicker("#" + t, n => (n.tags || []).includes(t), openTagBrowser);
+      const x = document.createElement("span"); x.className = "barx"; x.textContent = "×";
+      x.title = "remove from bar";
+      x.onclick = e => { e.stopPropagation(); barTags.delete(t); renderTagChips(); };
+      wrap.append(lbl, x); tagsBox.appendChild(wrap);
+    });
+  }
+  renderTagChips();
 
   // --- Seed-driven filtering ------------------------------------------------
   const seedInput = document.getElementById("seed");
@@ -346,39 +374,87 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     });
   }
 
-  // --- Type picker: click a legend type → list all its nodes, add as seeds ---
+  // --- Picker: lists nodes (by type or tag) to add as seeds; or browses tags -
   const picker = document.getElementById("picker");
   const pfilter = document.getElementById("pfilter");
   const plist = picker.querySelector(".plist");
   const ptitle = picker.querySelector(".ptitle");
   const pcount = picker.querySelector(".pcount");
-  let pickType = null;
-  function pickItems() {
-    const q = pfilter.value.trim().toLowerCase();
-    return G.nodes.filter(n => (n.type || "intermediate") === pickType &&
-      (!q || n.id.toLowerCase().includes(q)));
+  const paddall = picker.querySelector('[data-pk="addall"]');
+  const pback = picker.querySelector('[data-pk="back"]');
+  let pickPred = null, pickTitle = "", curRender = () => {}, pickBack = null;
+
+  // Node-list mode: every node matching `pred` (filtered), click to add as seed.
+  // `back` (optional) is shown as "← Back" — used when we drilled in from the
+  // tag browser so the user can return to the tag list.
+  function openNodePicker(title, pred, back) {
+    pickPred = pred; pickTitle = title; pickBack = back || null;
+    paddall.hidden = false; pback.hidden = !pickBack; curRender = renderNodePicker;
+    pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
   }
-  function renderPicker() {
-    const items = pickItems();
-    ptitle.textContent = pickType + " — " + items.length;
+  function renderNodePicker() {
+    const q = pfilter.value.trim().toLowerCase();
+    const items = G.nodes.filter(n => pickPred(n) && (!q || n.id.toLowerCase().includes(q)));
+    ptitle.textContent = pickTitle + " — " + items.length;
     plist.innerHTML = "";
     items.forEach(n => {
-      const row = document.createElement("div");
       const on = pinned.has(n.id);
+      const row = document.createElement("div");
       row.className = "prow" + (on ? " on" : "");
-      row.textContent = (on ? "● " : "  ") + n.id;
-      row.title = n.id;
-      row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); renderSeedChips(); renderPicker(); scheduleFilter(); };
+      const lbl = document.createElement("span");
+      lbl.className = "plbl"; lbl.textContent = (on ? "● " : "  ") + n.id; lbl.title = n.id;
+      row.appendChild(lbl);
+      row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); renderSeedChips(); renderNodePicker(); scheduleFilter(); };
       plist.appendChild(row);
     });
     pcount.textContent = items.length + " shown";
   }
-  function openPicker(type) { pickType = type; pfilter.value = ""; picker.hidden = false; renderPicker(); pfilter.focus(); }
-  pfilter.addEventListener("input", renderPicker);
+
+  // Tag-browser mode: list all tag values (with counts). Click a tag name to
+  // drill into its node list; click "pin"/"on bar" to promote it to the toolbar.
+  const tagCount = new Map();
+  for (const n of G.nodes) for (const t of (n.tags || [])) tagCount.set(t, (tagCount.get(t) || 0) + 1);
+  function openTagBrowser() {
+    paddall.hidden = true; pback.hidden = true; pickBack = null; curRender = renderTagList;
+    pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
+  }
+  function renderTagList() {
+    const q = pfilter.value.trim().toLowerCase();
+    const tags = [...tagCount.keys()].filter(t => !q || t.toLowerCase().includes(q)).sort();
+    ptitle.textContent = "tags — " + tags.length;
+    plist.innerHTML = "";
+    tags.forEach(t => {
+      const row = document.createElement("div");
+      row.className = "prow";
+      const lbl = document.createElement("span");
+      lbl.className = "plbl"; lbl.textContent = "#" + t + "   (" + tagCount.get(t) + ")";
+      lbl.onclick = () => openNodePicker("#" + t, n => (n.tags || []).includes(t), openTagBrowser);
+      const pin = document.createElement("button");
+      const onbar = barTags.has(t);
+      pin.className = "pinbtn" + (onbar ? " pinned" : "");
+      pin.textContent = onbar ? "on bar ✓" : "pin to bar";
+      pin.title = onbar ? "remove from toolbar" : "add to toolbar for quick access";
+      pin.onclick = e => {
+        e.stopPropagation();
+        onbar ? barTags.delete(t) : barTags.add(t);
+        renderTagChips(); renderTagList();
+      };
+      row.append(lbl, pin);
+      plist.appendChild(row);
+    });
+    pcount.textContent = tags.length + " tags";
+  }
+
+  pfilter.addEventListener("input", () => curRender());
   picker.addEventListener("click", e => {
     const pk = e.target.getAttribute && e.target.getAttribute("data-pk");
     if (pk === "close") picker.hidden = true;
-    else if (pk === "addall") { pickItems().forEach(n => pinned.add(n.id)); renderSeedChips(); renderPicker(); scheduleFilter(); }
+    else if (pk === "back" && pickBack) pickBack();
+    else if (pk === "addall") {
+      const q = pfilter.value.trim().toLowerCase();
+      G.nodes.filter(n => pickPred(n) && (!q || n.id.toLowerCase().includes(q))).forEach(n => pinned.add(n.id));
+      renderSeedChips(); renderNodePicker(); scheduleFilter();
+    }
   });
 
   function tokenToRegex(tok) {
@@ -389,11 +465,10 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   function seedRegexes() {
     return seedInput.value.split(/[\s,]+/).filter(Boolean).map(tokenToRegex);
   }
-  function seedActive() { return seedInput.value.trim() !== "" || activeTags.size > 0 || pinned.size > 0; }
+  function seedActive() { return seedInput.value.trim() !== "" || pinned.size > 0; }
   function isSeed(node, regexes) {
     const d = node.data();
     if (pinned.has(d.id)) return true;
-    if (activeTags.size) for (const t of (d.tags || [])) if (activeTags.has(t)) return true;
     for (const re of regexes) if (re.test(d.id)) return true;
     return false;
   }
@@ -508,11 +583,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     else if (act === "expandAll") api.expandAll();
     else if (act === "clear") {
       seedInput.value = "";
-      activeTags.clear();
       pinned.clear();
       revealed.clear();
       hidden.clear();
-      [...tagsBox.children].forEach(c => c.classList.remove("on"));
       renderSeedChips();
       toInputs.checked = false; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
       selNode = null; stickyHandles = false; placeHandles();
