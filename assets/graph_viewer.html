@@ -40,9 +40,23 @@
   #nodebar button:hover { border-color:#58a6ff; color:#58a6ff; }
   .toggle { display:flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:pointer; }
   #legend { display:flex; gap:12px; margin-left:auto; color:var(--muted); flex-wrap:wrap; }
-  #legend span { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+  #legend span { display:flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer; }
+  #legend span:hover { color:var(--fg); }
   .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
   #count { color:var(--muted); white-space:nowrap; }
+  #picker { position:fixed; top:96px; right:12px; width:320px; max-height:72vh; z-index:25;
+    display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; box-shadow:0 6px 28px #000b; }
+  #picker .ph { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); }
+  #picker .ph .ptitle { font-weight:600; flex:1; }
+  #picker #pfilter { margin:8px 10px 4px; }
+  #picker .plist { overflow:auto; padding:2px 6px; flex:1; }
+  #picker .prow { padding:4px 8px; border-radius:5px; cursor:pointer; font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #picker .prow:hover { background:#1b2530; }
+  #picker .prow.on { color:var(--seed); }
+  #picker .pfoot { display:flex; align-items:center; gap:8px; padding:8px 10px; border-top:1px solid var(--line);
+    color:var(--muted); }
   #cy { position:fixed; left:0; right:0; bottom:0; top:92px; }
   #tip { position:fixed; max-width:380px; background:var(--panel); border:1px solid var(--line);
     border-radius:8px; padding:9px 11px; pointer-events:none; z-index:10; box-shadow:0 6px 24px #0008; }
@@ -101,6 +115,12 @@
   <button data-na="allDown"  title="reveal ALL downstream / children (to finals)">⇥</button>
 </div>
 <div id="tip" hidden></div>
+<div id="picker" hidden>
+  <div class="ph"><span class="ptitle"></span><button data-pk="close" title="close">✕</button></div>
+  <input id="pfilter" type="text" placeholder="filter…" autocomplete="off">
+  <div class="plist"></div>
+  <div class="pfoot"><button data-pk="addall">Add all shown</button><span class="pcount"></span></div>
+</div>
 <div id="empty" hidden>No graph data.</div>
 
 <script>/*__MAKEXX_GRAPH_LIBS__*/</script>
@@ -242,6 +262,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (!present.has(cls)) continue;
     const s = document.createElement("span");
     s.innerHTML = '<i class="sw" style="background:' + colors[cls] + '"></i>' + cls;
+    s.title = "list all " + cls + " targets to add";
+    s.onclick = () => openPicker(cls);
     legend.appendChild(s);
   }
   const isLeaf = n => !n.hasClass("group");
@@ -323,6 +345,41 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       seedsBox.appendChild(c);
     });
   }
+
+  // --- Type picker: click a legend type → list all its nodes, add as seeds ---
+  const picker = document.getElementById("picker");
+  const pfilter = document.getElementById("pfilter");
+  const plist = picker.querySelector(".plist");
+  const ptitle = picker.querySelector(".ptitle");
+  const pcount = picker.querySelector(".pcount");
+  let pickType = null;
+  function pickItems() {
+    const q = pfilter.value.trim().toLowerCase();
+    return G.nodes.filter(n => (n.type || "intermediate") === pickType &&
+      (!q || n.id.toLowerCase().includes(q)));
+  }
+  function renderPicker() {
+    const items = pickItems();
+    ptitle.textContent = pickType + " — " + items.length;
+    plist.innerHTML = "";
+    items.forEach(n => {
+      const row = document.createElement("div");
+      const on = pinned.has(n.id);
+      row.className = "prow" + (on ? " on" : "");
+      row.textContent = (on ? "● " : "  ") + n.id;
+      row.title = n.id;
+      row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); renderSeedChips(); renderPicker(); scheduleFilter(); };
+      plist.appendChild(row);
+    });
+    pcount.textContent = items.length + " shown";
+  }
+  function openPicker(type) { pickType = type; pfilter.value = ""; picker.hidden = false; renderPicker(); pfilter.focus(); }
+  pfilter.addEventListener("input", renderPicker);
+  picker.addEventListener("click", e => {
+    const pk = e.target.getAttribute && e.target.getAttribute("data-pk");
+    if (pk === "close") picker.hidden = true;
+    else if (pk === "addall") { pickItems().forEach(n => pinned.add(n.id)); renderSeedChips(); renderPicker(); scheduleFilter(); }
+  });
 
   function tokenToRegex(tok) {
     const esc = tok.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
@@ -429,6 +486,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   linkMode.addEventListener("change", scheduleFilter);
   document.addEventListener("keydown", e => {
     if (e.key === "/" && document.activeElement !== seedInput) { e.preventDefault(); seedInput.focus(); }
+    else if (e.key === "Escape" && !picker.hidden) picker.hidden = true;
   });
 
   document.getElementById("bars").addEventListener("click", e => {
