@@ -57,6 +57,7 @@ using std::vector;
 #include "graph_cytoscape_js_embed.hpp"
 #include "graph_cytoscape_dagre_js_embed.hpp"
 #include "graph_expand_collapse_js_embed.hpp"
+#include "graph_cytoscape_svg_js_embed.hpp"
 #include "graph_viewer_html_embed.hpp"
 #include <cstring>
 #include <cerrno>
@@ -131,6 +132,9 @@ int build_graph_html() {
 	libs += graph_cytoscape_js;        libs += "\n;\n";
 	libs += graph_cytoscape_dagre_js;  libs += "\n;\n";
 	libs += graph_expand_collapse_js;  libs += "\n;\n";
+	// cytoscape-svg auto-registers against the global cytoscape (set above), so
+	// it just needs to evaluate after cytoscape.min.js; adds cy.svg().
+	libs += graph_cytoscape_svg_js;    libs += "\n;\n";
 
 	// An inline <script> is terminated by the first literal "</script" the HTML
 	// parser sees, regardless of JS context. The vendored libs and the JSON

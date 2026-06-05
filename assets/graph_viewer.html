@@ -101,6 +101,7 @@
     <span id="title">dependency graph</span>
     <button data-act="fit" title="Fit to view">Fit</button>
     <button data-act="png" title="Download the current view as a PNG image">PNG</button>
+    <button data-act="svg" title="Download the current view as a vector SVG">SVG</button>
     <button data-act="theme" title="Toggle light / dark background">☀ Light</button>
     <button data-act="unhide" title="Un-hide all manually hidden nodes">Unhide</button>
     <button data-act="collapseAll" title="Fold every group">Fold all</button>
@@ -160,6 +161,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
 
   cytoscape.use(window.cytoscapeDagre);
   cytoscape.use(window.cytoscapeExpandCollapse);
+  // cytoscape-svg auto-registers on load; use() again would throw "already
+  // exists", so guard it — covers a future build that stops auto-registering.
+  try { if (window.cytoscapeSvg) cytoscape.use(window.cytoscapeSvg); } catch (e) {}
 
   // --- Build elements (group paths -> nested compound parents) --------------
   const groupIds = new Set();
@@ -593,6 +597,14 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     else if (e.key === "Escape" && !picker.hidden) picker.hidden = true;
   });
 
+  // Trigger a download of `href` (data: URI or object URL) named after the graph.
+  function download(href, ext) {
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = ((G.title || "makefile_graph").replace(/[^A-Za-z0-9._-]+/g, "_")) + "." + ext;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
   document.getElementById("bars").addEventListener("click", e => {
     const act = e.target && e.target.getAttribute && e.target.getAttribute("data-act");
     if (!act) return;
@@ -600,11 +612,15 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     else if (act === "png") {
       // Export the whole rendered (visible) graph at 2x, on the current background.
       const bg = getComputedStyle(document.body).backgroundColor || "#0f1216";
-      const uri = cy.png({ full: true, scale: 2, bg: bg });
-      const a = document.createElement("a");
-      a.href = uri;
-      a.download = ((G.title || "makefile_graph").replace(/[^A-Za-z0-9._-]+/g, "_")) + ".png";
-      document.body.appendChild(a); a.click(); a.remove();
+      download(cy.png({ full: true, scale: 2, bg: bg }), "png");
+    }
+    else if (act === "svg") {
+      // Vector export — scales to any size; same visible subset and background.
+      const bg = getComputedStyle(document.body).backgroundColor || "#0f1216";
+      const blob = new Blob([cy.svg({ full: true, scale: 1, bg: bg })], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      download(url, "svg");
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
     else if (act === "theme") setTheme(theme === "dark" ? "light" : "dark");
     else if (act === "clearSeed") { seedInput.value = ""; seedInput.focus(); scheduleFilter(); }

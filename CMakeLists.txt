@@ -36,6 +36,7 @@ set(GRAPH_ASSETS
     "graph_cytoscape_js|assets/vendor/cytoscape.min.js"
     "graph_cytoscape_dagre_js|assets/vendor/cytoscape-dagre.min.js"
     "graph_expand_collapse_js|assets/vendor/cytoscape-expand-collapse.min.js"
+    "graph_cytoscape_svg_js|assets/vendor/cytoscape-svg.min.js"
     "graph_viewer_html|assets/graph_viewer.html"
 )
 set(GRAPH_EMBED_HEADERS)

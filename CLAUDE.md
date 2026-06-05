@@ -16,7 +16,7 @@ cmake --install build   # installs to /usr/local/bin by default
 
 Output binary: `build/makexx`
 
-**How the embed works:** `include/makexxfile.hpp` and `src/starter.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `starter_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required. The same embed step also bakes in the interactive-graph viewer assets under `assets/` (the vendored Cytoscape/dagre/expand-collapse stack and `assets/graph_viewer.html`) so `makexx --build-graph` can assemble a single self-contained HTML graph offline.
+**How the embed works:** `include/makexxfile.hpp` and `src/starter.cpp` are the sources of truth. During the build, `cmake/embed_as_string.cmake` reads each file and wraps its content in a C++ raw string literal, writing `makexxfile_embed.hpp` and `starter_embed.hpp` into the build directory. `makexx.cpp` includes these generated headers. Editing either source file and re-running `cmake --build build` regenerates the embeddings and recompiles automatically. No `xxd` required. The same embed step also bakes in the interactive-graph viewer assets under `assets/` (the vendored Cytoscape/dagre/expand-collapse/svg stack and `assets/graph_viewer.html`) so `makexx --build-graph` can assemble a single self-contained HTML graph offline.
 
 ## How makexx works at runtime
 
@@ -288,7 +288,7 @@ src/starter.cpp               — starter makefile.cpp written to new project di
 CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
 assets/graph_viewer.html      — interactive graph viewer template (placeholders filled by `makexx --build-graph`)
-assets/vendor/                — vendored Cytoscape.js + dagre + cytoscape-dagre + expand-collapse (embedded, kept offline)
+assets/vendor/                — vendored Cytoscape.js + dagre + cytoscape-dagre + expand-collapse + cytoscape-svg (embedded, kept offline)
 examples/compile/             — example: multi-target C++ project build
 examples/portfolio_analytics/ — example: domain-specific workflow with config separation
 examples/family_tree/         — example: genealogy workflow with AI context generation
