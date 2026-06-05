@@ -107,6 +107,8 @@
     <button data-act="fit" title="Fit to view">Fit</button>
     <button data-act="png" title="Download the current view as a PNG image">PNG</button>
     <button data-act="svg" title="Download the current view as a vector SVG">SVG</button>
+    <button data-act="save" title="Save the current graph state (seeds, hidden/revealed, toggles, theme) to a JSON file">Save</button>
+    <button data-act="load" title="Load a previously saved graph-state JSON file">Load</button>
     <button data-act="theme" title="Toggle light / dark background">☀ Light</button>
     <button data-act="unhide" title="Un-hide all manually hidden nodes">Unhide</button>
     <button data-act="collapseAll" title="Fold every group">Fold all</button>
@@ -147,6 +149,7 @@
   <div class="pfoot"><button data-pk="addall">Add all shown</button><span class="pcount"></span></div>
 </div>
 <div id="empty" hidden>No graph data.</div>
+<input id="stateFile" type="file" accept=".json,application/json" hidden>
 
 <script>/*__MAKEXX_GRAPH_LIBS__*/</script>
 <script>
@@ -273,10 +276,15 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   // Show the spinner, let the browser paint it (double rAF), then run the
   // synchronous filter + layout. The spinner is CSS-animated so it keeps
   // turning on the compositor even while the main thread is blocked by dagre.
-  function scheduleFilter() {
+  // keepView=true lays the graph out again but leaves the camera where it is —
+  // for incremental edits (hide / reveal) so poking at the graph doesn't yank
+  // your zoom/pan. Seed / filter changes re-frame (keepView falsy) since they
+  // produce a genuinely new subgraph worth fitting.
+  function scheduleFilter(keepView) {
     BUSY.hidden = false;
+    const keep = !!keepView;
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { applyFilter(); } finally { BUSY.hidden = true; placeHandles(); }
+      try { applyFilter(keep); } finally { BUSY.hidden = true; placeHandles(); }
     }));
   }
   // Reveal nodes around `node` into the persistent `revealed` set.
@@ -289,7 +297,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       : (all ? node.successors("node")   : node.outgoers("node"));
     revealed.add(node.id());
     hop.forEach(n => revealed.add(n.id()));
-    scheduleFilter();
+    scheduleFilter(true);
   }
   // Hide a node, or everything up/downstream of it (into the `hidden` set).
   function hideAround(node, what) {
@@ -297,12 +305,16 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (what === "node") hidden.add(node.id());
     else (what === "up" ? node.predecessors("node") : node.successors("node"))
            .forEach(n => hidden.add(n.id()));
-    scheduleFilter();
+    scheduleFilter(true);
   }
 
   const api = cy.expandCollapse({ layoutBy: dagreLayout, fisheye: false, animate: false, undoable: false, expandCollapseCascade: true });
 
-  function relayout() { cy.elements(":visible").layout(dagreLayout()).run(); }
+  function relayout(keepView) {
+    // keepView → lay out but suppress dagre's auto-fit, so zoom/pan are kept.
+    const opts = keepView ? Object.assign(dagreLayout(), { fit: false }) : dagreLayout();
+    cy.elements(":visible").layout(opts).run();
+  }
 
   // --- Legend + counts ------------------------------------------------------
   const present = new Set(G.nodes.map(n => n.type || "intermediate"));
@@ -600,7 +612,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     return false;
   }
 
-  function applyFilter() {
+  function applyFilter(keepView) {
     cy.nodes().removeClass("seed");
     const nLeaf = cy.nodes().filter(isLeaf).length;
     const big = nLeaf > BIG_NODES || cy.edges().length > BIG_EDGES;
@@ -616,7 +628,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       ele = ele.difference(hideColl).difference(hideColl.connectedEdges());
       cy.elements().style("display", "none");
       ele.style("display", "element");
-      hideHint(); relayout();
+      hideHint(); relayout(keepView);
       return ele;
     };
 
@@ -699,6 +711,64 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     document.body.appendChild(a); a.click(); a.remove();
   }
 
+  // --- Save / load the graph state to a portable JSON file ------------------
+  // Captures the *logical* view (seeds, pinned tags, hidden/revealed nodes,
+  // toggles, menu folds, theme) — not exact zoom/pan, since load re-runs the
+  // filter which re-frames. The file survives `make graph` regenerating the
+  // HTML, so you can commit/share it and re-load a saved view later.
+  const STATE_VERSION = 1;
+  function gatherState() {
+    return {
+      v: STATE_VERSION,
+      title: G.title || "",
+      seedText: seedInput.value,
+      pinned: [...pinned],
+      barTags: [...barTags],
+      revealed: [...revealed],
+      hidden: [...hidden],
+      menuFolded: [...menuFolded],
+      toInputs: toInputs.checked,
+      toFinals: toFinals.checked,
+      filterOn: filterOn.checked,
+      linkMode: linkMode.checked,
+      theme: theme,
+    };
+  }
+  function applyState(s) {
+    if (!s || typeof s !== "object") throw new Error("not a graph-state file");
+    const fill = (set, arr) => { set.clear(); (Array.isArray(arr) ? arr : []).forEach(x => set.add(x)); };
+    seedInput.value = typeof s.seedText === "string" ? s.seedText : "";
+    fill(pinned, s.pinned);
+    fill(barTags, s.barTags);
+    fill(revealed, s.revealed);
+    fill(hidden, s.hidden);
+    if (Array.isArray(s.menuFolded)) fill(menuFolded, s.menuFolded);   // else keep defaults
+    toInputs.checked = !!s.toInputs;
+    toFinals.checked = !!s.toFinals;
+    filterOn.checked = s.filterOn !== false;     // default on
+    linkMode.checked = !!s.linkMode;
+    if (s.theme === "light" || s.theme === "dark") setTheme(s.theme);
+    renderSeedChips();
+    renderTagChips();
+    if (!picker.hidden) curRender();             // refresh an open picker in place
+    scheduleFilter();                            // re-apply + re-frame
+  }
+  const stateFile = document.getElementById("stateFile");
+  stateFile.addEventListener("change", () => {
+    const f = stateFile.files && stateFile.files[0];
+    stateFile.value = "";                        // allow re-loading the same file
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let s;
+      try { s = JSON.parse(reader.result); } catch (e) { alert("Not valid JSON: " + e.message); return; }
+      if (s && s.title && G.title && s.title !== G.title &&
+          !confirm('This state was saved from "' + s.title + '", not "' + G.title + '". Load it anyway?')) return;
+      try { applyState(s); } catch (e) { alert("Could not load graph state: " + e.message); }
+    };
+    reader.readAsText(f);
+  });
+
   document.getElementById("bars").addEventListener("click", e => {
     const act = e.target && e.target.getAttribute && e.target.getAttribute("data-act");
     if (!act) return;
@@ -717,6 +787,13 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       download(url, "svg");
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
+    else if (act === "save") {
+      const blob = new Blob([JSON.stringify(gatherState(), null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      download(url, "state.json");
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    else if (act === "load") stateFile.click();
     else if (act === "theme") setTheme(theme === "dark" ? "light" : "dark");
     else if (act === "clearSeed") { seedInput.value = ""; seedInput.focus(); scheduleFilter(); }
     else if (act === "unhide") { hidden.clear(); scheduleFilter(); }
