@@ -80,6 +80,7 @@
     <label class="toggle"><input type="checkbox" id="toInputs" checked> ↑ inputs</label>
     <label class="toggle"><input type="checkbox" id="toFinals"> ↓ finals</label>
     <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
+    <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shows how they're related"><input type="checkbox" id="linkMode"> ↔ Link</label>
     <button data-act="clear" title="Clear seeds + expansions, show everything">Clear</button>
   </div>
 </div>
@@ -159,10 +160,10 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         "text-valign": "center", "text-halign": "center",
         "shape": "round-rectangle", "width": "label", "height": "label",
         "padding": "7px", "background-color": "#30363d",
-        "border-width": 1.5, "border-color": "#484f58" } },
+        "border-width": 1, "border-color": "#484f58" } },
       { selector: "node.input",        style: { "border-color": "#10b981",  "background-color": "#16241d" } },
       { selector: "node.intermediate", style: { "border-color": "#58a6ff", "background-color": "#13233a" } },
-      { selector: "node.final",        style: { "border-color": "#f59e0b",  "background-color": "#332208", "border-width": 2.5 } },
+      { selector: "node.final",        style: { "border-color": "#f59e0b",  "background-color": "#332208", "border-width": 1.5 } },
       { selector: "node.phony",        style: { "border-color": "#a78bfa",  "background-color": "#241a3a" } },
       { selector: "node.tool",         style: { "border-color": "#22d3ee",   "background-color": "#0c2a30" } },
       { selector: "node.group", style: {
@@ -172,9 +173,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         "border-color": "#3a424d", "border-width": 1, "border-style": "dashed",
         "padding": "16px", "text-margin-y": -2 } },
       { selector: "node.seed", style: {                              // literal colours — cytoscape doesn't resolve CSS var()
-        "border-color": "#ffe000", "border-width": 6,
+        "border-color": "#ffe000", "border-width": 4,
         "color": "#ffffff", "font-weight": "bold",
-        "overlay-color": "#ffe000", "overlay-opacity": 0.35, "overlay-padding": 12,
+        "overlay-color": "#ffe000", "overlay-opacity": 0.3, "overlay-padding": 10,
         "z-index": 9999 } },
       { selector: "edge", style: {
         "width": 1.4, "line-color": "#3a424d", "target-arrow-color": "#3a424d",
@@ -248,6 +249,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const toInputs = document.getElementById("toInputs");
   const toFinals = document.getElementById("toFinals");
   const filterOn = document.getElementById("filterOn");
+  const linkMode = document.getElementById("linkMode");
   const pinned = new Set();    // seed node ids (added by double-click, or patterns/tags)
   const revealed = new Set();  // node ids revealed via on-node ⊕ handles (accumulates)
 
@@ -267,6 +269,18 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   }
   exUp.onclick = () => expand(selNode, "up");
   exDown.onclick = () => expand(selNode, "down");
+  // Handles appear on hover (transient, with a short delay so you can reach
+  // them) or are pinned by a single click. Hovering a handle keeps it open.
+  let stickyHandles = false, hideTimer = null;
+  function scheduleHide() {
+    if (stickyHandles) return;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => { selNode = null; placeHandles(); }, 180);
+  }
+  [exUp, exDown].forEach(h => {
+    h.addEventListener("mouseenter", () => clearTimeout(hideTimer));
+    h.addEventListener("mouseleave", scheduleHide);
+  });
 
   // Cleanable list of pinned (double-clicked) seeds.
   function renderSeedChips() {
@@ -307,6 +321,26 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
 
     // Apply the filter only when there are seeds and Filter is on.
     if (seedActive() && filterOn.checked && seeds.length > 0) {
+      if (linkMode.checked && seeds.length >= 2) {
+        // ↔ Link: "how are these related?" — shortest path between seeds
+        // ignoring edge direction, so it finds connections through a shared
+        // ancestor / convergence point, not just a directed lineage.
+        const anchor = seeds.first();
+        let ele = seeds.union(cy.nodes().filter(n => revealed.has(n.id())));
+        const disc = [];
+        seeds.forEach(s => {
+          if (s.same(anchor)) return;
+          const r = cy.elements().aStar({ root: anchor, goal: s, directed: false });
+          if (r.found) ele = ele.union(r.path); else disc.push(s.id());
+        });
+        ele = ele.union(ele.edgesWith(ele)).union(ele.ancestors());
+        cy.elements().style("display", "none"); ele.style("display", "element");
+        hideHint(); relayout();
+        updateCount(disc.length
+          ? (ele.filter(isLeaf).length + " shown · not linked to first seed: " + disc.join(", "))
+          : ele.filter(isLeaf).length);
+        return;
+      }
       // "Connect the seeds": every node on a path between two seeds = nodes
       // both downstream of some seed and upstream of some seed.
       const down = seeds.union(seeds.successors().nodes());
@@ -356,6 +390,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   toInputs.addEventListener("change", scheduleFilter);
   toFinals.addEventListener("change", scheduleFilter);
   filterOn.addEventListener("change", scheduleFilter);
+  linkMode.addEventListener("change", scheduleFilter);
   document.addEventListener("keydown", e => {
     if (e.key === "/" && document.activeElement !== seedInput) { e.preventDefault(); seedInput.focus(); }
   });
@@ -373,8 +408,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       revealed.clear();
       [...tagsBox.children].forEach(c => c.classList.remove("on"));
       renderSeedChips();
-      toInputs.checked = true; toFinals.checked = false; filterOn.checked = true;
-      selNode = null; placeHandles();
+      toInputs.checked = true; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
+      selNode = null; stickyHandles = false; placeHandles();
       scheduleFilter();
     }
   });
@@ -398,9 +433,12 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     tip.style.left = Math.min(x + 14, window.innerWidth - tip.offsetWidth - 8) + "px";
     tip.style.top = Math.min(y + 14, window.innerHeight - tip.offsetHeight - 8) + "px";
   }
-  cy.on("mouseover", "node", e => showTip(e.target, e));
+  cy.on("mouseover", "node", e => {
+    showTip(e.target, e);
+    if (!e.target.hasClass("group")) { stickyHandles = false; selNode = e.target; clearTimeout(hideTimer); placeHandles(); }
+  });
   cy.on("mousemove", "node", e => { if (!tip.hidden) showTip(e.target, e); });
-  cy.on("mouseout", "node", () => { tip.hidden = true; });
+  cy.on("mouseout", "node", () => { tip.hidden = true; scheduleHide(); });
   // Single click = select (shows ⊕ expand handles). Double click = toggle seed.
   let lastTapId = null, lastTapAt = 0;
   cy.on("tap", "node", e => {
@@ -414,9 +452,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       lastTapId = null; lastTapAt = 0; return;
     }
     lastTapId = n.id(); lastTapAt = now;
-    selNode = n; placeHandles();                               // single click -> select
+    selNode = n; stickyHandles = true; clearTimeout(hideTimer); placeHandles();   // single click -> pin handles
   });
-  cy.on("tap", e => { tip.hidden = true; if (e.target === cy) { selNode = null; placeHandles(); } });
+  cy.on("tap", e => { tip.hidden = true; if (e.target === cy) { selNode = null; stickyHandles = false; placeHandles(); } });
   cy.on("pan zoom", placeHandles);
   cy.on("position", "node", e => { if (selNode && e.target.id() === selNode.id()) placeHandles(); });
   window.addEventListener("resize", placeHandles);
