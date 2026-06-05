@@ -77,7 +77,7 @@
     <input id="seed" type="text" placeholder="seed by name / pattern (e.g. *_alpha_*) — Enter  ·  dbl-click a node to seed  ·  / to focus" autocomplete="off">
     <span id="seeds"></span>
     <span id="tags"></span>
-    <label class="toggle"><input type="checkbox" id="toInputs" checked> ↑ inputs</label>
+    <label class="toggle"><input type="checkbox" id="toInputs"> ↑ inputs</label>
     <label class="toggle"><input type="checkbox" id="toFinals"> ↓ finals</label>
     <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
     <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shows how they're related"><input type="checkbox" id="linkMode"> ↔ Link</label>
@@ -175,7 +175,6 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       { selector: "node.seed", style: {                              // literal colours — cytoscape doesn't resolve CSS var()
         "border-color": "#ffe000", "border-width": 4,
         "color": "#ffffff", "font-weight": "bold",
-        "overlay-color": "#ffe000", "overlay-opacity": 0.3, "overlay-padding": 10,
         "z-index": 9999 } },
       { selector: "edge", style: {
         "width": 1.4, "line-color": "#3a424d", "target-arrow-color": "#3a424d",
@@ -408,7 +407,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       revealed.clear();
       [...tagsBox.children].forEach(c => c.classList.remove("on"));
       renderSeedChips();
-      toInputs.checked = true; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
+      toInputs.checked = false; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
       selNode = null; stickyHandles = false; placeHandles();
       scheduleFilter();
     }
