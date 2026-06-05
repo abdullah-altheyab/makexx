@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Interactive dependency graph
+
+- **PNG export.** A `PNG` toolbar button downloads the current (filtered/traced) view as a 2× PNG via cytoscape's `cy.png`, rendered on the current background. Captures the whole visible graph, not just the on-screen viewport.
+
 ## v0.4.0
 
 ### Makefile DSL — breaking
