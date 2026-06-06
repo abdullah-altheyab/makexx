@@ -28,11 +28,28 @@
   #title { font-weight:600; white-space:nowrap; }
   input[type=text] { background:var(--bg); color:var(--fg); border:1px solid var(--line);
     border-radius:6px; padding:6px 9px; outline:none; }
-  #seed { flex:0 0 300px; }
+  #seed { flex:0 0 320px; }
+  .seedwrap { display:inline-flex; align-items:center; gap:8px; margin-left:auto; }
   input[type=text]:focus { border-color:#58a6ff; }
   button { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px;
     padding:6px 10px; cursor:pointer; white-space:nowrap; }
   button:hover { border-color:#58a6ff; }
+  .menuwrap { position:relative; display:inline-flex; }
+  .menubtn.open { border-color:#58a6ff; color:#58a6ff; }
+  .dropdown { position:absolute; top:calc(100% + 5px); left:0; z-index:30; min-width:190px;
+    display:flex; flex-direction:column; padding:4px; background:var(--panel);
+    border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 28px #000b; }
+  .dropdown button { display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    border:1px solid transparent; border-radius:6px; background:transparent; color:var(--fg); padding:7px 11px; }
+  .dropdown button:hover { background:var(--hover); border-color:transparent; }
+  .dropdown .sep { height:1px; margin:4px 6px; background:var(--line); }
+  .dropdown .mkbd { margin-left:auto; color:var(--muted); font-size:11px; line-height:1.4;
+    border:1px solid var(--line); border-radius:4px; padding:0 5px; }
+  .dropdown button.opt::before { content:""; display:inline-block; width:1.1em; text-align:center; }
+  .dropdown button.opt.on::before { content:"✓"; color:#58a6ff; }
+  .dropdown .toggle { width:100%; gap:8px; padding:7px 11px; border-radius:6px; color:var(--fg); }
+  .dropdown .toggle:hover { background:var(--hover); }
+  .dropdown .toggle input { accent-color:#58a6ff; }
   .lbl { color:var(--muted); white-space:nowrap; }
   #tags, #seeds { display:flex; gap:6px; flex-wrap:wrap; }
   .chip { font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line);
@@ -44,11 +61,29 @@
   #nodebar button { font:11px/1 sans-serif; padding:4px 6px; min-width:26px; border-radius:5px;
     border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
   #nodebar button:hover { border-color:#58a6ff; color:#58a6ff; }
+  #nodebar button.sib { margin-left:6px; color:var(--seed); border-color:var(--seed); }
+  #nodebar button.sib:hover { color:var(--seed); border-color:var(--seed); background:var(--chipon); }
   .toggle { display:flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:pointer; }
-  #legend { display:flex; gap:12px; margin-left:auto; color:var(--muted); flex-wrap:wrap; }
+  /* Slide toggle (the Filter switch on the menu bar). */
+  .switch { display:inline-flex; align-items:center; gap:7px; cursor:pointer; color:var(--muted); white-space:nowrap; }
+  .switch input { position:absolute; opacity:0; width:0; height:0; }
+  .switch .track { position:relative; flex:none; width:32px; height:18px; border-radius:999px;
+    background:var(--line); transition:background .15s; }
+  .switch .knob { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:var(--bg); box-shadow:0 1px 2px #0006; transition:left .15s; }
+  .switch input:checked + .track { background:#58a6ff; }
+  .switch input:checked + .track .knob { left:16px; }
+  .switch input:focus-visible + .track { outline:2px solid #58a6ff; outline-offset:1px; }
+  #searchtools { display:flex; align-items:center; gap:10px; margin-left:auto; flex-wrap:wrap; }
+  #legend { display:flex; gap:12px; color:var(--muted); flex-wrap:wrap; }
   #legend span { display:flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer; }
   #legend span:hover { color:var(--fg); }
+  #legend span.absent { opacity:.4; }
+  .seedkey { display:inline-flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:default; }
   .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .sw-pick { background:transparent; border:2px solid var(--seed); }
+  .sw-pat { background:transparent; border:2px dashed #fb923c; margin-left:6px; }
+  .sw-both { background:transparent; border:2px dashed var(--seed); margin-left:6px; }
   #count { color:var(--muted); white-space:nowrap; }
   #picker { position:fixed; top:96px; right:12px; width:320px; max-height:72vh; z-index:25;
     display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line);
@@ -65,6 +100,8 @@
   #picker .prow .plbl { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #picker .prow:hover { background:var(--hover); }
   #picker .prow.on { color:var(--seed); }
+  #picker .prow.off .plbl { color:var(--muted); text-decoration:line-through; }
+  #picker .pempty { padding:10px 12px; max-width:260px; color:var(--muted); }
   #picker .prow .pinbtn { font:10px/1 sans-serif; padding:3px 6px; border-radius:4px; flex:none;
     border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer; }
   #picker .prow .pinbtn.pinned { color:var(--seed); border-color:var(--seed); }
@@ -78,11 +115,16 @@
   .barchip .barx:hover { opacity:1; }
   #picker .pfoot { display:flex; align-items:center; gap:8px; padding:8px 10px; border-top:1px solid var(--line);
     color:var(--muted); }
+  #picker .pfoot button { font-size:11px; padding:4px 8px; }
+  #picker .pbulk { display:flex; gap:6px; }
+  #picker .pcount { margin-left:auto; white-space:nowrap; }
   #cy { position:fixed; left:0; right:0; bottom:0; top:92px; }
   #tip { position:fixed; max-width:380px; background:var(--panel); border:1px solid var(--line);
     border-radius:8px; padding:9px 11px; pointer-events:none; z-index:10; box-shadow:0 6px 24px #0008; }
   #tip .t-name { font-weight:600; word-break:break-all; }
   #tip .t-meta { color:var(--muted); margin-top:2px; }
+  #tip .t-seed { margin-top:4px; font-weight:600; color:var(--seed); }
+  #tip .t-seed.t-pat { color:#fb923c; }
   #tip .t-help { margin-top:6px; }
   #tip .t-desc { margin-top:6px; color:var(--muted); font-style:italic; }
   #tip .t-tags { margin-top:6px; color:#58a6ff; }
@@ -103,32 +145,76 @@
 <div id="bars">
   <div class="bar r1">
     <span id="title">dependency graph</span>
-    <button data-act="menu" title="Browse targets by group (like makexx -i) and pick seeds">Menu</button>
-    <button data-act="fit" title="Fit to view">Fit</button>
-    <button data-act="png" title="Download the current view as a PNG image">PNG</button>
-    <button data-act="svg" title="Download the current view as a vector SVG">SVG</button>
-    <button data-act="save" title="Save the graph state — overwrites the last-saved file (or prompts if none yet)">Save</button>
-    <button data-act="saveAs" title="Save the graph state to a new file — choose name/location">Save As</button>
-    <button data-act="load" title="Load a previously saved graph-state JSON file">Load</button>
-    <button data-act="theme" title="Toggle light / dark background">☀ Light</button>
-    <button data-act="unhide" title="Un-hide all manually hidden nodes">Unhide</button>
-    <button data-act="collapseAll" title="Fold every group">Fold all</button>
-    <button data-act="expandAll" title="Unfold every group">Unfold all</button>
-    <span id="legend"></span>
     <span id="count"></span>
+    <span class="seedkey" title="Seeds = picked anchors (double-click / pickers). Search results = search-box matches. Both = seeded AND matched. Tracing applies to Seeds only.">
+      <i class="sw sw-pick"></i>Seeds<i class="sw sw-pat"></i>Search Results<i class="sw sw-both"></i>both
+    </span>
+    <span class="seedwrap">
+      <span class="lbl">Search:</span>
+      <input id="seed" type="text" placeholder="name / pattern / help text (e.g. *_alpha_*) — Enter  ·  dbl-click a node to seed  ·  / to focus" autocomplete="off">
+      <button data-act="clearSeed" title="clear the search box">✕</button>
+      <label class="switch" title="Restrict the search to nodes currently visible in the graph (don't pull in new ones)">
+        <input type="checkbox" id="searchInView">
+        <span class="track"><span class="knob"></span></span>
+        in view
+      </label>
+      <button data-act="seedResults" title="Add all current search results as seeds">Seed results</button>
+      <button data-act="unseedResults" title="Remove all current search results from the seeds">Unseed results</button>
+    </span>
   </div>
   <div class="bar r2">
-    <span class="lbl">Trace:</span>
-    <input id="seed" type="text" placeholder="seed by name / pattern (e.g. *_alpha_*) — Enter  ·  dbl-click a node to seed  ·  / to focus" autocomplete="off">
-    <button data-act="clearSeed" title="clear the search box">✕</button>
-    <span id="seeds"></span>
-    <span id="tags"></span>
-    <label class="toggle"><input type="checkbox" id="toInputs"> ← inputs</label>
-    <label class="toggle"><input type="checkbox" id="toFinals"> → finals</label>
-    <label class="toggle" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked> Filter</label>
-    <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shows how they're related"><input type="checkbox" id="linkMode"> ↔ Link</label>
-    <button data-act="reset" title="Reset expansions, hidden nodes &amp; modifiers — but keep the seeds">Reset</button>
-    <button data-act="clear" title="Clear seeds + expansions, show everything">Clear</button>
+    <span class="menuwrap">
+      <button data-act="fileMenu" class="menubtn" aria-haspopup="true" title="Export image · save / load graph state">File ▾</button>
+      <div id="filemenu" class="dropdown" hidden>
+        <button data-act="png" title="Download the current view as a PNG image">Export as PNG</button>
+        <button data-act="svg" title="Download the current view as a vector SVG">Export as SVG</button>
+        <div class="sep"></div>
+        <button data-act="save" title="Save the graph state — overwrites the last-saved file (or prompts if none yet)">Save State</button>
+        <button data-act="saveAs" title="Save the graph state to a new file — choose name / location">Save State As…</button>
+        <button data-act="load" title="Load a previously saved graph-state JSON file">Open State…</button>
+      </div>
+    </span>
+    <span class="menuwrap">
+      <button data-act="viewMenu" class="menubtn" aria-haspopup="true" title="View options">View ▾</button>
+      <div id="viewmenu" class="dropdown" hidden>
+        <button data-act="fit">Fit to view <span class="mkbd">F</span></button>
+        <div class="sep"></div>
+        <button data-act="themeLight" class="opt">Light Background</button>
+        <button data-act="themeDark" class="opt on">Dark Background</button>
+      </div>
+    </span>
+    <span class="menuwrap">
+      <button data-act="tracingMenu" class="menubtn" aria-haspopup="true" title="Tracing options — extend the trace to inputs / finals, or link seeds">Tracing ▾</button>
+      <div id="tracingmenu" class="dropdown" hidden>
+        <label class="toggle" title="Extend the trace upstream to source files"><input type="checkbox" id="toInputs"> ← inputs</label>
+        <label class="toggle" title="Extend the trace downstream to final targets"><input type="checkbox" id="toFinals"> → finals</label>
+        <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shortest path between them"><input type="checkbox" id="linkMode"> ↔ Link</label>
+      </div>
+    </span>
+    <span class="menuwrap">
+      <button data-act="actionsMenu" class="menubtn" aria-haspopup="true" title="Reset / clear the trace, unhide nodes, fold groups">Actions ▾</button>
+      <div id="actionsmenu" class="dropdown" hidden>
+        <button data-act="reset" title="Reset expansions, hidden nodes &amp; modifiers — but keep the seeds">Reset (keep seeds)</button>
+        <button data-act="clear" title="Clear seeds + expansions, show everything">Clear all</button>
+        <div class="sep"></div>
+        <button data-act="unhide" title="Un-hide all manually hidden nodes">Unhide nodes</button>
+        <div class="sep"></div>
+        <button data-act="collapseAll" title="Fold every group">Fold all groups</button>
+        <button data-act="expandAll" title="Unfold every group">Unfold all groups</button>
+      </div>
+    </span>
+    <label class="switch" title="Apply the seed filter (off = show everything, keep seeds)">
+      <input type="checkbox" id="filterOn" checked>
+      <span class="track"><span class="knob"></span></span>
+      Filter
+    </label>
+    <span id="searchtools">
+      <span class="lbl">Seed:</span>
+      <button data-act="menu" class="chip" title="Browse / search targets by group (like makexx -i) and pick them as seeds">Targets ▾</button>
+      <span id="legend"></span>
+      <span id="tags"></span>
+      <button data-act="seeds" class="chip" title="The seeds — picked anchors from double-click / Targets / Tags / types (searchable). Search results come from the Search box and show dashed; Tracing applies to seeds only.">Seeds ▾ (0)</button>
+    </span>
   </div>
 </div>
 <div id="cy"></div>
@@ -141,13 +227,14 @@
   <button data-na="hideDown" title="hide everything downstream">⊘→</button>
   <button data-na="exDown"   title="reveal children — one level">→</button>
   <button data-na="allDown"  title="reveal ALL downstream / children (to finals)">⇥</button>
+  <button data-na="siblings" class="sib" title="add siblings — the other targets of this same rule — as seeds" hidden>⧉</button>
 </div>
 <div id="tip" hidden></div>
 <div id="picker" hidden>
   <div class="ph"><button data-pk="back" class="pback" title="back to tags" hidden>← Back</button><span class="ptitle"></span><button data-pk="close" title="close">✕</button></div>
   <input id="pfilter" type="text" placeholder="filter…" autocomplete="off">
   <div class="plist"></div>
-  <div class="pfoot"><button data-pk="addall">Add all shown</button><span class="pcount"></span></div>
+  <div class="pfoot"><span class="pbulk"><button data-pk="addall" title="Seed every row currently visible (rows under folded groups are left untouched)">Add visible</button><button data-pk="removeall" title="Unseed every row currently visible (rows under folded groups are left untouched)">Remove visible</button></span><span class="pcount"></span></div>
 </div>
 <div id="empty" hidden>No graph data.</div>
 <input id="stateFile" type="file" accept=".json,application/json" hidden>
@@ -201,7 +288,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
         id: n.id, label: n.label || n.id, parent,
         type: n.type || "intermediate", ext: n.ext || "",
         help: n.help || "", desc: n.desc || "",
-        tags: n.tags || [], cmds: n.cmds || [], srcline: n.srcline || 0
+        tags: n.tags || [], cmds: n.cmds || [], srcline: n.srcline || 0,
+        rule: typeof n.rule === "number" ? n.rule : -1
       },
       classes: n.type || "intermediate"
     });
@@ -245,8 +333,16 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       "background-opacity": 1, "background-color": p.grpBg,
       "border-color": p.grpBorder, "border-width": 1, "border-style": "dashed",
       "padding": "16px", "text-margin-y": -2 } },
-    { selector: "node.seed", style: {
+    { selector: "node.seed", style: {           // picked seed (pinned) — solid yellow
       "border-color": "#ffe000", "border-width": 4,
+      "color": p.seedText, "font-weight": "bold",
+      "z-index": 9999 } },
+    { selector: "node.pseed", style: {          // search result only — dashed orange
+      "border-color": "#fb923c", "border-width": 4, "border-style": "dashed",
+      "color": p.seedText, "font-weight": "bold",
+      "z-index": 9998 } },
+    { selector: "node.bseed", style: {          // seed AND search match — dashed yellow
+      "border-color": "#ffe000", "border-width": 4, "border-style": "dashed",
       "color": p.seedText, "font-weight": "bold",
       "z-index": 9999 } },
     { selector: "edge", style: {
@@ -266,8 +362,10 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     theme = t;
     document.documentElement.classList.toggle("light", t === "light");
     cy.style().fromJson(cyStyle(THEMES[t])).update();   // re-skin canvas; positions kept
-    const btn = document.querySelector('[data-act="theme"]');
-    if (btn) btn.textContent = t === "light" ? "🌙 Dark" : "☀ Light";
+    const L = document.querySelector('[data-act="themeLight"]');
+    const D = document.querySelector('[data-act="themeDark"]');
+    if (L) L.classList.toggle("on", t === "light");      // ✓ marks the active background
+    if (D) D.classList.toggle("on", t === "dark");
   }
   const BIG_NODES = 400, BIG_EDGES = 1200;   // above this, never draw the whole graph (dagre can't)
   const EMPTY = document.getElementById("empty");
@@ -321,11 +419,16 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const present = new Set(G.nodes.map(n => n.type || "intermediate"));
   const colors = { input:"#10b981", intermediate:"#58a6ff", final:"#f59e0b", phony:"#a78bfa", tool:"#22d3ee" };
   const legend = document.getElementById("legend");
-  for (const cls of ["input","intermediate","final","phony","tool"]) {
-    if (!present.has(cls)) continue;
+  // The four core roles are always offered as seed-by-type tools (a predictable
+  // set, dimmed when a graph happens to have none of that type); `tool` shows
+  // only when external tools exist.
+  const legendTypes = ["input", "intermediate", "final", "phony"];
+  if (present.has("tool")) legendTypes.push("tool");
+  for (const cls of legendTypes) {
     const s = document.createElement("span");
+    if (!present.has(cls)) s.classList.add("absent");
     s.innerHTML = '<i class="sw" style="background:' + colors[cls] + '"></i>' + cls;
-    s.title = "list all " + cls + " targets to add";
+    s.title = present.has(cls) ? ("list all " + cls + " targets to add") : ("no " + cls + " targets in this graph");
     s.onclick = () => openNodePicker(cls, n => (n.type || "intermediate") === cls);
     legend.appendChild(s);
   }
@@ -374,6 +477,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const toFinals = document.getElementById("toFinals");
   const filterOn = document.getElementById("filterOn");
   const linkMode = document.getElementById("linkMode");
+  const searchInView = document.getElementById("searchInView");
   const pinned = new Set();    // seed node ids (added by double-click, or patterns/tags)
   const revealed = new Set();  // node ids revealed via on-node ⊕ handles (accumulates)
   const hidden = new Set();    // node ids manually hidden (Hide / Hide ↑ / Hide ↓)
@@ -381,10 +485,31 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   // On-node action bar (floats above the hovered/selected node).
   const cyDiv = document.getElementById("cy");
   const nodebar = document.getElementById("nodebar");
-  const seedsBox = document.getElementById("seeds");
+  const sibBtn = nodebar.querySelector('[data-na="siblings"]');
   let selNode = null;
+
+  // Siblings = the targets of one multi-target rule (same `rule` index). Group
+  // node ids by rule so a node knows its co-targets; only groups of >1 matter.
+  const siblings = new Map();
+  for (const n of G.nodes) {
+    if (typeof n.rule === "number" && n.rule >= 0) {
+      if (!siblings.has(n.rule)) siblings.set(n.rule, []);
+      siblings.get(n.rule).push(n.id);
+    }
+  }
+  function siblingIds(node) {
+    const r = node && node.data("rule");
+    return (r == null || r < 0) ? [] : (siblings.get(r) || []);
+  }
+  const hasSiblings = node => siblingIds(node).length > 1;
+  function addSiblings(node) {
+    siblingIds(node).forEach(id => pinned.add(id));   // includes the node itself — harmless
+    refreshSeeds(); scheduleFilter();
+  }
+
   function placeHandles() {
     if (!selNode || selNode.removed() || !selNode.visible()) { nodebar.hidden = true; return; }
+    sibBtn.hidden = !hasSiblings(selNode);          // only show ⧉ for multi-target rules
     nodebar.hidden = false;                         // unhide first so offsetWidth is measurable
     const bb = selNode.renderedBoundingBox();
     const r = cyDiv.getBoundingClientRect();
@@ -403,6 +528,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     else if (a === "hideUp")   hideAround(selNode, "up");
     else if (a === "hideDown") hideAround(selNode, "down");
     else if (a === "hideNode") hideAround(selNode, "node");
+    else if (a === "siblings") addSiblings(selNode);
   });
   // The bar shows on hover (transient, short delay so it's reachable) or is
   // pinned by a single click. Hovering the bar keeps it open.
@@ -415,16 +541,13 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   nodebar.addEventListener("mouseenter", () => clearTimeout(hideTimer));
   nodebar.addEventListener("mouseleave", scheduleHide);
 
-  // Cleanable list of pinned (double-clicked) seeds.
-  function renderSeedChips() {
-    seedsBox.innerHTML = "";
-    [...pinned].forEach(id => {
-      const c = document.createElement("button");
-      c.className = "chip on seedchip"; c.textContent = id + "  ×"; c.title = "remove this seed";
-      c.onclick = () => { pinned.delete(id); renderSeedChips(); scheduleFilter(); };
-      seedsBox.appendChild(c);
-    });
-  }
+  // Seeds live in `pinned`. `seedShown` is the Seeds picker's sticky display
+  // list: a row stays listed after you toggle it off (so you can toggle it back)
+  // until the picker is reopened. The picker-mode render/open functions are in
+  // the picker section below; `refreshSeeds()` (defined there) is the single
+  // updater everything calls after `pinned` changes.
+  const seedShown = new Set();
+  const seedsBtn = document.querySelector('[data-act="seeds"]');
 
   // --- Picker: lists nodes (by type or tag) to add as seeds; or browses tags -
   const picker = document.getElementById("picker");
@@ -432,21 +555,23 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const plist = picker.querySelector(".plist");
   const ptitle = picker.querySelector(".ptitle");
   const pcount = picker.querySelector(".pcount");
-  const paddall = picker.querySelector('[data-pk="addall"]');
+  const pbulk = picker.querySelector('.pbulk');
   const pback = picker.querySelector('[data-pk="back"]');
   let pickPred = null, pickTitle = "", curRender = () => {}, pickBack = null;
+  let pickVisibleIds = [];   // node ids currently shown (filter + folds applied) — for bulk add/remove
 
   // Node-list mode: every node matching `pred` (filtered), click to add as seed.
   // `back` (optional) is shown as "← Back" — used when we drilled in from the
   // tag browser so the user can return to the tag list.
   function openNodePicker(title, pred, back) {
     pickPred = pred; pickTitle = title; pickBack = back || null;
-    paddall.hidden = false; pback.hidden = !pickBack; curRender = renderNodePicker;
+    pbulk.hidden = false; pback.hidden = !pickBack; curRender = renderNodePicker;
     pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
   }
   function renderNodePicker() {
     const q = pfilter.value.trim().toLowerCase();
     const items = G.nodes.filter(n => pickPred(n) && (!q || n.id.toLowerCase().includes(q)));
+    pickVisibleIds = items.map(n => n.id);
     ptitle.textContent = pickTitle + " — " + items.length;
     plist.innerHTML = "";
     items.forEach(n => {
@@ -456,7 +581,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       const lbl = document.createElement("span");
       lbl.className = "plbl"; lbl.textContent = (on ? "● " : "  ") + n.id; lbl.title = n.id;
       row.appendChild(lbl);
-      row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); renderSeedChips(); renderNodePicker(); scheduleFilter(); };
+      row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); refreshSeeds(); renderNodePicker(); scheduleFilter(); };
       plist.appendChild(row);
     });
     pcount.textContent = items.length + " shown";
@@ -467,10 +592,11 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   const tagCount = new Map();
   for (const n of G.nodes) for (const t of (n.tags || [])) tagCount.set(t, (tagCount.get(t) || 0) + 1);
   function openTagBrowser() {
-    paddall.hidden = true; pback.hidden = true; pickBack = null; curRender = renderTagList;
+    pbulk.hidden = true; pback.hidden = true; pickBack = null; curRender = renderTagList;
     pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
   }
   function renderTagList() {
+    pickVisibleIds = [];   // tag rows aren't seeds; bulk add/remove is hidden here
     const q = pfilter.value.trim().toLowerCase();
     const tags = [...tagCount.keys()].filter(t => !q || t.toLowerCase().includes(q)).sort();
     ptitle.textContent = "tags — " + tags.length;
@@ -506,7 +632,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   // folded too, mirroring the initial fold state of `makexx -i`.
   const menuFolded = new Set([UNDOC, ...(G.folded_groups || [])]);
   function openMenuBrowser() {
-    paddall.hidden = true; pback.hidden = true; pickBack = null; curRender = renderMenuList;
+    pbulk.hidden = false; pback.hidden = true; pickBack = null; curRender = renderMenuList;
     pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
   }
   function menuRow(n, depth) {
@@ -520,7 +646,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     lbl.innerHTML = (on ? "● " : "") + esc(n.id) + (help ? '<span class="mdesc"> — ' + esc(help) + "</span>" : "");
     lbl.title = n.id + (n.help ? " — " + n.help : "");
     row.appendChild(lbl);
-    row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); renderSeedChips(); renderMenuList(); scheduleFilter(); };
+    row.onclick = () => { pinned.has(n.id) ? pinned.delete(n.id) : pinned.add(n.id); refreshSeeds(); renderMenuList(); scheduleFilter(); };
     return row;
   }
   function menuHeader(key, label, depth, folded) {
@@ -565,8 +691,12 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     };
     ptitle.textContent = "menu — " + total;
     plist.innerHTML = "";
+    // Only rows actually appended become "visible" for bulk add/remove — rows
+    // hidden under a folded group are deliberately excluded.
+    const shown = [];
+    const addRow = (n, d) => { plist.appendChild(menuRow(n, d)); shown.push(n.id); };
     // Ungrouped documented targets first (no header), like help's "Targets:".
-    (byGroup.get("") || []).forEach(n => plist.appendChild(menuRow(n, 0)));
+    (byGroup.get("") || []).forEach(n => addRow(n, 0));
     // Grouped targets, with auto-created parent section headers.
     for (const g of ordered) {
       if (anyAncestorFolded(g)) continue;
@@ -574,26 +704,85 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       const selfFolded = !searching && menuFolded.has(g);
       menuHeader(g, g.split("/").pop(), depth, selfFolded);
       if (selfFolded) continue;
-      (byGroup.get(g) || []).forEach(n => plist.appendChild(menuRow(n, depth + 1)));
+      (byGroup.get(g) || []).forEach(n => addRow(n, depth + 1));
     }
     // Undocumented (no HELP) at the bottom, folded by default — like the TUI.
     if (undoc.length) {
       const folded = !searching && menuFolded.has(UNDOC);
       menuHeader(UNDOC, "Undocumented (" + undoc.length + ")", 0, folded);
-      if (!folded) undoc.forEach(n => plist.appendChild(menuRow(n, 1)));
+      if (!folded) undoc.forEach(n => addRow(n, 1));
     }
+    pickVisibleIds = shown;
     pcount.textContent = total + " targets";
   }
+
+  // Seeds mode: the same searchable picker as Targets/Tags, but listing the
+  // current seeds. `seedShown` is sticky so a row you toggle off stays listed
+  // (toggle it back on) until the picker is reopened. Toggling applies to the
+  // graph immediately (keepView so the camera doesn't jump while you flip rows).
+  function openSeedsPicker() {
+    seedShown.clear();
+    for (const id of pinned) seedShown.add(id);
+    pickPred = null; pickTitle = "seeds"; pickBack = null;
+    pbulk.hidden = false; pback.hidden = true; curRender = renderSeedsList;
+    pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
+  }
+  function renderSeedsList() {
+    const q = pfilter.value.trim().toLowerCase();
+    for (const id of pinned) seedShown.add(id);     // capture seeds added by other means
+    const all = [...seedShown].sort();
+    ptitle.textContent = "seeds — " + pinned.size;
+    plist.innerHTML = "";
+    if (!all.length) {
+      pickVisibleIds = [];
+      const e = document.createElement("div");
+      e.className = "pempty";
+      e.textContent = "No seeds yet — double-click a node, or pick from Targets / Tags / a type.";
+      plist.appendChild(e);
+      pcount.textContent = "0 seeds";
+      return;
+    }
+    const vis = all.filter(id => !q || id.toLowerCase().includes(q));
+    pickVisibleIds = vis;
+    vis.forEach(id => {
+      const active = pinned.has(id);
+      const row = document.createElement("div");
+      row.className = "prow" + (active ? " on" : " off");
+      const lbl = document.createElement("span");
+      lbl.className = "plbl"; lbl.textContent = (active ? "● " : "○ ") + id;
+      lbl.title = active ? "deactivate" : "reactivate";
+      row.appendChild(lbl);
+      row.onclick = () => {
+        pinned.has(id) ? pinned.delete(id) : pinned.add(id);
+        seedShown.add(id);                 // keep the row listed until the picker reopens
+        refreshSeeds();                    // count + re-render list
+        scheduleFilter(true);              // apply to the graph now, camera steady
+      };
+      plist.appendChild(row);
+    });
+    pcount.textContent = pinned.size + " active · " + all.length + " shown";
+  }
+  // Single updater everything calls after `pinned` changes: the Seeds button
+  // count, plus the live list when the Seeds picker is the active view.
+  function seedsActive() { return !picker.hidden && curRender === renderSeedsList; }
+  function refreshSeeds() {
+    if (seedsBtn) seedsBtn.textContent = "Seeds ▾ (" + pinned.size + ")";
+    if (seedsActive()) renderSeedsList();
+  }
+  refreshSeeds();
 
   pfilter.addEventListener("input", () => curRender());
   picker.addEventListener("click", e => {
     const pk = e.target.getAttribute && e.target.getAttribute("data-pk");
     if (pk === "close") picker.hidden = true;
     else if (pk === "back" && pickBack) pickBack();
-    else if (pk === "addall") {
-      const q = pfilter.value.trim().toLowerCase();
-      G.nodes.filter(n => pickPred(n) && (!q || n.id.toLowerCase().includes(q))).forEach(n => pinned.add(n.id));
-      renderSeedChips(); renderNodePicker(); scheduleFilter();
+    else if (pk === "addall" || pk === "removeall") {
+      // Operate only on the rows currently visible (filter + folds already
+      // applied when pickVisibleIds was last set), so folded groups are untouched.
+      if (pk === "addall") pickVisibleIds.forEach(id => pinned.add(id));
+      else                 pickVisibleIds.forEach(id => pinned.delete(id));
+      if (curRender === renderSeedsList) pickVisibleIds.forEach(id => seedShown.add(id));   // keep rows listed
+      refreshSeeds(); curRender(); scheduleFilter();
     }
   });
 
@@ -606,25 +795,42 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     return seedInput.value.split(/[\s,]+/).filter(Boolean).map(tokenToRegex);
   }
   function seedActive() { return seedInput.value.trim() !== "" || pinned.size > 0; }
-  function isSeed(node, regexes) {
+  // A node matches the search box if any token hits its name, HELP, or DESC.
+  // Bare tokens are substrings (so they reach help/desc prose); anchored globs
+  // (e.g. *_alpha_*) still work against the name.
+  function matchesPattern(node, regexes) {
+    if (!regexes.length) return false;
     const d = node.data();
-    if (pinned.has(d.id)) return true;
-    for (const re of regexes) if (re.test(d.id)) return true;
+    const help = d.help || "", desc = d.desc || "";
+    for (const re of regexes) if (re.test(d.id) || re.test(help) || re.test(desc)) return true;
     return false;
   }
 
   function applyFilter(keepView) {
-    cy.nodes().removeClass("seed");
+    cy.nodes().removeClass("seed pseed bseed");
     const nLeaf = cy.nodes().filter(isLeaf).length;
     const big = nLeaf > BIG_NODES || cy.edges().length > BIG_EDGES;
-    const seeds = seedActive()
-      ? cy.nodes().filter(n => isLeaf(n) && isSeed(n, seedRegexes()))
-      : cy.collection();
-    seeds.addClass("seed");                          // outline seeds always
+    const active = seedActive();
+    const regexes = seedRegexes();
+    // Three highlight states: seed-only (picked, solid yellow), search-only
+    // (matches the box, dashed orange), and both (dashed yellow). The trace
+    // (modifiers + connect-between) runs on the SEEDS (picked) only; search
+    // results are shown and highlighted but never extended.
+    // "in view" scopes the search to nodes currently on screen — snapshot them
+    // before show() repaints. matched ⊆ visible then, so search can't pull in
+    // anything that wasn't already shown.
+    const inView = searchInView.checked;
+    const seen = inView ? new Set(cy.nodes(":visible").map(n => n.id())) : null;
+    const picked  = active ? cy.nodes().filter(n => isLeaf(n) && pinned.has(n.id())) : cy.collection();
+    const matched = active ? cy.nodes().filter(n => isLeaf(n) && matchesPattern(n, regexes) && (!inView || seen.has(n.id()))) : cy.collection();
+    picked.difference(matched).addClass("seed");     // seed only
+    matched.difference(picked).addClass("pseed");    // search only
+    picked.intersection(matched).addClass("bseed");  // both
+    const total = picked.union(matched).length;
 
     // Reveal `ele` (minus manually-hidden nodes and their edges), lay out, count.
-    // Seeds are never hidden — they're the anchors, so they always win.
-    const hideColl = cy.nodes().filter(n => hidden.has(n.id()) && !n.hasClass("seed"));
+    // Seeds and search results are never hidden — they're the highlighted set.
+    const hideColl = cy.nodes().filter(n => hidden.has(n.id()) && !n.hasClass("seed") && !n.hasClass("pseed") && !n.hasClass("bseed"));
     const show = (ele) => {
       ele = ele.difference(hideColl).difference(hideColl.connectedEdges());
       cy.elements().style("display", "none");
@@ -633,47 +839,40 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       return ele;
     };
 
-    // Apply the filter only when there are seeds and Filter is on.
-    if (seedActive() && filterOn.checked && seeds.length > 0) {
-      if (linkMode.checked && seeds.length >= 2) {
-        // ↔ Link: "how are these related?" — shortest path between seeds
-        // ignoring edge direction, so it finds connections through a shared
-        // ancestor / convergence point, not just a directed lineage.
-        const anchor = seeds.first();
-        let ele = seeds.union(cy.nodes().filter(n => revealed.has(n.id())));
+    if (active && filterOn.checked) {
+      // The trace is built from SEEDS (picked) only.
+      let vis = cy.collection();
+      let note = "";
+      if (linkMode.checked && picked.length >= 2) {
+        // ↔ Link: shortest path between seeds ignoring edge direction — finds a
+        // connection through a shared ancestor / convergence point.
+        const anchor = picked.first();
+        vis = picked;
         const disc = [];
-        seeds.forEach(s => {
+        picked.forEach(s => {
           if (s.same(anchor)) return;
           const r = cy.elements().aStar({ root: anchor, goal: s, directed: false });
-          if (r.found) ele = ele.union(r.path); else disc.push(s.id());
+          if (r.found) vis = vis.union(r.path.nodes()); else disc.push(s.id());
         });
-        ele = show(ele.union(ele.edgesWith(ele)).union(ele.ancestors()));
-        updateCount(disc.length
-          ? (ele.filter(isLeaf).length + " shown · not linked to first seed: " + disc.join(", "))
-          : ele.filter(isLeaf).length);
-        return;
+        if (disc.length) note = " · not linked to first seed: " + disc.join(", ");
+      } else if (picked.length) {
+        // "Connect the seeds": nodes both downstream and upstream of a seed.
+        const down = picked.union(picked.successors().nodes());
+        const up   = picked.union(picked.predecessors().nodes());
+        vis = down.intersection(up);
+        if (toInputs.checked) vis = vis.union(vis.predecessors().nodes());   // upstream to inputs
+        if (toFinals.checked) vis = vis.union(vis.successors().nodes());     // downstream to finals
       }
-      // "Connect the seeds": every node on a path between two seeds = nodes
-      // both downstream of some seed and upstream of some seed.
-      const down = seeds.union(seeds.successors().nodes());
-      const up   = seeds.union(seeds.predecessors().nodes());
-      let vis = down.intersection(up);
-      if (toInputs.checked) vis = vis.union(vis.predecessors().nodes());   // upstream to inputs
-      if (toFinals.checked) vis = vis.union(vis.successors().nodes());     // downstream to finals
-      if (revealed.size) vis = vis.union(cy.nodes().filter(n => revealed.has(n.id())));  // manual expansions
-      const ele = show(vis.union(vis.edgesWith(vis)).union(vis.ancestors()));   // + edges + group boxes
-      updateCount(ele.filter(isLeaf).length);
+      vis = vis.union(matched);   // search results: shown + highlighted, never extended
+      if (revealed.size) vis = vis.union(cy.nodes().filter(n => revealed.has(n.id())));
+      if (vis.empty()) { cy.elements().style("display", "none"); hideHint(); updateCount(0); return; }
+      const ele = show(vis.union(vis.edgesWith(vis)).union(vis.ancestors()));
+      updateCount(note ? (ele.filter(isLeaf).length + " shown" + note) : ele.filter(isLeaf).length);
       return;
     }
-    // Seeds set but nothing matched.
-    if (seedActive() && filterOn.checked && seeds.length === 0) {
-      cy.elements().style("display", "none"); hideHint(); updateCount(0); return;
-    }
-    // Not filtering (no seeds, or Filter off). A big graph can't be drawn
-    // whole — show a hint and wait for a seed rather than hang dagre on it.
+    // Not filtering (nothing active, or Filter off). A big graph can't be drawn
+    // whole — show a hint unless the user has a manual expansion.
     if (big) {
-      // If the user has manually expanded a neighborhood, show that instead
-      // of the hint (lets exploration persist after clearing the seed text).
       const rev = cy.nodes().filter(n => revealed.has(n.id()));
       if (rev.length) {
         const ele = show(rev.union(rev.edgesWith(rev)).union(rev.ancestors()));
@@ -682,14 +881,14 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       }
       cy.elements().style("display", "none");
       showHint("Large graph — " + nLeaf + " targets, " + cy.edges().length + " deps. Too big to draw "
-        + "whole; seed a filter to begin: type a name or pattern (e.g. *_alpha_*) in the Trace box, "
-        + "or pick a #tag." + (seedActive() && !filterOn.checked ? "  (Filter is currently off.)" : ""));
-      updateCount(seedActive() ? (seeds.length + " seeds · filter off") : null);
+        + "whole; begin by typing a name / pattern in the Search box, or pick from Targets / Tags / a type."
+        + (active && !filterOn.checked ? "  (Filter is currently off.)" : ""));
+      updateCount(active ? (total + " highlighted · filter off") : null);
       return;
     }
-    // Small graph: safe to draw everything (seeds stay highlighted, hidden subtracted).
+    // Small graph: draw everything (seeds + results stay highlighted).
     const ele = show(cy.elements());
-    updateCount(seedActive() ? (seeds.length + " seeds · filter off")
+    updateCount(active ? (total + " highlighted · filter off")
                 : (hidden.size ? ele.filter(isLeaf).length : null));
   }
 
@@ -699,8 +898,32 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   toFinals.addEventListener("change", scheduleFilter);
   filterOn.addEventListener("change", scheduleFilter);
   linkMode.addEventListener("change", scheduleFilter);
+  searchInView.addEventListener("change", scheduleFilter);
+  // Toolbar dropdown menus (File, View) — anchored under their buttons (CSS).
+  // Opening one closes the others; an outside click, Esc, or running an item
+  // closes them all.
+  const menus = [...document.querySelectorAll(".menuwrap")]
+    .map(w => ({ act: w.querySelector(".menubtn").getAttribute("data-act"),
+                 btn: w.querySelector(".menubtn"), menu: w.querySelector(".dropdown") }))
+    .filter(m => m.btn && m.menu);
+  function closeMenus() { for (const m of menus) { m.menu.hidden = true; m.btn.classList.remove("open"); } }
+  function toggleMenu(act) {
+    const m = menus.find(x => x.act === act);
+    if (!m) return;
+    const willOpen = m.menu.hidden;
+    closeMenus();
+    m.menu.hidden = !willOpen;
+    m.btn.classList.toggle("open", willOpen);
+  }
+  document.addEventListener("click", e => {
+    if (!(e.target.closest && e.target.closest(".menuwrap"))) closeMenus();
+  });
+  const typing = () => { const a = document.activeElement; return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"); };
+  function doFit() { cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 }); }
   document.addEventListener("keydown", e => {
-    if (e.key === "/" && document.activeElement !== seedInput) { e.preventDefault(); seedInput.focus(); }
+    if (e.key === "/" && !typing()) { e.preventDefault(); seedInput.focus(); }
+    else if ((e.key === "f" || e.key === "F") && !typing()) { e.preventDefault(); doFit(); }
+    else if (e.key === "Escape" && menus.some(m => !m.menu.hidden)) closeMenus();
     else if (e.key === "Escape" && !picker.hidden) picker.hidden = true;
   });
 
@@ -732,6 +955,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       toFinals: toFinals.checked,
       filterOn: filterOn.checked,
       linkMode: linkMode.checked,
+      searchInView: searchInView.checked,
       theme: theme,
     };
   }
@@ -748,8 +972,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     toFinals.checked = !!s.toFinals;
     filterOn.checked = s.filterOn !== false;     // default on
     linkMode.checked = !!s.linkMode;
+    searchInView.checked = !!s.searchInView;
     if (s.theme === "light" || s.theme === "dark") setTheme(s.theme);
-    renderSeedChips();
+    refreshSeeds();
     renderTagChips();
     if (!picker.hidden) curRender();             // refresh an open picker in place
     scheduleFilter();                            // re-apply + re-frame
@@ -819,8 +1044,17 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   document.getElementById("bars").addEventListener("click", e => {
     const act = e.target && e.target.getAttribute && e.target.getAttribute("data-act");
     if (!act) return;
+    if (menus.some(m => m.act === act)) { toggleMenu(act); return; }   // File / View / Actions ▾
     if (act === "menu") openMenuBrowser();
-    else if (act === "fit") cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 });
+    else if (act === "seeds") openSeedsPicker();
+    else if (act === "seedResults" || act === "unseedResults") {
+      // Promote (or drop) every current search-box match to / from the seeds.
+      const rx = seedRegexes();
+      if (rx.length) cy.nodes().filter(n => isLeaf(n) && matchesPattern(n, rx))
+        .forEach(n => act === "seedResults" ? pinned.add(n.id()) : pinned.delete(n.id()));
+      refreshSeeds(); scheduleFilter();
+    }
+    else if (act === "fit") doFit();
     else if (act === "png") {
       // Export the whole rendered (visible) graph at 2x, on the current background.
       const bg = getComputedStyle(document.body).backgroundColor || "#0f1216";
@@ -837,7 +1071,8 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     else if (act === "save") saveState();
     else if (act === "saveAs") saveStateAs();
     else if (act === "load") stateFile.click();
-    else if (act === "theme") setTheme(theme === "dark" ? "light" : "dark");
+    else if (act === "themeLight") setTheme("light");
+    else if (act === "themeDark") setTheme("dark");
     else if (act === "clearSeed") { seedInput.value = ""; seedInput.focus(); scheduleFilter(); }
     else if (act === "unhide") { hidden.clear(); scheduleFilter(); }
     else if (act === "collapseAll") api.collapseAll();
@@ -847,7 +1082,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       pinned.clear();
       revealed.clear();
       hidden.clear();
-      renderSeedChips();
+      refreshSeeds();
       toInputs.checked = false; toFinals.checked = false; filterOn.checked = true; linkMode.checked = false;
       selNode = null; stickyHandles = false; placeHandles();
       scheduleFilter();
@@ -862,6 +1097,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       selNode = null; stickyHandles = false; placeHandles();
       scheduleFilter();
     }
+    closeMenus();             // any item action also dismisses the open menu
   });
 
   // --- Hover tooltip (now incl. tags + the recipe commands) -----------------
@@ -873,6 +1109,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     const meta = [d.type, d.ext ? "." + d.ext : null, d.srcline ? "makefile.cpp:" + d.srcline : null].filter(Boolean).join(" · ");
     let html = '<div class="t-name">' + esc(d.id) + "</div>";
     if (meta) html += '<div class="t-meta">' + esc(meta) + "</div>";
+    if (node.hasClass("bseed")) html += '<div class="t-seed">◈ seed + search result</div>';
+    else if (node.hasClass("seed")) html += '<div class="t-seed">● seed</div>';
+    else if (node.hasClass("pseed")) html += '<div class="t-seed t-pat">▢ search result</div>';
     if (d.help) html += '<div class="t-help">' + esc(d.help) + "</div>";
     if (d.desc) html += '<div class="t-desc">' + esc(d.desc) + "</div>";
     if (d.tags && d.tags.length) html += '<div class="t-tags">' + d.tags.map(t => "#" + esc(t)).join("  ") + "</div>";
@@ -907,7 +1146,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (lastTapId === n.id() && now - lastTapAt < 350) {       // double click -> seed
       const id = n.id();
       pinned.has(id) ? pinned.delete(id) : pinned.add(id);
-      renderSeedChips(); scheduleFilter();
+      refreshSeeds(); scheduleFilter();
       lastTapId = null; lastTapAt = 0; return;
     }
     lastTapId = n.id(); lastTapAt = now;

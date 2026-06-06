@@ -1513,6 +1513,19 @@ class Makefile {
 			auto it = target_rule.find(n);
 			return it != target_rule.end() ? it->second->src_line : 0;
 		};
+		// A stable per-rule index so the viewer can group "sibling" targets — the
+		// several outputs of one multi-target rule. Inputs/tools (no producing
+		// rule) get -1. Assigned lazily in node-emission order.
+		std::map<Rule const *, int> rule_index;
+		auto node_rule = [&](std::string const &n) -> int {
+			auto it = target_rule.find(n);
+			if(it == target_rule.end()) return -1;
+			auto ri = rule_index.find(it->second);
+			if(ri != rule_index.end()) return ri->second;
+			int idx = (int)rule_index.size();
+			rule_index[it->second] = idx;
+			return idx;
+		};
 		auto json_arr = [&](std::vector<std::string> const &v) -> std::string {
 			std::string o;
 			for(size_t i = 0; i < v.size(); i++) {
@@ -1539,6 +1552,7 @@ class Makefile {
 			  << "\"label\":\"" << json_escape(n) << "\","
 			  << "\"ext\":\"" << json_escape(get_ext(n)) << "\","
 			  << "\"type\":\"" << node_type(n) << "\","
+			  << "\"rule\":" << node_rule(n) << ","
 			  << "\"group\":\"" << json_escape(node_group(n)) << "\","
 			  << "\"help\":\"" << json_escape(node_help(n)) << "\","
 			  << "\"desc\":\"" << json_escape(desc) << "\","
@@ -1558,7 +1572,7 @@ class Makefile {
 			if(emitted.count(t)) continue;
 			if(!first) j << ","; first = false;
 			j << "{\"id\":\"" << json_escape(t) << "\",\"label\":\"" << json_escape(t)
-			  << "\",\"ext\":\"\",\"type\":\"tool\",\"group\":\"\",\"help\":\"\",\"desc\":\"\","
+			  << "\",\"ext\":\"\",\"type\":\"tool\",\"rule\":-1,\"group\":\"\",\"help\":\"\",\"desc\":\"\","
 			  << "\"tags\":[],\"srcline\":0,\"cmds\":[]}";
 			emitted.insert(t);
 		}
