@@ -867,7 +867,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       if (revealed.size) vis = vis.union(cy.nodes().filter(n => revealed.has(n.id())));
       if (vis.empty()) { cy.elements().style("display", "none"); hideHint(); updateCount(0); return; }
       const ele = show(vis.union(vis.edgesWith(vis)).union(vis.ancestors()));
-      updateCount(note ? (ele.filter(isLeaf).length + " shown" + note) : ele.filter(isLeaf).length);
+      updateCount(note ? (ele.nodes().filter(isLeaf).length + " shown" + note) : ele.nodes().filter(isLeaf).length);
       return;
     }
     // Not filtering (nothing active, or Filter off). A big graph can't be drawn
@@ -876,7 +876,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       const rev = cy.nodes().filter(n => revealed.has(n.id()));
       if (rev.length) {
         const ele = show(rev.union(rev.edgesWith(rev)).union(rev.ancestors()));
-        updateCount(ele.filter(isLeaf).length);
+        updateCount(ele.nodes().filter(isLeaf).length);
         return;
       }
       cy.elements().style("display", "none");
@@ -889,7 +889,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     // Small graph: draw everything (seeds + results stay highlighted).
     const ele = show(cy.elements());
     updateCount(active ? (total + " highlighted · filter off")
-                : (hidden.size ? ele.filter(isLeaf).length : null));
+                : (hidden.size ? ele.nodes().filter(isLeaf).length : null));
   }
 
   // Filter only on Enter — live per-keystroke filtering froze large graphs.
