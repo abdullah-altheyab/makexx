@@ -61,6 +61,14 @@ Users can define domain classes, use loops to generate parameterized rules, togg
 
 `generate()` writes an `AGENTS.md` file summarizing the project's targets, dependencies, and structure in plain English, enabling AI coding assistants to understand and modify the workflow.
 
+## Interactive Dependency Graph
+
+`mf.generate_with_graph()` additionally emits a self-contained, offline HTML viewer (opened via `make graph`) built on Cytoscape.js and dagre. Rather than rendering the entire graph — which, for workflows with thousands of parameterized rules, becomes an unreadable hairball — the viewer is organized around *trace-seeded filtering*: the user selects seed targets (by name pattern, hashtag tags drawn from rule descriptions, node type, or direct selection) and the tool displays only the connected subgraph between them, optionally extended upstream to inputs (provenance) or downstream to final targets (impact). A separate full-text search highlights matches without disturbing the seed set, and nodes can be heat-colored by recorded run time, frequency, or recency.
+
+## Usage and Timing Data
+
+With `mf.profile = true`, each rule invocation appends a timestamped duration to an append-only log. `makexx --stats` aggregates this into a per-target table — run count, recency, total and median time, ranked by total time — for identifying bottlenecks and never-run targets, and the same raw data drives the dependency graph's heat-coloring.
+
 # Comparison with Existing Tools
 
 | Feature | makexx | Make | CMake | Snakemake |
@@ -78,10 +86,10 @@ Users can define domain classes, use loops to generate parameterized rules, togg
 
 # AI Usage Disclosure
 
-Claude Code (Anthropic) was used during development for code generation, refactoring, and documentation. All AI-generated code was reviewed, tested, and validated by the author. The test suite (33 tests) and CI pipeline (Linux and macOS) verify correctness.
+Claude Code (Anthropic) was used during development for code generation, refactoring, and documentation. All AI-generated code was reviewed, tested, and validated by the author. The test suite (150 checks) and CI pipeline (Linux and macOS) verify correctness.
 
 # Acknowledgments
 
-The author thanks the open-source communities behind GNU Make and CMake for the foundational tooling that inspired this project.
+The author thanks the open-source communities behind GNU Make and CMake for the foundational tooling that inspired this project, and the Cytoscape.js and dagre projects (with the cytoscape-dagre, cytoscape-expand-collapse, and cytoscape-svg extensions), which power the interactive dependency-graph viewer.
 
 # References

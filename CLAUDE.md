@@ -297,7 +297,7 @@ src/starter.cpp               — starter makefile.cpp written to new project di
 CMakeLists.txt                — builds makexx; drives the embed step via cmake/embed_as_string.cmake
 cmake/embed_as_string.cmake   — wraps a file's content in a C++ raw string literal for embedding
 assets/graph_viewer.html      — interactive graph viewer template (placeholders filled by `makexx --build-graph`)
-assets/vendor/                — vendored Cytoscape.js + dagre + cytoscape-dagre + expand-collapse + cytoscape-svg (embedded, kept offline)
+assets/vendor/                — vendored Cytoscape.js + dagre + cytoscape-dagre + expand-collapse + cytoscape-svg (embedded, kept offline; all MIT — see THIRD_PARTY_LICENSES.md)
 examples/compile/             — example: multi-target C++ project build
 examples/portfolio_analytics/ — example: domain-specific workflow with config separation
 examples/family_tree/         — example: genealogy workflow with AI context generation

@@ -79,7 +79,7 @@ mf << MENU("Processing", "Run the data pipeline");             // optional: decl
 
 **Interactive mode (`makexx -i`).** A TUI for browsing and running targets: `/` to search and filter, Space to multi-select, `d` to dry-run, `?` to show dependencies, `r` to refresh after editing `makefile.cpp` (cursor / fold / select / search are preserved across the reload). `q` quits; Esc dismisses; double-Esc quits when nothing is active. Targets without a `HELP()` are tucked into a folded **Undocumented** group — browse or `/`-search it to find rules you haven't documented yet.
 
-**Interactive dependency graph.** With `mf.generate_with_graph()`, `make graph` opens a **single self-contained `makefile_graph.html`** in your browser — no server, no network, works offline. The Cytoscape/dagre viewer colours nodes by kind (input / intermediate / final / phony / tool) and is built around **trace-seeded filtering**: when the same pipeline is instantiated many times (per play, region, AOI…), seed by a name pattern (`*_alpha_*`) or a `#tag` (hashtags you put in `HELP`/`DESC`) and it shows just that slice — connecting the seeds through their shared intermediate steps, with `↑ inputs` / `↓ finals` toggles for provenance and impact. Hover shows each step's commands. The static Graphviz `make makefile_graph.pdf` is still there for a shareable artifact.
+**Interactive dependency graph.** With `mf.generate_with_graph()`, `make graph` opens a **single self-contained `makefile_graph.html`** in your browser — no server, no network, works offline. The Cytoscape/dagre viewer colours nodes by kind (input / intermediate / final / phony / tool) and is built around **trace-seeded filtering**: when the same pipeline is instantiated many times (per play, region, AOI…), pick **seeds** — double-click a node, browse `Targets ▾` / `Tags ▾` (hashtags from `HELP`/`DESC`), or a node type — and it shows just that slice, connecting the seeds through their shared steps with `↑ inputs` / `↓ finals` for provenance and impact. The **Search** box highlights matches by name / `HELP` / `DESC` (kept distinct from seeds), and you can promote matches to seeds in one click. Tidy menus (File / View / Tracing / Actions), **save/load** of a view to a portable `.state.json`, PNG/SVG export, light/dark, and — when `mf.profile` data exists — **heat-coloring** nodes by run time / count / recency. A built-in `? Help` lists it all. The static Graphviz `make makefile_graph.pdf` is still there for a shareable artifact.
 
 **Usage & timing data.** Set `mf.profile = true` and makexx logs how long each rule takes to an append-only `.makexx_hits` on every run. `makexx --stats` reads it back as a per-rule table — runs, last-used, total and median time, sorted so the **bottleneck is on top** — plus the targets nobody has run (review/deletion candidates). Local, append-only, no server: build-scan insight for a plain Makefile.
 
@@ -249,3 +249,14 @@ make -n install                        # spot-check a few targets
 ```
 
 Iterate with the assistant on anything that looks off — recursive variable expansion, non-trivial pattern-rule stem manipulation, and conditional blocks (`ifeq`) are the common rough edges.
+
+## Acknowledgments
+
+makexx stands on the shoulders of others:
+
+- The interactive dependency graph is rendered by **[Cytoscape.js](https://js.cytoscape.org)** with **[dagre](https://github.com/dagrejs/dagre)** layout, plus the **cytoscape-dagre**, **cytoscape-expand-collapse**, and **cytoscape-svg** extensions — all MIT-licensed and vendored offline so the generated `makefile_graph.html` needs no network. Full attribution and licenses are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+- The static PDF graph uses **[Graphviz](https://graphviz.org/)** when installed (optional, not bundled).
+- Inspired by the foundational tooling of **GNU Make** and **CMake**.
+- Built by [Abdullah AlTheyab](https://github.com/abdullah-altheyab), with **[Claude Code](https://claude.com/claude-code)** (Anthropic) used throughout for implementation, refactoring, and documentation — all reviewed and tested by the author.
+
+makexx is MIT-licensed — see [LICENSE](LICENSE).
