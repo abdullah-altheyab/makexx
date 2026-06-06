@@ -1052,7 +1052,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       const rx = seedRegexes();
       if (rx.length) cy.nodes().filter(n => isLeaf(n) && matchesPattern(n, rx))
         .forEach(n => act === "seedResults" ? pinned.add(n.id()) : pinned.delete(n.id()));
-      refreshSeeds(); scheduleFilter();
+      refreshSeeds(); scheduleFilter(true);   // keep the camera — acting on in-view matches
     }
     else if (act === "fit") doFit();
     else if (act === "png") {
@@ -1146,7 +1146,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (lastTapId === n.id() && now - lastTapAt < 350) {       // double click -> seed
       const id = n.id();
       pinned.has(id) ? pinned.delete(id) : pinned.add(id);
-      refreshSeeds(); scheduleFilter();
+      refreshSeeds(); scheduleFilter(true);   // keep the camera — you're acting on a node in view
       lastTapId = null; lastTapAt = 0; return;
     }
     lastTapId = n.id(); lastTapAt = now;
