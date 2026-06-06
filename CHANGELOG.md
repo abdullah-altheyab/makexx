@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Interactive dependency graph
+
+- **Heat-coloring from `.makexx_hits`.** When `mf.profile = true` has accumulated timing data, **View ▾ ▸ Heat** tints node fills by usage — **total time**, **run count**, or **recency** — on a cool→hot (blue→amber→red) scale (log-scaled for time/count); targets with no recorded runs stay dim, and type/seed info remains on the borders. A gradient **scale** with min/max shows on the top row, and the hover tooltip gains a `runs · total · median · last` line. `makexx --build-graph` aggregates the log at assemble time and injects it as `MAKEXX_STATS`, so the heat reflects every run since the graph JSON was generated; the Heat options only appear when there's data. The chosen mode is saved with the view state. (Second reader of the same raw `.makexx_hits` events as `makexx --stats`.)
+
 ## v0.5.0
 
 A major overhaul of the standalone interactive dependency-graph viewer (`makefile_graph.html`).

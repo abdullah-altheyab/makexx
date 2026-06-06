@@ -186,7 +186,7 @@ The target column is the literal `$@`, so the log joins cleanly to graph nodes a
 - `.makexx_hits` is **never** removed by `full_clean`/`soft_clean` (it's accumulated history); the `.makexx_prof/` temp dir is cleaned by `full_clean`. Both are gitignored and excluded from `list_unknown`.
 - Off by default — it adds two process spawns + a temp file per built target.
 
-`makexx --stats` reads this log and prints a per-rule table — run count, last-run (relative), total time, median — sorted by total time so the bottleneck is on top, plus a "never recorded" list of menu targets with zero runs (review/deletion candidates). It aggregates entirely at read time. Heat-coloring in the interactive graph is the other planned reader of the same raw events.
+`makexx --stats` reads this log and prints a per-rule table — run count, last-run (relative), total time, median — sorted by total time so the bottleneck is on top, plus a "never recorded" list of menu targets with zero runs (review/deletion candidates). It aggregates entirely at read time. The interactive graph's **heat-coloring** (View ▾ ▸ Heat) is the other reader of the same raw events: `makexx --build-graph` aggregates `.makexx_hits` per target at assemble time and injects it into the HTML as `MAKEXX_STATS` (`{target: {runs, total, median, last}}`), which the viewer maps to node fills.
 
 ### AI agent context file (AGENTS.md)
 
@@ -236,6 +236,8 @@ The viewer is built around **trace-seeded filtering** — the answer to "the gra
 - **Hover** shows type, `HELP`, `DESC`, `#tags`, the seed kind (`● seed` / `▢ search result` / `◈ both`), **`makefile.cpp:<line>`** (rule definition; for loop-generated rules the template line, captured via `__builtin_LINE()` and emitted as `srcline`), and the rule's **commands** (`cmds`, numbered, continuations collapsed, capped with `… +N more`).
 - **`Filter`** applies/suspends the filter without losing seeds (off = full graph with seeds still highlighted). **Actions ▾**: **Clear** wipes seeds + toggles; **Reset** keeps the seeds but drops reveals / hides / modifiers; **Unhide** restores manually-hidden nodes; **Fold / Unfold all** for groups.
 - **`Save` / `Save As` / `Load`** persist the logical view to a portable `<graph>.state.json` (seeds, pinned bar tags, hidden/revealed nodes, the modifier toggles + `in view`, menu fold state, theme — *not* zoom/pan, since load re-runs the filter and re-frames). `Save As` picks a new name/location, `Save` overwrites the last; on Chromium (File System Access API) `Save As` opens a real OS dialog and `Save` overwrites in place, else it falls back to a filename prompt + download. The file survives `make graph` regenerating the HTML; loading a state whose recorded title differs prompts for confirmation.
+
+- **Heat-coloring** (View ▾ ▸ Heat) tints node fills by a usage metric from `.makexx_hits` — **total time** / **run count** / **recency**, cool→hot (log-scaled for the first two; targets with no runs stay dim) — leaving type/seed info on the borders. A gradient scale shows the min/max and the hover tooltip gains a `runs · total · median · last` line. Only available when profiling data exists; the mode is saved with the view state.
 
 A **`? Help`** button on the menu bar opens an in-viewer cheat-sheet of all the above (highlight sets, search, pickers, Tracing, the on-node bar, menus, and the `/` · `F` · `Esc` keys); close it with `✕`, a backdrop click, or `Esc`.
 

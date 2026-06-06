@@ -123,6 +123,10 @@
     border-radius:8px; padding:9px 11px; pointer-events:none; z-index:10; box-shadow:0 6px 24px #0008; }
   #tip .t-name { font-weight:600; word-break:break-all; }
   #tip .t-meta { color:var(--muted); margin-top:2px; }
+  #tip .t-stat { margin-top:4px; color:#f59e0b; }
+  #heatscale { display:inline-flex; align-items:center; gap:5px; color:var(--muted); white-space:nowrap; font-size:12px; }
+  #heatscale .hbar { width:64px; height:9px; border-radius:3px; border:1px solid var(--line);
+    background:linear-gradient(90deg,#1f6feb,#f59e0b,#f85149); display:inline-block; }
   #tip .t-seed { margin-top:4px; font-weight:600; color:var(--seed); }
   #tip .t-seed.t-pat { color:#fb923c; }
   #tip .t-help { margin-top:6px; }
@@ -164,6 +168,7 @@
     <span class="seedkey" title="Seeds = picked anchors (double-click / pickers). Search results = search-box matches. Both = seeded AND matched. Tracing applies to Seeds only.">
       <i class="sw sw-pick"></i>Seeds<i class="sw sw-pat"></i>Search Results<i class="sw sw-both"></i>both
     </span>
+    <span id="heatscale" hidden></span>
     <span class="seedwrap">
       <span class="lbl">Search:</span>
       <input id="seed" type="text" placeholder="name / pattern / help text (e.g. *_alpha_*) — Enter  ·  dbl-click a node to seed  ·  / to focus" autocomplete="off">
@@ -196,6 +201,11 @@
         <div class="sep"></div>
         <button data-act="themeLight" class="opt">Light Background</button>
         <button data-act="themeDark" class="opt on">Dark Background</button>
+        <div class="sep" data-heat hidden></div>
+        <button data-act="heat:off" class="opt on" data-heat hidden>Heat: off</button>
+        <button data-act="heat:total" class="opt" data-heat hidden>Heat: total time</button>
+        <button data-act="heat:runs" class="opt" data-heat hidden>Heat: run count</button>
+        <button data-act="heat:recency" class="opt" data-heat hidden>Heat: recency</button>
       </div>
     </span>
     <span class="menuwrap">
@@ -302,6 +312,9 @@
 // Data injected by `makexx --build-graph`; the fallback keeps this file a
 // valid, openable page on its own (shows the empty state).
 const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[],"edges":[]}/*makexx-data-end*/;
+// Per-target timing aggregated from .makexx_hits (when mf.profile is on) for
+// heat-coloring: { "<target>": {runs, total, median, last} }. Empty if none.
+const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
 
 (function () {
   const G = MAKEXX_GRAPH;
@@ -423,6 +436,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     const D = document.querySelector('[data-act="themeDark"]');
     if (L) L.classList.toggle("on", t === "light");      // ✓ marks the active background
     if (D) D.classList.toggle("on", t === "dark");
+    applyHeat();                                          // re-assert heat fills over the new palette
   }
   const BIG_NODES = 400, BIG_EDGES = 1200;   // above this, never draw the whole graph (dagre can't)
   const EMPTY = document.getElementById("empty");
@@ -498,6 +512,53 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     else s = v;
     document.getElementById("count").textContent = s;
   }
+
+  // --- Heat coloring (from .makexx_hits, injected as MAKEXX_STATS) -----------
+  // Tints node fills by a usage metric (type/seed info stays on the borders).
+  // Stable per node, so it's applied on mode/theme change, not every filter.
+  const STATS = MAKEXX_STATS || {};
+  const hasStats = Object.keys(STATS).length > 0;
+  let heatMode = "off";          // off | total | runs | recency
+  const fmtMs = ms => ms < 1000 ? ms + "ms" : ms < 60000 ? (ms / 1000).toFixed(1) + "s"
+    : Math.floor(ms / 60000) + "m" + String(Math.round(ms % 60000 / 1000)).padStart(2, "0") + "s";
+  const agoStr = e => { const d = Math.floor(Date.now() / 1000 - e); return d < 60 ? d + "s ago"
+    : d < 3600 ? Math.floor(d / 60) + "m ago" : d < 86400 ? Math.floor(d / 3600) + "h ago" : Math.floor(d / 86400) + "d ago"; };
+  const heatMetric = {
+    total:   { label: "total time", val: s => s.total, log: true,  fmt: fmtMs },
+    runs:    { label: "run count",  val: s => s.runs,  log: true,  fmt: n => n + "×" },
+    recency: { label: "recency",    val: s => s.last,  log: false, fmt: agoStr },
+  };
+  function heatColor(t) {                         // 0 = cool blue → 1 = hot red, via amber
+    t = Math.max(0, Math.min(1, t));
+    const stops = [[31, 111, 235], [245, 158, 11], [248, 81, 73]];
+    const seg = t < 0.5 ? 0 : 1, f = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+    const c = stops[seg].map((x, i) => Math.round(x + (stops[seg + 1][i] - x) * f));
+    return "rgb(" + c.join(",") + ")";
+  }
+  function applyHeat() {
+    const scaleEl = document.getElementById("heatscale");
+    cy.nodes().removeStyle("background-color");
+    if (heatMode === "off" || !hasStats) { scaleEl.hidden = true; return; }
+    const m = heatMetric[heatMode];
+    const leaves = cy.nodes().filter(isLeaf);
+    const raws = []; leaves.forEach(n => { const s = STATS[n.id()]; if (s) raws.push(m.val(s)); });
+    if (!raws.length) { scaleEl.hidden = true; return; }
+    const tr = v => m.log ? Math.log1p(v) : v;
+    const lo = Math.min(...raws), hi = Math.max(...raws), tlo = tr(lo), thi = tr(hi);
+    const norm = v => thi > tlo ? (tr(v) - tlo) / (thi - tlo) : 1;
+    leaves.forEach(n => { const s = STATS[n.id()]; n.style("background-color", s ? heatColor(norm(m.val(s))) : "#2b323b"); });
+    scaleEl.innerHTML = "heat: " + m.label + " <span>" + m.fmt(lo) + "</span><i class='hbar'></i><span>" + m.fmt(hi) + "</span>";
+    scaleEl.hidden = false;
+  }
+  function setHeat(mode) {
+    heatMode = mode;
+    ["off", "total", "runs", "recency"].forEach(k => {
+      const b = document.querySelector('[data-act="heat:' + k + '"]');
+      if (b) b.classList.toggle("on", k === mode);
+    });
+    applyHeat();
+  }
+  if (hasStats) document.querySelectorAll("[data-heat]").forEach(el => { el.hidden = false; });
 
   // --- Tags -----------------------------------------------------------------
   // The toolbar shows ONE "Tags ▾" button, not a chip per tag (that would
@@ -1017,6 +1078,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
       filterOn: filterOn.checked,
       linkMode: linkMode.checked,
       searchInView: searchInView.checked,
+      heat: heatMode,
       theme: theme,
     };
   }
@@ -1034,6 +1096,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     filterOn.checked = s.filterOn !== false;     // default on
     linkMode.checked = !!s.linkMode;
     searchInView.checked = !!s.searchInView;
+    if (hasStats && typeof s.heat === "string" && heatMetric[s.heat]) setHeat(s.heat); else setHeat("off");
     if (s.theme === "light" || s.theme === "dark") setTheme(s.theme);
     refreshSeeds();
     renderTagChips();
@@ -1109,6 +1172,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (act === "menu") openMenuBrowser();
     else if (act === "seeds") openSeedsPicker();
     else if (act === "help") help.hidden = false;
+    else if (act.indexOf("heat:") === 0) setHeat(act.slice(5));
     else if (act === "seedResults" || act === "unseedResults") {
       // Promote (or drop) every current search-box match to / from the seeds.
       const rx = seedRegexes();
@@ -1174,6 +1238,9 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (node.hasClass("bseed")) html += '<div class="t-seed">◈ seed + search result</div>';
     else if (node.hasClass("seed")) html += '<div class="t-seed">● seed</div>';
     else if (node.hasClass("pseed")) html += '<div class="t-seed t-pat">▢ search result</div>';
+    const st = STATS[d.id];
+    if (st) html += '<div class="t-stat">' + st.runs + " runs · " + fmtMs(st.total) + " total · "
+      + fmtMs(st.median) + " median · " + agoStr(st.last) + "</div>";
     if (d.help) html += '<div class="t-help">' + esc(d.help) + "</div>";
     if (d.desc) html += '<div class="t-desc">' + esc(d.desc) + "</div>";
     if (d.tags && d.tags.length) html += '<div class="t-tags">' + d.tags.map(t => "#" + esc(t)).join("  ") + "</div>";

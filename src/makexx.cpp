@@ -156,6 +156,52 @@ int build_graph_html() {
 		html.replace(s, e - s, data);
 	}
 
+	// Heat data: aggregate the .makexx_hits timing log (if any) per target into a
+	// JSON object the viewer can colour nodes by. Read here — at assemble time —
+	// so it reflects runs accumulated since the graph JSON was generated.
+	string stats_json = "{}";
+	{
+		std::ifstream hf(".makexx_hits");
+		if(hf.is_open()) {
+			struct S { long runs = 0; long long total = 0; long last = 0; std::vector<long long> durs; };
+			std::map<string, S> agg;
+			string line;
+			while(std::getline(hf, line)) {                  // epoch \t kind \t target \t dur_ms
+				size_t a = line.find('\t'); if(a == string::npos) continue;
+				size_t b = line.find('\t', a + 1); if(b == string::npos) continue;
+				size_t c = line.find('\t', b + 1); if(c == string::npos) continue;
+				long epoch = atol(line.substr(0, a).c_str());
+				string target = line.substr(b + 1, c - b - 1);
+				long long dur = atoll(line.substr(c + 1).c_str());
+				auto &st = agg[target];
+				st.runs++; st.total += dur; st.durs.push_back(dur);
+				if(epoch > st.last) st.last = epoch;
+			}
+			if(!agg.empty()) {
+				auto esc = [](string const &x) { string o; for(char ch : x) { if(ch == '"' || ch == '\\') o += '\\'; o += ch; } return o; };
+				string o = "{"; bool first = true;
+				for(auto &kv : agg) {
+					auto &st = kv.second;
+					std::sort(st.durs.begin(), st.durs.end());
+					long long med = st.durs[st.durs.size() / 2];
+					if(!first) o += ","; first = false;
+					o += "\"" + esc(kv.first) + "\":{\"runs\":" + std::to_string(st.runs)
+					   + ",\"total\":" + std::to_string(st.total) + ",\"median\":" + std::to_string(med)
+					   + ",\"last\":" + std::to_string(st.last) + "}";
+				}
+				o += "}";
+				stats_json = o;
+			}
+		}
+	}
+	stats_json = replace_all(stats_json, "</script", "<\\/script");
+	auto ss = html.find("/*makexx-stats-start*/");
+	auto se = html.find("/*makexx-stats-end*/");
+	if(ss != string::npos && se != string::npos && se >= ss) {
+		se += strlen("/*makexx-stats-end*/");
+		html.replace(ss, se - ss, stats_json);
+	}
+
 	write_file("makefile_graph.html", html.c_str(), (int)html.size());
 	cout << "Wrote makefile_graph.html (" << (html.size() / 1024) << " KB)" << endl;
 	return 0;
