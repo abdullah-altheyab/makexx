@@ -139,6 +139,21 @@
     margin:-23px 0 0 -23px; border:4px solid var(--line); border-top-color:#58a6ff;
     border-radius:50%; animation:mxspin .8s linear infinite; }
   @keyframes mxspin { to { transform:rotate(360deg); } }
+  #help { position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center; background:#0009; }
+  #help .box { width:min(640px,92vw); max-height:84vh; overflow:auto; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 44px #000c; }
+  #help .hh { position:sticky; top:0; display:flex; align-items:center; gap:8px; padding:12px 16px;
+    background:var(--panel); border-bottom:1px solid var(--line); }
+  #help .hh h2 { margin:0; font-size:15px; flex:1; }
+  #help .hbody { padding:6px 16px 16px; }
+  #help h3 { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:16px 0 6px; }
+  #help dl { margin:0; display:grid; grid-template-columns:max-content 1fr; gap:5px 14px; }
+  #help dt { color:var(--fg); white-space:nowrap; }
+  #help dd { margin:0; color:var(--muted); }
+  #help code { font-family:ui-monospace,Menlo,Consolas,monospace; color:#cdd9e5; }
+  #help kbd { font:11px ui-monospace,Menlo,Consolas,monospace; border:1px solid var(--line);
+    border-radius:4px; padding:0 5px; color:var(--fg); }
+  #help .swrow { display:inline-flex; align-items:center; gap:6px; }
 </style>
 </head>
 <body>
@@ -208,6 +223,7 @@
       <span class="track"><span class="knob"></span></span>
       Filter
     </label>
+    <button data-act="help" title="Controls &amp; keyboard help">? Help</button>
     <span id="searchtools">
       <span class="lbl">Seed:</span>
       <button data-act="menu" class="chip" title="Browse / search targets by group (like makexx -i) and pick them as seeds">Targets ▾</button>
@@ -238,6 +254,47 @@
 </div>
 <div id="empty" hidden>No graph data.</div>
 <input id="stateFile" type="file" accept=".json,application/json" hidden>
+<div id="help" hidden>
+  <div class="box">
+    <div class="hh"><h2>Graph controls</h2><button data-hclose title="close">✕</button></div>
+    <div class="hbody">
+      <h3>Two highlight sets</h3>
+      <dl>
+        <dt><span class="swrow"><i class="sw sw-pick"></i>Seeds</span></dt><dd>solid yellow — your trace anchors</dd>
+        <dt><span class="swrow"><i class="sw sw-pat"></i>Search results</span></dt><dd>dashed orange — Search-box matches; highlighted, not traced</dd>
+        <dt><span class="swrow"><i class="sw sw-both"></i>both</span></dt><dd>dashed yellow — seeded and matched</dd>
+      </dl>
+      <h3>Search (top-right box)</h3>
+      <dl>
+        <dt>type + <kbd>Enter</kbd></dt><dd>match target name, <code>HELP</code> or <code>DESC</code>; glob with <code>*</code> (e.g. <code>*_alpha_*</code>)</dd>
+        <dt>in view</dt><dd>limit matches to nodes already on screen</dd>
+        <dt>Seed results / Unseed results</dt><dd>add / remove all current matches to / from the seeds</dd>
+      </dl>
+      <h3>Pick seeds</h3>
+      <dl>
+        <dt>double-click a node</dt><dd>toggle it as a seed</dd>
+        <dt>Targets ▾ / Tags ▾ / type / Seeds ▾</dt><dd>searchable pickers; <b>Add / Remove visible</b> bulk-toggle the shown rows (folded groups untouched)</dd>
+      </dl>
+      <h3>Tracing ▾ (applies to seeds only)</h3>
+      <dl>
+        <dt>← inputs / → finals</dt><dd>extend the trace upstream to sources / downstream to finals</dd>
+        <dt>↔ Link</dt><dd>shortest path between 2+ seeds, ignoring edge direction</dd>
+        <dt>Filter</dt><dd>apply / suspend filtering (off = full graph, seeds still highlighted)</dd>
+      </dl>
+      <h3>On a node (hover bar)</h3>
+      <dl>
+        <dt>⊕ / ⇤ ⇥</dt><dd>reveal one level (← parents, → children) / all the way to inputs · finals</dd>
+        <dt>⊘← ⊘→ / ✕</dt><dd>hide upstream / downstream / this node (Actions ▸ Unhide restores)</dd>
+        <dt>⧉</dt><dd>add siblings — the other targets of a multi-target rule</dd>
+      </dl>
+      <h3>Menus &amp; keys</h3>
+      <dl>
+        <dt>File ▾ / View ▾ / Actions ▾</dt><dd>export &amp; save/load state · Fit + light/dark · reset / clear / unhide / fold</dd>
+        <dt><kbd>/</kbd> · <kbd>F</kbd> · <kbd>Esc</kbd></dt><dd>focus search · fit to view · close menus / panels</dd>
+      </dl>
+    </div>
+  </div>
+</div>
 
 <script>/*__MAKEXX_GRAPH_LIBS__*/</script>
 <script>
@@ -920,9 +977,13 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
   });
   const typing = () => { const a = document.activeElement; return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"); };
   function doFit() { cy.animate({ fit: { eles: cy.elements(":visible"), padding: 30 } }, { duration: 250 }); }
+  // Help overlay — closed by its ✕, a backdrop click, or Esc.
+  const help = document.getElementById("help");
+  help.addEventListener("click", e => { if (e.target === help || (e.target.closest && e.target.closest("[data-hclose]"))) help.hidden = true; });
   document.addEventListener("keydown", e => {
     if (e.key === "/" && !typing()) { e.preventDefault(); seedInput.focus(); }
     else if ((e.key === "f" || e.key === "F") && !typing()) { e.preventDefault(); doFit(); }
+    else if (e.key === "Escape" && !help.hidden) help.hidden = true;
     else if (e.key === "Escape" && menus.some(m => !m.menu.hidden)) closeMenus();
     else if (e.key === "Escape" && !picker.hidden) picker.hidden = true;
   });
@@ -1047,6 +1108,7 @@ const MAKEXX_GRAPH = /*makexx-data-start*/{"title":"","description":"","nodes":[
     if (menus.some(m => m.act === act)) { toggleMenu(act); return; }   // File / View / Actions ▾
     if (act === "menu") openMenuBrowser();
     else if (act === "seeds") openSeedsPicker();
+    else if (act === "help") help.hidden = false;
     else if (act === "seedResults" || act === "unseedResults") {
       // Promote (or drop) every current search-box match to / from the seeds.
       const rx = seedRegexes();

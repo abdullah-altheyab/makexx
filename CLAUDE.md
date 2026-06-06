@@ -237,6 +237,8 @@ The viewer is built around **trace-seeded filtering** — the answer to "the gra
 - **`Filter`** applies/suspends the filter without losing seeds (off = full graph with seeds still highlighted). **Actions ▾**: **Clear** wipes seeds + toggles; **Reset** keeps the seeds but drops reveals / hides / modifiers; **Unhide** restores manually-hidden nodes; **Fold / Unfold all** for groups.
 - **`Save` / `Save As` / `Load`** persist the logical view to a portable `<graph>.state.json` (seeds, pinned bar tags, hidden/revealed nodes, the modifier toggles + `in view`, menu fold state, theme — *not* zoom/pan, since load re-runs the filter and re-frames). `Save As` picks a new name/location, `Save` overwrites the last; on Chromium (File System Access API) `Save As` opens a real OS dialog and `Save` overwrites in place, else it falls back to a filename prompt + download. The file survives `make graph` regenerating the HTML; loading a state whose recorded title differs prompts for confirmation.
 
+A **`? Help`** button on the menu bar opens an in-viewer cheat-sheet of all the above (highlight sets, search, pickers, Tracing, the on-node bar, menus, and the `/` · `F` · `Esc` keys); close it with `✕`, a backdrop click, or `Esc`.
+
 Filtering re-runs the dagre layout on just the visible subset.
 
 ## Examples
