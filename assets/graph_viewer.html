@@ -234,6 +234,7 @@
       <button data-act="menu" class="chip" title="Browse / search targets by group (like makexx -i) and pick them as seeds">Targets ▾</button>
       <span id="legend"></span>
       <span id="tags"></span>
+      <span id="toolschip"></span>
       <button data-act="seeds" class="chip" title="The seeds — picked anchors from double-click / Targets / Tags / types (searchable). Search results come from the Search box and show dashed; Tracing applies to seeds only.">Seeds ▾ (0)</button>
     </span>
   </div>
@@ -624,6 +625,45 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   }
   renderTagChips();
 
+  // --- Tools picker ---------------------------------------------------------
+  // All unique tool names across all nodes, with counts of nodes using each.
+  const allToolsMap = new Map();   // tool name → node count
+  for (const n of G.nodes) for (const t of (n.tools || [])) allToolsMap.set(t, (allToolsMap.get(t) || 0) + 1);
+  const toolsChipBox = document.getElementById("toolschip");
+  if (allToolsMap.size > 0) {
+    const btn = document.createElement("button");
+    btn.className = "chip";
+    btn.textContent = "Tools ▾ (" + allToolsMap.size + ")";
+    btn.title = "browse tools used by rules — pick nodes as seeds";
+    btn.onclick = openToolBrowser;
+    toolsChipBox.appendChild(btn);
+  }
+  function openToolBrowser() {
+    pbulk.hidden = true; pback.hidden = true; pickBack = null; curRender = renderToolList;
+    pfilter.value = ""; picker.hidden = false; curRender(); pfilter.focus();
+  }
+  function renderToolList() {
+    pickVisibleIds = [];
+    const q = pfilter.value.trim().toLowerCase();
+    const tools = [...allToolsMap.keys()].filter(t => !q || t.toLowerCase().includes(q)).sort();
+    ptitle.textContent = "tools — " + tools.length;
+    plist.innerHTML = "";
+    if (!tools.length) {
+      const e = document.createElement("div"); e.className = "pempty";
+      e.textContent = "No tools match."; plist.appendChild(e);
+    } else {
+      tools.forEach(t => {
+        const row = document.createElement("div"); row.className = "prow";
+        const lbl = document.createElement("span"); lbl.className = "plbl";
+        lbl.textContent = t + "   (" + allToolsMap.get(t) + ")";
+        lbl.title = "list nodes using " + t;
+        lbl.onclick = () => openNodePicker(t, n => (n.tools || []).includes(t), openToolBrowser);
+        row.appendChild(lbl); plist.appendChild(row);
+      });
+    }
+    pcount.textContent = tools.length + " tools";
+  }
+
   // --- Seed-driven filtering ------------------------------------------------
   const seedInput = document.getElementById("seed");
   const toInputs = document.getElementById("toInputs");
@@ -815,7 +855,8 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     const q = pfilter.value.trim().toLowerCase();
     const searching = q.length > 0;
     const match = n => !searching || n.id.toLowerCase().includes(q) ||
-      (n.help || "").toLowerCase().includes(q) || (n.group || "").toLowerCase().includes(q);
+      (n.help || "").toLowerCase().includes(q) || (n.group || "").toLowerCase().includes(q) ||
+      (n.tools || []).some(t => t.toLowerCase().includes(q));
     // Partition matched targets: documented under their group, the rest undoc.
     const byGroup = new Map();             // group path ("" = ungrouped) -> nodes[]
     const undoc = [];
@@ -956,8 +997,8 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   function matchesPattern(node, regexes) {
     if (!regexes.length) return false;
     const d = node.data();
-    const help = d.help || "", desc = d.desc || "";
-    for (const re of regexes) if (re.test(d.id) || re.test(help) || re.test(desc)) return true;
+    const help = d.help || "", desc = d.desc || "", toolStr = (d.tools || []).join(" ");
+    for (const re of regexes) if (re.test(d.id) || re.test(help) || re.test(desc) || re.test(toolStr)) return true;
     return false;
   }
 
