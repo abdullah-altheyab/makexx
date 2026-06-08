@@ -734,7 +734,7 @@ static void test_phony() {
     mf.generate();
     auto content = read_makefile();
     // Built-in phony targets are emitted in sorted order (graph is on by default).
-    CHECK_CONTAINS(content, ".PHONY: all full_clean graph help list list_input list_unknown soft_clean");
+    CHECK_CONTAINS(content, ".PHONY: all check_tools full_clean graph help list list_input list_unknown soft_clean");
 }
 
 static void test_byproduct() {

@@ -356,7 +356,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
         id: n.id, label: n.label || n.id, parent,
         type: n.type || "intermediate", ext: n.ext || "",
         help: n.help || "", desc: n.desc || "",
-        tags: n.tags || [], cmds: n.cmds || [], tools: n.tools || [], srcline: n.srcline || 0,
+        tags: n.tags || [], cmds: n.cmds || [], tools: n.tools || [], tool_hints: n.tool_hints || {}, srcline: n.srcline || 0,
         rule: typeof n.rule === "number" ? n.rule : -1
       },
       classes: n.type || "intermediate"
@@ -657,8 +657,11 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
       tools.forEach(t => {
         const row = document.createElement("div"); row.className = "prow";
         const lbl = document.createElement("span"); lbl.className = "plbl";
-        lbl.textContent = t + "   (" + allToolsMap.get(t) + ")";
-        lbl.title = "list nodes using " + t;
+        // Find hint by scanning nodes for one that has it
+        let hint = "";
+        for (const n of G.nodes) { if ((n.tool_hints || {})[t]) { hint = n.tool_hints[t]; break; } }
+        lbl.textContent = t + (hint ? "   — " + hint : "") + "   (" + allToolsMap.get(t) + ")";
+        lbl.title = "list nodes using " + t + (hint ? " — install: " + hint : "");
         lbl.onclick = () => openNodePicker(t, n => (n.tools || []).includes(t), openToolBrowser);
         row.appendChild(lbl); plist.appendChild(row);
       });
@@ -1337,7 +1340,10 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     if (d.help) html += '<div class="t-help">' + esc(d.help) + "</div>";
     if (d.desc) html += '<div class="t-desc">' + esc(d.desc) + "</div>";
     if (d.tags && d.tags.length) html += '<div class="t-tags">' + d.tags.map(t => "#" + esc(t)).join("  ") + "</div>";
-    if (d.tools && d.tools.length) html += '<div class="t-meta">Tools: ' + d.tools.map(esc).join(", ") + "</div>";
+    if (d.tools && d.tools.length) html += '<div class="t-meta">Tools: ' + d.tools.map(t => {
+      const h = d.tool_hints && d.tool_hints[t];
+      return esc(t) + (h ? ' <span style="opacity:.6">(' + esc(h) + ')</span>' : "");
+    }).join(", ") + "</div>";
     if (d.cmds && d.cmds.length) {
       const MAXCMDS = 8, MAXLEN = 110;
       const lines = d.cmds.slice(0, MAXCMDS).map((c, i) => {

@@ -163,6 +163,7 @@ class Rule {
 	std::set<std::string> retain_files;
 	std::set<std::string> phony_targets;
 	std::set<std::string> tools;
+	std::map<std::string, std::string> tool_hints;   // name → install hint (optional)
 	std::map<std::string, std::string> file_descriptions;
 	bool retain_targets;
 	bool phony_all;
@@ -358,13 +359,11 @@ inline const PHONY_t PHONY;
 class TOOL {
   public:
 	std::set<std::string> tools;
-	TOOL(StringList ts) { for(auto &t : ts) tools.insert(t); }
-	TOOL(std::vector<std::string> ts) { for(auto &t : ts) tools.insert(t); }
-	template<typename... Args>
-	TOOL(std::string first, Args&&... rest) {
-		tools.insert(first);
-		(tools.insert(std::string(std::forward<Args>(rest))), ...);
-	}
+	std::string hint;   // optional install hint — shown in AGENTS.md and check_tools
+	TOOL(std::string name)                        { tools.insert(name); }
+	TOOL(std::string name, std::string install_hint) { tools.insert(name); hint = install_hint; }
+	TOOL(StringList ts)                           { for(auto &t : ts) tools.insert(t); }
+	TOOL(std::vector<std::string> ts)             { for(auto &t : ts) tools.insert(t); }
 };
 
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
@@ -455,8 +454,9 @@ inline Rule &operator<<(Rule &a, TARGET t) {
 	return a;
 }
 inline Rule &operator<<(Rule &a, TOOL t) {
-	for(auto &x : t.tools)
-		a.tools.insert(x);
+	for(auto &x : t.tools) a.tools.insert(x);
+	if(!t.hint.empty())
+		for(auto &x : t.tools) a.tool_hints[x] = t.hint;
 	return a;
 }
 inline Rule &operator<<(Rule &a, DESC d) {
@@ -494,6 +494,7 @@ class Makefile {
 	std::set<std::string> soft_clean_retain_nodes;
 	std::set<std::string> mf_phony_targets;
 	std::map<std::string, std::string> mf_file_descriptions;
+	std::map<std::string, std::string> tool_hints;  // tool name → install hint
 	std::set<std::string> folded_groups;
 	std::map<std::string, std::string> group_descriptions;
 
@@ -626,6 +627,7 @@ class Makefile {
 		builtin("list",         "List all tracked files");
 		builtin("list_unknown", "List untracked files in directory");
 		builtin("list_input",   "List input files");
+		builtin("check_tools",  "Check all declared tools are installed");
 		builtin("help",         "Show this help");
 		if(graph) {
 			builtin("makefile_graph.pdf", "Generate dependency graph PDF (requires Graphviz)");
@@ -757,7 +759,14 @@ class Makefile {
 		std::set<std::string> temps_list;
 		std::set<std::string> byprods_list;
 		std::set<std::string> hidden_targets_list;
-		std::set<std::string> phony_targets = {"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"};
+		// Harvest tool hints from all rules into the Makefile-level map.
+		// Rule-level hints fill in gaps; mf-level declarations (already in
+		// tool_hints) take precedence since they're the explicit project setting.
+		for(auto const &cmd : commands)
+			for(auto const &kv : cmd->tool_hints)
+				tool_hints.emplace(kv.first, kv.second);   // emplace: only inserts if absent
+
+		std::set<std::string> phony_targets = {"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help", "check_tools"};
 		if(graph) phony_targets.insert("graph");
 		// Collect user-marked phony targets so they appear in .PHONY and
 		// skip the ### GENERATING decoration. `rule << PHONY` marks all
@@ -854,7 +863,7 @@ class Makefile {
 					// recipe simply doesn't reach the trailing log line.
 					static const std::set<std::string> builtin_names = {
 						"all", "full_clean", "soft_clean", "list",
-						"list_unknown", "list_input", "help", "graph"};
+						"list_unknown", "list_input", "help", "graph", "check_tools"};
 					bool instrument = profile && !command->commands.empty();
 					if(instrument)
 						for(auto &i : to_list)
@@ -997,6 +1006,36 @@ class Makefile {
 		myfile << "\nlist_input:\n";
 		for(auto &itm : inputfiles_list)
 			myfile << "\t@echo \"\t" + itm + "\"\n";
+
+		// check_tools: verify each declared tool is on PATH; print hint if missing.
+		{
+			std::set<std::string> all_tools;
+			for(auto const &cmd : commands)
+				for(auto const &t : cmd->tools) all_tools.insert(t);
+			myfile << "\ncheck_tools:\n";
+			myfile << "\t@echo 'Checking tools...'\n";
+			if(all_tools.empty()) {
+				myfile << "\t@echo '  (no tools declared)'\n";
+			} else {
+				for(auto const &t : all_tools) {
+					// Bare names are resolved via command -v; paths with '/' are used as-is.
+					std::string check = (t.find('/') == std::string::npos)
+						? "command -v " + t + " >/dev/null 2>&1"
+						: "test -x " + t;
+					std::string ok_msg  = "  " + t;
+					// pad to column 20 for alignment
+					if(ok_msg.size() < 20) ok_msg += std::string(20 - ok_msg.size(), ' ');
+					std::string miss_msg = ok_msg + "MISSING";
+					auto hit = tool_hints.find(t);
+					if(hit != tool_hints.end())
+						miss_msg += "  -> " + hit->second;
+					ok_msg += "ok";
+					myfile << "\t@" << check << " && echo '" << ok_msg
+					       << "' || echo '" << miss_msg << "'\n";
+				}
+			}
+		}
+
 		myfile << makefile;
 		if(graph) {
 			generate_graph();
@@ -1048,6 +1087,7 @@ class Makefile {
 		cf << "        << TEMP(\"scratch.tmp\")                 // cleaned by full_clean/soft_clean\n";
 		cf << "        << RETAIN                              // exclude outputs from soft_clean\n";
 		cf << "        << TOOL(\"g++\")                         // executable prereq, mtime-tracked\n";
+		cf << "        << TOOL(\"xx\", \"https://github.com/author/xx\") // with install hint\n";
 		cf << "        << MENU(\"Build\");                      // group (nested: \"Build/Tests\")\n";
 		cf << "\n";
 		cf << "    // Use auto& only when building a rule across statements (e.g. in a loop):\n";
@@ -1219,6 +1259,25 @@ class Makefile {
 		}
 		cf << "\n";
 
+		// Tools section — only if any tools are declared.
+		{
+			std::set<std::string> all_tools;
+			for(auto const &cmd : commands)
+				for(auto const &t : cmd->tools) all_tools.insert(t);
+			if(!all_tools.empty()) {
+				cf << "## Tools\n\n";
+				cf << "External executables used by this build. Run `make check_tools` to verify they are all installed.\n\n";
+				for(auto const &t : all_tools) {
+					cf << "- `" << t << "`";
+					auto hit = tool_hints.find(t);
+					if(hit != tool_hints.end())
+						cf << " \xe2\x80\x94 install: " << hit->second;
+					cf << "\n";
+				}
+				cf << "\n";
+			}
+		}
+
 		// When profiling is on, hand agents the breadcrumbs to estimate build
 		// time themselves: where the data is, its exact schema, the join key,
 		// and the procedure. We document the data and how to use it, not just
@@ -1277,7 +1336,7 @@ class Makefile {
 	// section and the menu file's folded "Undocumented" group.
 	std::vector<Rule *> collect_undocumented_rules() {
 		static const std::set<std::string> builtin_names = {
-			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"
+			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help", "check_tools"
 		};
 		std::vector<Rule *> out;
 		for(auto const &cmd : commands) {
@@ -1406,6 +1465,14 @@ class Makefile {
 		return *this;
 	}
 
+	// `mf << TOOL("name", "hint")` declares a project-level install hint for a
+	// tool without attaching it to any rule. Shown in AGENTS.md and check_tools.
+	Makefile& operator<<(TOOL t) {
+		if(!t.hint.empty())
+			for(auto &x : t.tools) tool_hints[x] = t.hint;
+		return *this;
+	}
+
 	static std::string json_escape(std::string const &s) {
 		std::string o;
 		o.reserve(s.size() + 8);
@@ -1478,7 +1545,7 @@ class Makefile {
 		// `help` is a real rule (others like all/clean are raw makefile
 		// text), so filter the built-in target names out of the graph.
 		static const std::set<std::string> builtin_names = {
-			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help"
+			"all", "full_clean", "soft_clean", "list", "list_unknown", "list_input", "help", "check_tools"
 		};
 
 		auto file_desc = combined_file_descriptions();
@@ -1521,6 +1588,19 @@ class Makefile {
 			auto it = target_rule.find(n);
 			if(it == target_rule.end()) return {};
 			return std::vector<std::string>(it->second->tools.begin(), it->second->tools.end());
+		};
+		// Emit a JSON object mapping tool name → install hint for tools that have one.
+		// Uses the merged Makefile-level tool_hints map (mf-level + rule-level hints).
+		auto json_tool_hints = [&](std::vector<std::string> const &tools_list) -> std::string {
+			std::string o = "{";
+			bool first_hint = true;
+			for(auto const &t : tools_list) {
+				auto it = tool_hints.find(t);
+				if(it == tool_hints.end()) continue;
+				if(!first_hint) o += ","; first_hint = false;
+				o += "\"" + json_escape(t) + "\":\"" + json_escape(it->second) + "\"";
+			}
+			return o + "}";
 		};
 		auto node_srcline = [&](std::string const &n) -> int {
 			auto it = target_rule.find(n);
@@ -1572,7 +1652,8 @@ class Makefile {
 			  << "\"tags\":[" << json_arr(node_tags(n)) << "],"
 			  << "\"srcline\":" << node_srcline(n) << ","
 			  << "\"cmds\":[" << json_arr(node_cmds(n)) << "],"
-			  << "\"tools\":[" << json_arr(node_tools(n)) << "]}";
+			  << "\"tools\":[" << json_arr(node_tools(n)) << "],"
+			  << "\"tool_hints\":" << json_tool_hints(node_tools(n)) << "}";
 			emitted.insert(n);
 		};
 		for(auto const &n : nodes)
@@ -1626,7 +1707,8 @@ class Makefile {
 				  << "\"type\":\"rule\",\"rule\":" << ridx << ","
 				  << "\"srcline\":" << node_srcline(tgts[0]) << ","
 				  << "\"cmds\":[" << json_arr(node_cmds(tgts[0])) << "],"
-				  << "\"tools\":[" << json_arr(rule_tools) << "]}";
+				  << "\"tools\":[" << json_arr(rule_tools) << "],"
+				  << "\"tool_hints\":" << json_tool_hints(rule_tools) << "}";
 				edge_sets.push_back({rid, srcs, tgts});
 			} else {
 				edge_sets.push_back({"", srcs, tgts});
