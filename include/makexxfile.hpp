@@ -917,7 +917,8 @@ class Makefile {
             if(profile)
                 myfile << "\trm -rf .makexx_prof\n";
             for(auto &itm : processed_nodes){
-                myfile << "\trm -f \"" << itm << "\"\n";
+                if(!phony_targets.count(itm))
+                    myfile << "\trm -f \"" << itm << "\"\n";
             }
 
             for(auto &itm : byprods_list)
@@ -930,6 +931,7 @@ class Makefile {
         {
             myfile << "soft_clean: \n"<<std::endl;
             for(auto &itm : processed_nodes){
+                if(phony_targets.count(itm)) continue;
                 if(soft_clean_retain_nodes.find(itm)==soft_clean_retain_nodes.end())
                     myfile << "\trm -f \"" << itm << "\"\n";
             }

@@ -5,43 +5,51 @@ int main() {
     Makefile mf;
     mf.title = "My Project";
 
-    // Add rules with: mf.add("target", "source") << FINAL << "shell command";
+    // ── Getting started ───────────────────────────────────────────────────────
     //
-    //   FINAL    — included in 'make all'
-    //   OPTIONAL — run on demand only (the default)
+    //  This file IS the build description.  Edit it to define your rules, then
+    //  run  makexx  to regenerate the makefile.
     //
-    // Use GNU make automatic variables in commands:
-    //   $<  first source file
-    //   $@  target file
-    //   $^  all source files
+    //  Quick syntax:
+    //    auto& rule = mf.add("target", "source");  // add a rule
+    //    rule << FINAL;                             // include in 'make all'
+    //    rule << HELP("description");               // document the target
+    //    rule << MENU("Group");                     // organise under a group
+    //    rule << "your shell command $< $@ $^";    // append a shell command
     //
-    // Organize help with menu groups — a rule joins a group via its OWN << MENU:
-    //   rule << MENU("name")                — put this rule in a group
-    //   rule << MENU("Parent/Child")        — nested groups via slash separator
-    //   mf   << MENU("name", FOLDED)        — declare a group folded by default in makexx -i
-    //   mf   << MENU("name", "description") — declare a group's description (help/AGENTS/TUI)
+    //  Flags:
+    //    FINAL    — built by 'make all'
+    //    OPTIONAL — run on demand only (the default)
+    //    PHONY    — target is not a file
     //
-    // Helper functions:
-    //   stem("dir/file.cpp")            — "file"
-    //   basename("dir/file.cpp")        — "file.cpp"
-    //   change_ext("file.cpp", ".o")    — "file.o"
-    //   join_path("obj", "file.o")      — "obj/file.o"
+    //  Nested groups:
+    //    rule << MENU("Parent/Child")
+    //
+    //  Helpers:
+    //    stem("dir/file.cpp")          → "file"
+    //    change_ext("file.cpp", ".o")  → "file.o"
+    //    join_path("obj", "file.o")    → "obj/file.o"
+    //
+    //  Full DSL reference: makefile.hpp (installed in this directory)
+    // ─────────────────────────────────────────────────────────────────────────
 
-    mf.add("step1.out", "input.dat")
-        << MENU("Processing")
-        << HELP("run step 1")
-        << "your-tool --input $< --output $@";
-
-    mf.add("step2.out", "step1.out")
-        << MENU("Processing")
-        << HELP("run step 2")
-        << "your-other-tool $< > $@";
-
-    mf.add("report.pdf", {"step1.out", "step2.out"})
-        << MENU("Reports")
-        << FINAL
-        << HELP("generate final report")
-        << "report-tool $^ -o $@";
+    mf.add("start")
+        << PHONY << FINAL
+        << HELP("getting started — edit makefile.cpp then run makexx")
+        << "@echo ''"
+        << "@echo 'Welcome to makexx!  This is a fresh project.'"
+        << "@echo ''"
+        << "@echo 'Next steps:'"
+        << "@echo '  1. Open makefile.cpp in this directory'"
+        << "@echo '  2. Replace the starter rules with your own build rules'"
+        << "@echo '  3. Run  makexx  to regenerate the makefile and build'"
+        << "@echo ''"
+        << "@echo 'Useful commands:'"
+        << "@echo '  makexx -c     regenerate the makefile without building'"
+        << "@echo '  make help     list all documented targets'"
+        << "@echo '  makexx -i     interactive target selector (TUI)'"
+        << "@echo ''"
+        << "@echo 'Full DSL reference is in makefile.hpp (installed in this directory).'";
 
     mf.generate();
 }
