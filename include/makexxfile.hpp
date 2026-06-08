@@ -1058,9 +1058,12 @@ class Makefile {
 		cf << "\n";
 		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // DECLARE a group description/FOLDED\n";
 		cf << "    mf << PHONY(\"install\");                       // declare phony by name\n";
-		cf << "    mf.title       = \"My Project\";\n";
-		cf << "    mf.description = \"Project summary for AGENTS.md\";\n";
-		cf << "    mf.preamble    = \"CFLAGS ?= -O2\\n\";           // raw make injected near top\n";
+		cf << "    mf.title            = \"My Project\";\n";
+		cf << "    mf.description      = \"What this project does\"; // shown in " << context_filename << " header\n";
+		cf << "    mf.preamble         = \"CFLAGS ?= -O2\\n\";      // raw make injected near top\n";
+		cf << "    mf.profile          = true;                    // log per-rule timing to .makexx_hits\n";
+		cf << "    mf.silent           = true;                    // prefix all commands with @ (suppress echo)\n";
+		cf << "    mf.context_filename = \"CLAUDE.md\";             // rename the generated context file\n";
 		cf << "\n";
 		cf << "    // Path helpers: stem, basename, change_ext, join_path, get_ext\n";
 		cf << "    // Cross-platform file opener: open_file(\"report.pdf\")\n";

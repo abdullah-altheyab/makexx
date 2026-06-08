@@ -4,6 +4,11 @@ using namespace std;
 int main() {
     Makefile mf;
     mf.title = "My Project";
+    // mf.description      = "What this project does";     // shown in AGENTS.md header
+    // mf.profile          = true;                         // log per-rule timing to .makexx_hits
+    // mf.context_filename = "CLAUDE.md";                  // rename the generated context file
+    // mf.preamble         = "CFLAGS ?= -O2\n";           // raw make text injected near top
+    // mf.silent           = true;                         // prefix all commands with @
 
     // ── Getting started ───────────────────────────────────────────────────────
     //
