@@ -353,7 +353,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
         id: n.id, label: n.label || n.id, parent,
         type: n.type || "intermediate", ext: n.ext || "",
         help: n.help || "", desc: n.desc || "",
-        tags: n.tags || [], cmds: n.cmds || [], srcline: n.srcline || 0,
+        tags: n.tags || [], cmds: n.cmds || [], tools: n.tools || [], srcline: n.srcline || 0,
         rule: typeof n.rule === "number" ? n.rule : -1
       },
       classes: n.type || "intermediate"
