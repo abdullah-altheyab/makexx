@@ -1022,6 +1022,7 @@ class Makefile {
 	void generate_context(bool graph = false) {
 		std::ofstream cf(context_filename);
 		cf << "# " << (title.empty() ? "Project" : title) << "\n\n";
+		cf << "> **Auto-generated \xe2\x80\x94 do not edit.** This file is produced by `makexx` from `makefile.cpp`. Any edits will be overwritten the next time `makexx` runs. To update the build description, edit `makefile.cpp` instead.\n\n";
 		if(!description.empty())
 			cf << description << "\n\n";
 
@@ -1037,23 +1038,25 @@ class Makefile {
 		cf << "#include \"makefile.hpp\"\n";
 		cf << "int main() {\n";
 		cf << "    Makefile mf;\n";
-		cf << "    auto& r = mf.add(\"output.o\", \"input.cpp\");   // or {tgt1,tgt2}, {src1,src2}\n";
-		cf << "    r << \"g++ -c $< -o $@\";                      // append commands ($<, $@, $^)\n";
-		cf << "    r << FINAL;                                   // included in `make all`\n";
-		cf << "    r << PHONY;                                   // REQUIRED whenever the target name\n";
-		cf << "                                                  //   isn't a file the recipe creates\n";
-		cf << "                                                  //   (install, clean_*, list_*, etc.)\n";
-		cf << "    r << HELP(\"description shown in make help\");\n";
-		cf << "    r << DESC(\"input.txt\", \"what this file is\");  // also mf << DESC(...);\n";
-		cf << "                                                  //   multiple DESC for the same file\n";
-		cf << "                                                  //   accumulate (joined with a space)\n";
-		cf << "    r << TEMP(\"scratch.tmp\");                     // cleaned by full_clean/soft_clean\n";
-		cf << "    r << RETAIN;                                  // exclude rule outputs from soft_clean\n";
-		cf << "    r << TOOL(\"g++\");                             // executable prereq, mtime-tracked\n";
-		cf << "    r << MENU(\"Build\");                           // put this rule in a group\n";
-		cf << "    r << MENU(\"Build/Tests\");                     // nested group (parents auto-created)\n";
 		cf << "\n";
-		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // DECLARE a group description/FOLDED (groups no rule)\n";
+		cf << "    // Preferred style — chain << for self-contained rules:\n";
+		cf << "    mf.add(\"output.o\", \"input.cpp\")             // or {tgt1,tgt2}, {src1,src2}\n";
+		cf << "        << \"g++ -c $< -o $@\"                   // append commands ($<, $@, $^)\n";
+		cf << "        << FINAL                               // included in `make all`\n";
+		cf << "        << PHONY                               // REQUIRED when target isn't a file\n";
+		cf << "        << HELP(\"description shown in make help\")\n";
+		cf << "        << DESC(\"input.txt\", \"what this file is\") // also mf << DESC(...)\n";
+		cf << "        << TEMP(\"scratch.tmp\")                 // cleaned by full_clean/soft_clean\n";
+		cf << "        << RETAIN                              // exclude outputs from soft_clean\n";
+		cf << "        << TOOL(\"g++\")                         // executable prereq, mtime-tracked\n";
+		cf << "        << MENU(\"Build\");                      // group (nested: \"Build/Tests\")\n";
+		cf << "\n";
+		cf << "    // Use auto& only when building a rule across statements (e.g. in a loop):\n";
+		cf << "    auto& r = mf.add(\"list\") << PHONY;\n";
+		cf << "    for (auto& item : items)\n";
+		cf << "        r << (\"echo '  \" + item + \"'\");\n";
+		cf << "\n";
+		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // DECLARE a group description/FOLDED\n";
 		cf << "    mf << PHONY(\"install\");                       // declare phony by name\n";
 		cf << "    mf.title       = \"My Project\";\n";
 		cf << "    mf.description = \"Project summary for AGENTS.md\";\n";
