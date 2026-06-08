@@ -893,13 +893,23 @@ int run_interactive() {
 			if(eidx == -1) {
 				string arrow = groups[gidx].folded ? "▸" : "▾";
 				string gindent(groups[gidx].depth * 3, ' ');
-				string suffix = groups[gidx].description.empty()
-					? ""
-					: "  \033[2m" + groups[gidx].description + "\033[0m";
+				string const &gname = groups[gidx].display_name;
+				string const &gdesc = groups[gidx].description;
+				// Align the group description with the target description column.
+				// Entry layout: eindent(d*3) + mark(2) + "    "(4) + target(col_width) + "  "(2) + desc
+				//   → desc at d*3 + col_width + 8.
+				// Group header:  gindent(d*3) + "   "(3) + arrow(1) + " "(1) + name + gap + desc
+				//   → pad name to (col_width + 3) so desc lands at d*3 + col_width + 8.
+				string desc_part;
+				if(!gdesc.empty()) {
+					int pad = (col_width + 3) - (int)gname.size();
+					string gap(pad > 2 ? pad : 2, ' ');
+					desc_part = gap + "\033[2m" + gdesc + "\033[0m";
+				}
 				if(at_cursor)
-					printf("%s   %s \033[7m%s\033[0m%s\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str(), suffix.c_str());
+					printf("%s   %s \033[7m%s\033[0m%s\n", gindent.c_str(), arrow.c_str(), gname.c_str(), desc_part.c_str());
 				else
-					printf("%s   %s \033[1m%s\033[0m%s\n", gindent.c_str(), arrow.c_str(), groups[gidx].display_name.c_str(), suffix.c_str());
+					printf("%s   %s \033[1m%s\033[0m%s\n", gindent.c_str(), arrow.c_str(), gname.c_str(), desc_part.c_str());
 				lines_left--;
 			} else {
 				auto &e = entries[eidx];
