@@ -47,9 +47,8 @@
     border:1px solid var(--line); border-radius:4px; padding:0 5px; }
   .dropdown button.opt::before { content:""; display:inline-block; width:1.1em; text-align:center; }
   .dropdown button.opt.on::before { content:"✓"; color:#58a6ff; }
-  .dropdown .toggle { width:100%; gap:8px; padding:7px 11px; border-radius:6px; color:var(--fg); }
-  .dropdown .toggle:hover { background:var(--hover); }
-  .dropdown .toggle input { accent-color:#58a6ff; }
+  .dropdown .switch { display:flex; width:100%; padding:7px 11px; border-radius:6px; color:var(--fg); }
+  .dropdown .switch:hover { background:var(--hover); }
   .lbl { color:var(--muted); white-space:nowrap; }
   #tags, #seeds { display:flex; gap:6px; flex-wrap:wrap; }
   .chip { font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line);
@@ -63,8 +62,7 @@
   #nodebar button:hover { border-color:#58a6ff; color:#58a6ff; }
   #nodebar button.sib { margin-left:6px; color:var(--seed); border-color:var(--seed); }
   #nodebar button.sib:hover { color:var(--seed); border-color:var(--seed); background:var(--chipon); }
-  .toggle { display:flex; align-items:center; gap:4px; color:var(--muted); white-space:nowrap; cursor:pointer; }
-  /* Slide toggle (the Filter switch on the menu bar). */
+  /* Slide toggle — used in the menu bar (in-view) and Tracing dropdown. */
   .switch { display:inline-flex; align-items:center; gap:7px; cursor:pointer; color:var(--muted); white-space:nowrap; }
   .switch input { position:absolute; opacity:0; width:0; height:0; }
   .switch .track { position:relative; flex:none; width:32px; height:18px; border-radius:999px;
@@ -211,9 +209,13 @@
     <span class="menuwrap">
       <button data-act="tracingMenu" class="menubtn" aria-haspopup="true" title="Tracing options — extend the trace to inputs / finals, or link seeds">Tracing ▾</button>
       <div id="tracingmenu" class="dropdown" hidden>
-        <label class="toggle" title="Extend the trace upstream to source files"><input type="checkbox" id="toInputs"> ← inputs</label>
-        <label class="toggle" title="Extend the trace downstream to final targets"><input type="checkbox" id="toFinals"> → finals</label>
-        <label class="toggle" title="Connect 2+ seeds ignoring edge direction — shortest path between them"><input type="checkbox" id="linkMode"> ↔ Link</label>
+        <label class="switch" title="Show external tool nodes in the graph (off by default)"><input type="checkbox" id="showTools"><span class="track"><span class="knob"></span></span> Tools</label>
+        <div class="sep"></div>
+        <label class="switch" title="Extend the trace upstream to source files"><input type="checkbox" id="toInputs"><span class="track"><span class="knob"></span></span> ← inputs</label>
+        <label class="switch" title="Extend the trace downstream to final targets"><input type="checkbox" id="toFinals"><span class="track"><span class="knob"></span></span> → finals</label>
+        <label class="switch" title="Connect 2+ seeds ignoring edge direction — shortest path between them"><input type="checkbox" id="linkMode"><span class="track"><span class="knob"></span></span> ↔ Link</label>
+        <div class="sep"></div>
+        <label class="switch" title="Apply the seed filter (off = show everything, keep seeds)"><input type="checkbox" id="filterOn" checked><span class="track"><span class="knob"></span></span> Filter</label>
       </div>
     </span>
     <span class="menuwrap">
@@ -228,11 +230,6 @@
         <button data-act="expandAll" title="Unfold every group">Unfold all groups</button>
       </div>
     </span>
-    <label class="switch" title="Apply the seed filter (off = show everything, keep seeds)">
-      <input type="checkbox" id="filterOn" checked>
-      <span class="track"><span class="knob"></span></span>
-      Filter
-    </label>
     <button data-act="help" title="Controls &amp; keyboard help">? Help</button>
     <span id="searchtools">
       <span class="lbl">Seed:</span>
@@ -285,10 +282,11 @@
         <dt>double-click a node</dt><dd>toggle it as a seed</dd>
         <dt>Targets ▾ / Tags ▾ / type / Seeds ▾</dt><dd>searchable pickers; <b>Add / Remove visible</b> bulk-toggle the shown rows (folded groups untouched)</dd>
       </dl>
-      <h3>Tracing ▾ (applies to seeds only)</h3>
+      <h3>Tracing ▾</h3>
       <dl>
-        <dt>← inputs / → finals</dt><dd>extend the trace upstream to sources / downstream to finals</dd>
-        <dt>↔ Link</dt><dd>shortest path between 2+ seeds, ignoring edge direction</dd>
+        <dt>Tools</dt><dd>show / hide external tool nodes (off by default)</dd>
+        <dt>← inputs / → finals</dt><dd>extend the trace upstream to sources / downstream to finals (seeds only)</dd>
+        <dt>↔ Link</dt><dd>shortest path between 2+ seeds, ignoring edge direction (seeds only)</dd>
         <dt>Filter</dt><dd>apply / suspend filtering (off = full graph, seeds still highlighted)</dd>
       </dl>
       <h3>On a node (hover bar)</h3>
@@ -595,6 +593,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   const toFinals = document.getElementById("toFinals");
   const filterOn = document.getElementById("filterOn");
   const linkMode = document.getElementById("linkMode");
+  const showTools = document.getElementById("showTools");
   const searchInView = document.getElementById("searchInView");
   const pinned = new Set();    // seed node ids (added by double-click, or patterns/tags)
   const revealed = new Set();  // node ids revealed via on-node ⊕ handles (accumulates)
@@ -949,8 +948,10 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     // Reveal `ele` (minus manually-hidden nodes and their edges), lay out, count.
     // Seeds and search results are never hidden — they're the highlighted set.
     const hideColl = cy.nodes().filter(n => hidden.has(n.id()) && !n.hasClass("seed") && !n.hasClass("pseed") && !n.hasClass("bseed"));
+    const toolHide = showTools.checked ? cy.collection() : cy.nodes(".tool");
     const show = (ele) => {
-      ele = ele.difference(hideColl).difference(hideColl.connectedEdges());
+      ele = ele.difference(hideColl).difference(hideColl.connectedEdges())
+                .difference(toolHide).difference(toolHide.connectedEdges());
       cy.elements().style("display", "none");
       ele.style("display", "element");
       hideHint(); relayout(keepView);
@@ -1016,6 +1017,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   toFinals.addEventListener("change", scheduleFilter);
   filterOn.addEventListener("change", scheduleFilter);
   linkMode.addEventListener("change", scheduleFilter);
+  showTools.addEventListener("change", scheduleFilter);
   searchInView.addEventListener("change", scheduleFilter);
   // Toolbar dropdown menus (File, View) — anchored under their buttons (CSS).
   // Opening one closes the others; an outside click, Esc, or running an item
@@ -1077,6 +1079,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
       toFinals: toFinals.checked,
       filterOn: filterOn.checked,
       linkMode: linkMode.checked,
+      showTools: showTools.checked,
       searchInView: searchInView.checked,
       heat: heatMode,
       theme: theme,
@@ -1095,6 +1098,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     toFinals.checked = !!s.toFinals;
     filterOn.checked = s.filterOn !== false;     // default on
     linkMode.checked = !!s.linkMode;
+    showTools.checked = !!s.showTools;           // default off
     searchInView.checked = !!s.searchInView;
     if (hasStats && typeof s.heat === "string" && heatMetric[s.heat]) setHeat(s.heat); else setHeat("off");
     if (s.theme === "light" || s.theme === "dark") setTheme(s.theme);
