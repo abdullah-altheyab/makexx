@@ -316,8 +316,9 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
 
 (function () {
   const G = MAKEXX_GRAPH;
-  document.getElementById("title").textContent =
-    G.title && G.title.length ? G.title : "dependency graph";
+  const pageTitle = G.title && G.title.length ? G.title : "dependency graph";
+  document.getElementById("title").textContent = pageTitle;
+  document.title = G.title && G.title.length ? G.title + " — makexx" : "makexx — dependency graph";
 
   if (!G.nodes || !G.nodes.length) {
     document.getElementById("empty").hidden = false;
