@@ -277,12 +277,12 @@ static void test_graph_json() {
     CHECK_CONTAINS(j, "\"id\":\"app.cpp\"");           // source not produced -> input
     CHECK_CONTAINS(j, "\"type\":\"input\"");
     CHECK_CONTAINS(j, "\"desc\":\"entry point\"");
-    CHECK_CONTAINS(j, "\"type\":\"tool\"");            // g++ surfaced as a tool node
-    CHECK_CONTAINS(j, "\"tool\":true");                // and a tool edge
-    // Rule has 1 file source + 1 tool = 2 inputs → rule node inserted; no direct edge
-    CHECK_CONTAINS(j, "\"type\":\"rule\"");
-    CHECK_CONTAINS(j, "\"target\":\"__rule__");        // app.o/g++ → rule node
-    CHECK_CONTAINS(j, "\"source\":\"__rule__");        // rule node → app
+    // Tools no longer appear as graph nodes/edges — carried in "tools" field instead
+    CHECK_NOT_CONTAINS(j, "\"type\":\"tool\"");
+    CHECK_NOT_CONTAINS(j, "\"tool\":true");
+    CHECK_CONTAINS(j, "\"tools\":[\"g++\"]");          // tool listed on the target node
+    // 1 file source + 1 target → direct edge (tools don't count for fan-in)
+    CHECK_CONTAINS(j, "{\"source\":\"app.o\",\"target\":\"app\"}");
     CHECK_NOT_CONTAINS(j, "\"id\":\"help\"");          // built-in rule excluded
     // Makefile wiring: html target + graph phony, both reach makexx.
     auto mk = read_file("makefile");

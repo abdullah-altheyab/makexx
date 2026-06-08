@@ -1517,6 +1517,11 @@ class Makefile {
 			if(it == target_rule.end()) return {};
 			return it->second->commands;
 		};
+		auto node_tools = [&](std::string const &n) -> std::vector<std::string> {
+			auto it = target_rule.find(n);
+			if(it == target_rule.end()) return {};
+			return std::vector<std::string>(it->second->tools.begin(), it->second->tools.end());
+		};
 		auto node_srcline = [&](std::string const &n) -> int {
 			auto it = target_rule.find(n);
 			return it != target_rule.end() ? it->second->src_line : 0;
@@ -1566,24 +1571,12 @@ class Makefile {
 			  << "\"desc\":\"" << json_escape(desc) << "\","
 			  << "\"tags\":[" << json_arr(node_tags(n)) << "],"
 			  << "\"srcline\":" << node_srcline(n) << ","
-			  << "\"cmds\":[" << json_arr(node_cmds(n)) << "]}";
+			  << "\"cmds\":[" << json_arr(node_cmds(n)) << "],"
+			  << "\"tools\":[" << json_arr(node_tools(n)) << "]}";
 			emitted.insert(n);
 		};
 		for(auto const &n : nodes)
 			if(!excluded(n)) emit_node(n);
-		// External-tool prereqs (`<< TOOL(...)`) aren't in `nodes`; surface
-		// them as their own typed nodes so tool dependencies are visible.
-		std::set<std::string> tool_nodes;
-		for(auto const &cmd : commands)
-			for(auto const &t : cmd->tools) tool_nodes.insert(t);
-		for(auto const &t : tool_nodes) {
-			if(emitted.count(t)) continue;
-			if(!first) j << ","; first = false;
-			j << "{\"id\":\"" << json_escape(t) << "\",\"label\":\"" << json_escape(t)
-			  << "\",\"ext\":\"\",\"type\":\"tool\",\"rule\":-1,\"group\":\"\",\"help\":\"\",\"desc\":\"\","
-			  << "\"tags\":[],\"srcline\":0,\"cmds\":[]}";
-			emitted.insert(t);
-		}
 		// Some prereqs are wired via add_source and never entered `nodes`, so
 		// they show up only as edge endpoints. Emit them too — otherwise an
 		// edge would reference a nonexistent node and the viewer's graph
@@ -1605,8 +1598,7 @@ class Makefile {
 		// edge.  Rules with no emitted inputs produce no edges either way.
 		struct RuleEdgeSet {
 			std::string rnode_id;               // empty → direct edge, no rule node
-			std::vector<std::string> file_srcs;
-			std::vector<std::string> tool_srcs;
+			std::vector<std::string> srcs;
 			std::vector<std::string> tgts;
 		};
 		std::vector<RuleEdgeSet> edge_sets;
@@ -1618,25 +1610,26 @@ class Makefile {
 				if(emitted.count(si->second)) srcs.push_back(si->second);
 			for(auto ti = tr.first; ti != tr.second; ti++)
 				if(emitted.count(ti->second)) tgts.push_back(ti->second);
-			std::vector<std::string> tools;
-			for(auto const &t : cmd->tools)
-				if(emitted.count(t)) tools.push_back(t);
-			if(tgts.empty() && srcs.empty() && tools.empty()) continue;
-			int n_in  = (int)srcs.size() + (int)tools.size();
+			if(tgts.empty() && srcs.empty()) continue;
+			// Tools are no longer graph nodes — they appear in the tooltip only.
+			// Only file sources count for fan-in/out when deciding to insert a rule node.
+			int n_in  = (int)srcs.size();
 			int n_out = (int)tgts.size();
 			bool use_rnode = !tgts.empty() && n_in >= 1 && (n_in >= 2 || n_out >= 2);
 			if(use_rnode) {
 				int ridx = node_rule(tgts[0]);
 				std::string rid = "__rule__" + std::to_string(ridx);
+				std::vector<std::string> rule_tools(cmd->tools.begin(), cmd->tools.end());
 				// Append rule node into the still-open nodes JSON array.
 				if(!first) j << ","; first = false;
 				j << "{\"id\":\"" << json_escape(rid) << "\","
 				  << "\"type\":\"rule\",\"rule\":" << ridx << ","
 				  << "\"srcline\":" << node_srcline(tgts[0]) << ","
-				  << "\"cmds\":[" << json_arr(node_cmds(tgts[0])) << "]}";
-				edge_sets.push_back({rid, srcs, tools, tgts});
+				  << "\"cmds\":[" << json_arr(node_cmds(tgts[0])) << "],"
+				  << "\"tools\":[" << json_arr(rule_tools) << "]}";
+				edge_sets.push_back({rid, srcs, tgts});
 			} else {
-				edge_sets.push_back({"", srcs, tools, tgts});
+				edge_sets.push_back({"", srcs, tgts});
 			}
 		}
 
@@ -1645,29 +1638,18 @@ class Makefile {
 		for(auto const &es : edge_sets) {
 			if(es.rnode_id.empty()) {
 				// Direct edges (1:1 or no-input rules)
-				for(auto const &s : es.file_srcs)
+				for(auto const &s : es.srcs)
 					for(auto const &t : es.tgts) {
 						if(!first) j << ","; first = false;
 						j << "{\"source\":\"" << json_escape(s)
 						  << "\",\"target\":\"" << json_escape(t) << "\"}";
 					}
-				for(auto const &tool : es.tool_srcs)
-					for(auto const &t : es.tgts) {
-						if(!first) j << ","; first = false;
-						j << "{\"source\":\"" << json_escape(tool)
-						  << "\",\"target\":\"" << json_escape(t) << "\",\"tool\":true}";
-					}
 			} else {
-				// Fan through rule node: sources/tools → rule_node → targets
-				for(auto const &s : es.file_srcs) {
+				// Fan through rule node
+				for(auto const &s : es.srcs) {
 					if(!first) j << ","; first = false;
 					j << "{\"source\":\"" << json_escape(s)
 					  << "\",\"target\":\"" << json_escape(es.rnode_id) << "\"}";
-				}
-				for(auto const &tool : es.tool_srcs) {
-					if(!first) j << ","; first = false;
-					j << "{\"source\":\"" << json_escape(tool)
-					  << "\",\"target\":\"" << json_escape(es.rnode_id) << "\",\"tool\":true}";
 				}
 				for(auto const &t : es.tgts) {
 					if(!first) j << ","; first = false;
