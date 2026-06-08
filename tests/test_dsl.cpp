@@ -268,7 +268,7 @@ static void test_graph_json() {
     mf.add("app", "app.o") << MENU("Build") << FINAL << HELP("the app") << TOOL("g++") << "g++ $< -o $@";
     mf.add("app.o", "app.cpp") << "g++ -c $< -o $@";
     mf << DESC("app.cpp", "entry point");
-    mf.generate_with_graph();
+    mf.generate();
     auto j = read_file(".makexx_graph.json");
     CHECK_CONTAINS(j, "\"title\":\"GT\"");
     CHECK_CONTAINS(j, "\"id\":\"app\"");
@@ -299,7 +299,7 @@ static void test_graph_tags_and_cmds() {
     mf.add("alpha_forecast.bin", "data.csv")
         << FINAL << HELP("forecast #alpha play (issue #42, not C#sharp)") << "run $< > $@";
     mf << DESC("data.csv", "raw seismic from #geo dept");
-    mf.generate_with_graph();
+    mf.generate();
     auto j = read_file(".makexx_graph.json");
     // HELP hashtags become tags on the rule's target; numbers-first ok; C# not matched.
     CHECK_CONTAINS(j, "\"id\":\"alpha_forecast.bin\"");
@@ -322,7 +322,7 @@ static void test_graph_no_dangling_edges() {
     auto &r = mf.add("out.bin", "a.in");
     r << FINAL << HELP("build it") << "build $^ > $@";
     mf.add_source(r, "extra.in");   // wired as a prereq via add_source -> not in `nodes`
-    mf.generate_with_graph();
+    mf.generate();
     auto j = read_file(".makexx_graph.json");
     // The edge endpoint must still be emitted as a node, else the edge is
     // dangling and the viewer's graph library throws on load (blank page).
@@ -339,7 +339,7 @@ static void test_graph_srcline() {
     Makefile mf;
     int ln = __builtin_LINE() + 1;   // the mf.add below is on the next line
     mf.add("o.bin", "i.dat") << FINAL << HELP("build") << "cp $< $@";
-    mf.generate_with_graph();
+    mf.generate();
     auto j = read_file(".makexx_graph.json");
     // The rule's node carries the makefile.cpp line of its mf.add(...) call.
     CHECK_CONTAINS(j, "\"id\":\"o.bin\"");
@@ -376,20 +376,24 @@ static void test_profile() {
     CHECK_NOT_CONTAINS(mk, "rm -f \".makexx_hits\"");
 }
 
-static void test_profile_off_by_default() {
-    current_test = "test_profile_off_by_default";
+static void test_profile_on_by_default() {
+    current_test = "test_profile_on_by_default";
     TempDir td;
     Makefile mf;
     mf.add("o.bin", "i.dat") << "cp $< $@";
     mf.generate();
     auto mk = read_file("makefile");
-    // No instrumentation when profiling is off. (The .makexx_hits / .makexx_prof
-    // names still appear in the list_unknown ignore list — that's intentional
-    // and harmless — so assert on the actual wrapping instead.)
-    CHECK_NOT_CONTAINS(mk, "MXX_NOW");
-    CHECK_NOT_CONTAINS(mk, ">> .makexx_hits");
-    CHECK_NOT_CONTAINS(mk, ".t0");
-    CHECK_NOT_CONTAINS(mk, "rm -rf .makexx_prof");
+    // Profiling is on by default — instrumentation must be present.
+    CHECK_CONTAINS(mk, "MXX_NOW");
+    CHECK_CONTAINS(mk, ">> .makexx_hits");
+    // Opt-out: profile=false must suppress instrumentation.
+    Makefile mf2;
+    mf2.profile = false;
+    mf2.add("o.bin", "i.dat") << "cp $< $@";
+    mf2.generate();
+    auto mk2 = read_file("makefile");
+    CHECK_NOT_CONTAINS(mk2, "MXX_NOW");
+    CHECK_NOT_CONTAINS(mk2, ">> .makexx_hits");
 }
 
 static void test_preamble() {
@@ -729,8 +733,8 @@ static void test_phony() {
     Makefile mf;
     mf.generate();
     auto content = read_makefile();
-    // Built-in phony targets are emitted in sorted order.
-    CHECK_CONTAINS(content, ".PHONY: all full_clean help list list_input list_unknown soft_clean");
+    // Built-in phony targets are emitted in sorted order (graph is on by default).
+    CHECK_CONTAINS(content, ".PHONY: all full_clean graph help list list_input list_unknown soft_clean");
 }
 
 static void test_byproduct() {
@@ -767,7 +771,7 @@ int main() {
     test_graph_no_dangling_edges();
     test_graph_srcline();
     test_profile();
-    test_profile_off_by_default();
+    test_profile_on_by_default();
     test_user_phony();
     test_open_file();
     test_tool();

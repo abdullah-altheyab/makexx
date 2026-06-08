@@ -111,11 +111,11 @@ char *read_file(char const *file) {
 // Assemble the standalone interactive dependency-graph HTML: inline the
 // embedded Cytoscape stack + this project's `.makexx_graph.json` into the
 // viewer template, producing a single self-contained, offline file. The
-// JSON is written by mf.generate_with_graph() in the user's makefile.cpp.
+// JSON is written by mf.generate() when mf.graph is true (the default).
 int build_graph_html() {
 	if(!exists(".makexx_graph.json")) {
-		std::cerr << "error: .makexx_graph.json not found. Enable the graph by calling "
-		             "mf.generate_with_graph() in makefile.cpp, then run makexx -c." << endl;
+		std::cerr << "error: .makexx_graph.json not found. Make sure mf.graph is not set to false "
+		             "in makefile.cpp, then run makexx -c." << endl;
 		return 1;
 	}
 	std::ifstream jf(".makexx_graph.json");

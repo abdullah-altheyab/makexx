@@ -109,5 +109,5 @@ int main(int argc, char **argv) {
         <<HELP("Open the database editor")
         <<"familyeditor input=family.db"
         ;
-    mf.generate_with_graph();
+    mf.generate();
 }

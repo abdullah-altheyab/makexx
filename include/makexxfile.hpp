@@ -49,14 +49,14 @@
 //   mf.context_filename = "CLAUDE.md"      — override output filename
 //   mf.silent = true                       — prefix commands with @ in makefile
 //   mf.echo = false                        — suppress ### GENERATING decoration
-//   mf.profile = true                      — log per-rule run time to .makexx_hits (usage/timing data)
+//   mf.profile = false                     — opt out of per-rule timing (on by default)
+//   mf.graph   = false                     — opt out of graph generation (on by default)
 //   mf.preamble = "CFLAGS ?= -O2\n"        — raw text injected near top of generated makefile
 //                                            (for vars, include, vpath, .SUFFIXES, etc.)
 //   mf.on_softclean_retain("file")         — exclude from soft_clean
 //
 // Output:
-//   mf.generate()                          — write makefile + .makexx_menu + AGENTS.md
-//   mf.generate_with_graph()               — also write makefile_graph.gv (Graphviz)
+//   mf.generate()                          — write makefile + menu + AGENTS.md + graph
 //
 // Helpers:
 //   stem("dir/file.cpp")                  → "file"       basename("dir/file.cpp") → "file.cpp"
@@ -673,6 +673,7 @@ class Makefile {
 	// time. Off by default — it adds two process spawns + a temp file per
 	// built target.
 	bool profile;
+	bool graph;
 	std::string context_filename;
 	std::string title;
 	std::string description;
@@ -696,7 +697,8 @@ class Makefile {
 		silent = false;
 		echo = true;
 		context = true;
-		profile = false;
+		profile = true;
+		graph   = true;
 		context_filename = "AGENTS.md";
 		title = "";
 	};
@@ -745,10 +747,7 @@ class Makefile {
 		}
     }
 
-	void generate_with_graph() {
-		generate(true);
-	}
-	void generate(bool graph = false) {
+	void generate() {
 		dump_help(graph);
 		std::set<std::string> processed_nodes;
 		std::string makefile;
@@ -1061,7 +1060,8 @@ class Makefile {
 		cf << "    mf.title            = \"My Project\";\n";
 		cf << "    mf.description      = \"What this project does\"; // shown in " << context_filename << " header\n";
 		cf << "    mf.preamble         = \"CFLAGS ?= -O2\\n\";      // raw make injected near top\n";
-		cf << "    mf.profile          = true;                    // log per-rule timing to .makexx_hits\n";
+		cf << "    mf.profile          = false;                   // opt out of per-rule timing (on by default)\n";
+		cf << "    mf.graph            = false;                   // opt out of graph generation (on by default)\n";
 		cf << "    mf.silent           = true;                    // prefix all commands with @ (suppress echo)\n";
 		cf << "    mf.context_filename = \"CLAUDE.md\";             // rename the generated context file\n";
 		cf << "\n";
