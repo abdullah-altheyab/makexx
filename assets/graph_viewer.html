@@ -184,6 +184,8 @@
     <span class="menuwrap">
       <button data-act="fileMenu" class="menubtn" aria-haspopup="true" title="Export image · save / load graph state">File ▾</button>
       <div id="filemenu" class="dropdown" hidden>
+        <button data-act="refresh" title="Reload the page to pick up updated graph data (run `make graph` first to regenerate)">Refresh <span class="mkbd">R</span></button>
+        <div class="sep"></div>
         <button data-act="png" title="Download the current view as a PNG image">Export as PNG</button>
         <button data-act="svg" title="Download the current view as a vector SVG">Export as SVG</button>
         <div class="sep"></div>
@@ -296,7 +298,7 @@
       <h3>Menus &amp; keys</h3>
       <dl>
         <dt>File ▾ / View ▾ / Actions ▾</dt><dd>export &amp; save/load state · Fit + light/dark · reset / clear / unhide / fold</dd>
-        <dt><kbd>/</kbd> · <kbd>F</kbd> · <kbd>Esc</kbd></dt><dd>focus search · fit to view · close menus / panels</dd>
+        <dt><kbd>/</kbd> · <kbd>F</kbd> · <kbd>R</kbd> · <kbd>Esc</kbd></dt><dd>focus search · fit to view · refresh page (restores view) · close menus / panels</dd>
       </dl>
     </div>
   </div>
@@ -1121,6 +1123,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   help.addEventListener("click", e => { if (e.target === help || (e.target.closest && e.target.closest("[data-hclose]"))) help.hidden = true; });
   document.addEventListener("keydown", e => {
     if (e.key === "/" && !typing()) { e.preventDefault(); seedInput.focus(); }
+    else if ((e.key === "r" || e.key === "R") && !typing()) { e.preventDefault(); sessionStorage.setItem("makexx_graph_refresh", stateJSON()); location.reload(); }
     else if ((e.key === "f" || e.key === "F") && !typing()) { e.preventDefault(); doFit(); }
     else if (e.key === "Escape" && !help.hidden) help.hidden = true;
     else if (e.key === "Escape" && menus.some(m => !m.menu.hidden)) closeMenus();
@@ -1272,6 +1275,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
       download(url, "svg");
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
+    else if (act === "refresh") { sessionStorage.setItem("makexx_graph_refresh", stateJSON()); location.reload(); }
     else if (act === "save") saveState();
     else if (act === "saveAs") saveStateAs();
     else if (act === "load") stateFile.click();
@@ -1378,7 +1382,14 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   cy.on("position", "node", e => { if (selNode && e.target.id() === selNode.id()) placeHandles(); });
   window.addEventListener("resize", placeHandles);
 
-  applyFilter();   // initial view: full graph if small, "seed to begin" hint if big
+  // Restore state saved by the Refresh action; otherwise do the normal initial render.
+  const _refreshState = sessionStorage.getItem("makexx_graph_refresh");
+  if (_refreshState) {
+    sessionStorage.removeItem("makexx_graph_refresh");
+    try { applyState(JSON.parse(_refreshState)); } catch(e) { applyFilter(); }
+  } else {
+    applyFilter();   // initial view: full graph if small, "seed to begin" hint if big
+  }
 })();
 </script>
 </body>
