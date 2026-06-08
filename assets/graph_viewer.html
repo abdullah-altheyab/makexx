@@ -463,13 +463,22 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   // Reveal nodes around `node` into the persistent `revealed` set.
   // dir "up"/"down"; all=false → one level (incomers/outgoers), all=true →
   // the whole cone to inputs/finals (predecessors/successors).
+  // Rule nodes are transparent for one-level hops: if an immediate neighbour
+  // is a rule node, its other side (sources or targets) is included too so the
+  // user reaches real file nodes in one click regardless of fan structure.
   function reveal(node, dir, all) {
     if (!node || node.hasClass("group")) return;
     const hop = dir === "up"
       ? (all ? node.predecessors("node") : node.incomers("node"))
       : (all ? node.successors("node")   : node.outgoers("node"));
     revealed.add(node.id());
-    hop.forEach(n => revealed.add(n.id()));
+    hop.forEach(n => {
+      revealed.add(n.id());
+      if (!all && n.hasClass("rule")) {
+        const through = dir === "up" ? n.incomers("node") : n.outgoers("node");
+        through.forEach(t => revealed.add(t.id()));
+      }
+    });
     scheduleFilter(true);
   }
   // Hide a node, or everything up/downstream of it (into the `hidden` set).
