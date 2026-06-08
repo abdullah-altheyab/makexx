@@ -279,7 +279,10 @@ static void test_graph_json() {
     CHECK_CONTAINS(j, "\"desc\":\"entry point\"");
     CHECK_CONTAINS(j, "\"type\":\"tool\"");            // g++ surfaced as a tool node
     CHECK_CONTAINS(j, "\"tool\":true");                // and a tool edge
-    CHECK_CONTAINS(j, "{\"source\":\"app.o\",\"target\":\"app\"}");
+    // Rule has 1 file source + 1 tool = 2 inputs → rule node inserted; no direct edge
+    CHECK_CONTAINS(j, "\"type\":\"rule\"");
+    CHECK_CONTAINS(j, "\"target\":\"__rule__");        // app.o/g++ → rule node
+    CHECK_CONTAINS(j, "\"source\":\"__rule__");        // rule node → app
     CHECK_NOT_CONTAINS(j, "\"id\":\"help\"");          // built-in rule excluded
     // Makefile wiring: html target + graph phony, both reach makexx.
     auto mk = read_file("makefile");
@@ -324,7 +327,10 @@ static void test_graph_no_dangling_edges() {
     // The edge endpoint must still be emitted as a node, else the edge is
     // dangling and the viewer's graph library throws on load (blank page).
     CHECK_CONTAINS(j, "\"id\":\"extra.in\"");
-    CHECK_CONTAINS(j, "{\"source\":\"extra.in\",\"target\":\"out.bin\"}");
+    // 2 sources (a.in + extra.in) → rule node; edges fan through it
+    CHECK_CONTAINS(j, "\"type\":\"rule\"");
+    CHECK_CONTAINS(j, "{\"source\":\"extra.in\",\"target\":\"__rule__");
+    CHECK_CONTAINS(j, "\"source\":\"__rule__");
 }
 
 static void test_graph_srcline() {
@@ -472,8 +478,8 @@ static void test_agents_md() {
     CHECK_CONTAINS(content, "DSL quick reference");
     CHECK_CONTAINS(content, "auto& r = mf.add");
     CHECK_CONTAINS(content, "open_file(\"report.pdf\")");
-    // PHONY rule-of-thumb in the cheat sheet (eval-driven addition).
-    CHECK_CONTAINS(content, "REQUIRED whenever the target name");
+    // PHONY rule-of-thumb in the cheat sheet.
+    CHECK_CONTAINS(content, "REQUIRED when target isn't a file");
     // Phony flag on the install target.
     CHECK_CONTAINS(content, "`make install` (phony)");
     // Tool dep on the compile target.

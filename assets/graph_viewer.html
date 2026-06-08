@@ -376,10 +376,12 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   const THEMES = {
     dark:  { nodeText:"#e6edf3", nodeBg:"#30363d", nodeBorder:"#484f58",
              inBg:"#16241d", imBg:"#13233a", fnBg:"#332208", phBg:"#241a3a", tlBg:"#0c2a30",
+             ruleBg:"#2d333b", ruleBorder:"#545d68",
              grpText:"#8b949e", grpBg:"#ffffff06", grpBorder:"#3a424d",
              seedText:"#ffffff", edge:"#3a424d", tool:"#22d3ee" },
     light: { nodeText:"#1f2328", nodeBg:"#eef1f4", nodeBorder:"#aab2bd",
              inBg:"#e3f5ec", imBg:"#e1edff", fnBg:"#fdf0d9", phBg:"#efe8fd", tlBg:"#dcf5fa",
+             ruleBg:"#dde1e6", ruleBorder:"#8c959f",
              grpText:"#57606a", grpBg:"#00000008", grpBorder:"#c2c9d1",
              seedText:"#1f2328", edge:"#aeb6bf", tool:"#0e9bbb" }
   };
@@ -395,6 +397,9 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     { selector: "node.final",        style: { "border-color": "#f59e0b", "background-color": p.fnBg, "border-width": 1.5 } },
     { selector: "node.phony",        style: { "border-color": "#a78bfa", "background-color": p.phBg } },
     { selector: "node.tool",         style: { "border-color": "#22d3ee", "background-color": p.tlBg } },
+    { selector: "node.rule", style: {          // nameless recipe dot — no label, fixed tiny size
+      "label": "", "width": 10, "height": 10, "padding": "0px", "shape": "ellipse",
+      "background-color": p.ruleBg, "border-color": p.ruleBorder, "border-width": 1.5 } },
     { selector: "node.group", style: {
       "label": "data(label)", "text-valign": "top", "text-halign": "center",
       "color": p.grpText, "font-size": 12, "font-weight": "bold",
@@ -501,7 +506,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     s.onclick = () => openNodePicker(cls, n => (n.type || "intermediate") === cls);
     legend.appendChild(s);
   }
-  const isLeaf = n => !n.hasClass("group");
+  const isLeaf = n => !n.hasClass("group") && !n.hasClass("rule");
   function updateCount(v) {
     const total = cy.nodes().filter(isLeaf).length;
     let s;
@@ -533,18 +538,53 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     const c = stops[seg].map((x, i) => Math.round(x + (stops[seg + 1][i] - x) * f));
     return "rgb(" + c.join(",") + ")";
   }
+  // Return the STATS entry for a node: direct lookup for regular nodes,
+  // first-output-target lookup for rule nodes (whose recipe timing is keyed
+  // by $@ — the first declared output target).
+  function statsFor(cyNode) {
+    if (!cyNode.hasClass("rule")) return STATS[cyNode.id()];
+    let s = null;
+    cyNode.outgoers("node").forEach(n => { if (!s) s = STATS[n.id()]; });
+    return s;
+  }
+
   function applyHeat() {
     const scaleEl = document.getElementById("heatscale");
-    cy.nodes().removeStyle("background-color");
+    // Clear previous heat from rule nodes and edges (regular nodes are never heat-colored).
+    cy.nodes(".rule").removeStyle("background-color border-color");
+    cy.edges().removeStyle("line-color target-arrow-color");
     if (heatMode === "off" || !hasStats) { scaleEl.hidden = true; return; }
     const m = heatMetric[heatMode];
-    const leaves = cy.nodes().filter(isLeaf);
-    const raws = []; leaves.forEach(n => { const s = STATS[n.id()]; if (s) raws.push(m.val(s)); });
+    // Collect raw values: rule nodes (via their output targets' STATS)
+    // and direct edges (1:1 rules, via the target node's STATS).
+    const raws = [];
+    const rnVals = new Map();   // rule-node cy-id → raw metric value
+    cy.nodes(".rule").forEach(rn => {
+      const s = statsFor(rn);
+      if (s) { const v = m.val(s); rnVals.set(rn.id(), v); raws.push(v); }
+    });
+    const edgeVals = new Map(); // edge cy-id → raw metric value (direct edges only)
+    cy.edges().forEach(e => {
+      if (e.source().hasClass("rule") || e.target().hasClass("rule")) return;
+      const s = STATS[e.target().id()];
+      if (s) { const v = m.val(s); edgeVals.set(e.id(), v); raws.push(v); }
+    });
     if (!raws.length) { scaleEl.hidden = true; return; }
     const tr = v => m.log ? Math.log1p(v) : v;
     const lo = Math.min(...raws), hi = Math.max(...raws), tlo = tr(lo), thi = tr(hi);
     const norm = v => thi > tlo ? (tr(v) - tlo) / (thi - tlo) : 1;
-    leaves.forEach(n => { const s = STATS[n.id()]; n.style("background-color", s ? heatColor(norm(m.val(s))) : "#2b323b"); });
+    // Color rule nodes + all their adjacent edges (fan-in and fan-out).
+    rnVals.forEach((v, id) => {
+      const c = heatColor(norm(v));
+      const rn = cy.getElementById(id);
+      rn.style({ "background-color": c, "border-color": c });
+      rn.connectedEdges().style({ "line-color": c, "target-arrow-color": c });
+    });
+    // Color direct (1:1) edges.
+    edgeVals.forEach((v, id) => {
+      const c = heatColor(norm(v));
+      cy.getElementById(id).style({ "line-color": c, "target-arrow-color": c });
+    });
     scaleEl.innerHTML = "heat: " + m.label + " <span>" + m.fmt(lo) + "</span><i class='hbar'></i><span>" + m.fmt(hi) + "</span>";
     scaleEl.hidden = false;
   }
@@ -609,6 +649,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   // node ids by rule so a node knows its co-targets; only groups of >1 matter.
   const siblings = new Map();
   for (const n of G.nodes) {
+    if (n.type === "rule") continue;   // rule nodes are structural, not sibling targets
     if (typeof n.rule === "number" && n.rule >= 0) {
       if (!siblings.has(n.rule)) siblings.set(n.rule, []);
       siblings.get(n.rule).push(n.id);
@@ -784,6 +825,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     const undoc = [];
     let total = 0;
     for (const n of G.nodes) {
+      if (n.type === "rule") continue;   // rule nodes are structural, not user targets
       if (!match(n)) continue;
       total++;
       if (n.help && n.help.length) {
@@ -1236,15 +1278,26 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   function showTip(node, ev) {
     if (node.hasClass("group")) { tip.hidden = true; return; }
     const d = node.data();
-    const meta = [d.type, d.ext ? "." + d.ext : null, d.srcline ? "makefile.cpp:" + d.srcline : null].filter(Boolean).join(" · ");
-    let html = '<div class="t-name">' + esc(d.id) + "</div>";
-    if (meta) html += '<div class="t-meta">' + esc(meta) + "</div>";
-    if (node.hasClass("bseed")) html += '<div class="t-seed">◈ seed + search result</div>';
-    else if (node.hasClass("seed")) html += '<div class="t-seed">● seed</div>';
-    else if (node.hasClass("pseed")) html += '<div class="t-seed t-pat">▢ search result</div>';
-    const st = STATS[d.id];
-    if (st) html += '<div class="t-stat">' + st.runs + " runs · " + fmtMs(st.total) + " total · "
-      + fmtMs(st.median) + " median · " + agoStr(st.last) + "</div>";
+    let html;
+    if (node.hasClass("rule")) {
+      // Rule node: show outputs, srcline, timing, and commands
+      const outs = node.outgoers("node").map(n => n.id()).join(", ");
+      html = '<div class="t-name t-meta">recipe' + (outs ? " → " + esc(outs) : "") + "</div>";
+      if (d.srcline) html += '<div class="t-meta">makefile.cpp:' + d.srcline + "</div>";
+      const st = statsFor(node);
+      if (st) html += '<div class="t-stat">' + st.runs + " runs · " + fmtMs(st.total) + " total · "
+        + fmtMs(st.median) + " median · " + agoStr(st.last) + "</div>";
+    } else {
+      const meta = [d.type, d.ext ? "." + d.ext : null, d.srcline ? "makefile.cpp:" + d.srcline : null].filter(Boolean).join(" · ");
+      html = '<div class="t-name">' + esc(d.id) + "</div>";
+      if (meta) html += '<div class="t-meta">' + esc(meta) + "</div>";
+      if (node.hasClass("bseed")) html += '<div class="t-seed">◈ seed + search result</div>';
+      else if (node.hasClass("seed")) html += '<div class="t-seed">● seed</div>';
+      else if (node.hasClass("pseed")) html += '<div class="t-seed t-pat">▢ search result</div>';
+      const st = STATS[d.id];
+      if (st) html += '<div class="t-stat">' + st.runs + " runs · " + fmtMs(st.total) + " total · "
+        + fmtMs(st.median) + " median · " + agoStr(st.last) + "</div>";
+    }
     if (d.help) html += '<div class="t-help">' + esc(d.help) + "</div>";
     if (d.desc) html += '<div class="t-desc">' + esc(d.desc) + "</div>";
     if (d.tags && d.tags.length) html += '<div class="t-tags">' + d.tags.map(t => "#" + esc(t)).join("  ") + "</div>";
@@ -1277,9 +1330,11 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     if (n.hasClass("group")) return;
     const now = Date.now();
     if (lastTapId === n.id() && now - lastTapAt < 350) {       // double click -> seed
-      const id = n.id();
-      pinned.has(id) ? pinned.delete(id) : pinned.add(id);
-      refreshSeeds(); scheduleFilter(true);   // keep the camera — you're acting on a node in view
+      if (!n.hasClass("rule")) {   // rule nodes are structural — seed their targets instead
+        const id = n.id();
+        pinned.has(id) ? pinned.delete(id) : pinned.add(id);
+        refreshSeeds(); scheduleFilter(true);
+      }
       lastTapId = null; lastTapAt = 0; return;
     }
     lastTapId = n.id(); lastTapAt = now;

@@ -1597,24 +1597,82 @@ class Makefile {
 			for(auto ti = tr.first; ti != tr.second; ti++)
 				if(!excluded(ti->second) && !emitted.count(ti->second)) emit_node(ti->second);
 		}
-		j << "],\"edges\":[";
-		first = true;
+
+		// --- Rule nodes + edge sets ----------------------------------------
+		// For rules with ≥2 inputs OR ≥2 outputs insert a small nameless
+		// "rule" node (the recipe) and fan edges through it, collapsing
+		// inputs×outputs edges to inputs+outputs.  1:1 rules keep a direct
+		// edge.  Rules with no emitted inputs produce no edges either way.
+		struct RuleEdgeSet {
+			std::string rnode_id;               // empty → direct edge, no rule node
+			std::vector<std::string> file_srcs;
+			std::vector<std::string> tool_srcs;
+			std::vector<std::string> tgts;
+		};
+		std::vector<RuleEdgeSet> edge_sets;
 		for(auto const &cmd : commands) {
 			auto sr = rule_source.equal_range(cmd.get());
 			auto tr = rule_target.equal_range(cmd.get());
-			for(auto ti = tr.first; ti != tr.second; ti++) {
-				if(!emitted.count(ti->second)) continue;          // only edges between emitted nodes
-				for(auto si = sr.first; si != sr.second; si++) {
-					if(!emitted.count(si->second)) continue;
+			std::vector<std::string> srcs, tgts;
+			for(auto si = sr.first; si != sr.second; si++)
+				if(emitted.count(si->second)) srcs.push_back(si->second);
+			for(auto ti = tr.first; ti != tr.second; ti++)
+				if(emitted.count(ti->second)) tgts.push_back(ti->second);
+			std::vector<std::string> tools;
+			for(auto const &t : cmd->tools)
+				if(emitted.count(t)) tools.push_back(t);
+			if(tgts.empty() && srcs.empty() && tools.empty()) continue;
+			int n_in  = (int)srcs.size() + (int)tools.size();
+			int n_out = (int)tgts.size();
+			bool use_rnode = !tgts.empty() && n_in >= 1 && (n_in >= 2 || n_out >= 2);
+			if(use_rnode) {
+				int ridx = node_rule(tgts[0]);
+				std::string rid = "__rule__" + std::to_string(ridx);
+				// Append rule node into the still-open nodes JSON array.
+				if(!first) j << ","; first = false;
+				j << "{\"id\":\"" << json_escape(rid) << "\","
+				  << "\"type\":\"rule\",\"rule\":" << ridx << ","
+				  << "\"srcline\":" << node_srcline(tgts[0]) << ","
+				  << "\"cmds\":[" << json_arr(node_cmds(tgts[0])) << "]}";
+				edge_sets.push_back({rid, srcs, tools, tgts});
+			} else {
+				edge_sets.push_back({"", srcs, tools, tgts});
+			}
+		}
+
+		j << "],\"edges\":[";
+		first = true;
+		for(auto const &es : edge_sets) {
+			if(es.rnode_id.empty()) {
+				// Direct edges (1:1 or no-input rules)
+				for(auto const &s : es.file_srcs)
+					for(auto const &t : es.tgts) {
+						if(!first) j << ","; first = false;
+						j << "{\"source\":\"" << json_escape(s)
+						  << "\",\"target\":\"" << json_escape(t) << "\"}";
+					}
+				for(auto const &tool : es.tool_srcs)
+					for(auto const &t : es.tgts) {
+						if(!first) j << ","; first = false;
+						j << "{\"source\":\"" << json_escape(tool)
+						  << "\",\"target\":\"" << json_escape(t) << "\",\"tool\":true}";
+					}
+			} else {
+				// Fan through rule node: sources/tools → rule_node → targets
+				for(auto const &s : es.file_srcs) {
 					if(!first) j << ","; first = false;
-					j << "{\"source\":\"" << json_escape(si->second)
-					  << "\",\"target\":\"" << json_escape(ti->second) << "\"}";
+					j << "{\"source\":\"" << json_escape(s)
+					  << "\",\"target\":\"" << json_escape(es.rnode_id) << "\"}";
 				}
-				for(auto const &tool : cmd->tools) {
-					if(!emitted.count(tool)) continue;
+				for(auto const &tool : es.tool_srcs) {
 					if(!first) j << ","; first = false;
 					j << "{\"source\":\"" << json_escape(tool)
-					  << "\",\"target\":\"" << json_escape(ti->second) << "\",\"tool\":true}";
+					  << "\",\"target\":\"" << json_escape(es.rnode_id) << "\",\"tool\":true}";
+				}
+				for(auto const &t : es.tgts) {
+					if(!first) j << ","; first = false;
+					j << "{\"source\":\"" << json_escape(es.rnode_id)
+					  << "\",\"target\":\"" << json_escape(t) << "\"}";
 				}
 			}
 		}
