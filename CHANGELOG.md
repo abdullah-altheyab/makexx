@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 — 2026-06-09
 
 ### Makefile DSL — breaking
 
