@@ -34,3 +34,40 @@ jobs:
           test -f makefile
           test -f makefile.hpp
           test -f makefile.cpp
+
+  # The no-cmake build path (build.sh). Catches drift between build.sh and
+  # CMakeLists.txt — e.g. a missing embedded asset (won't compile) or a stale
+  # hardcoded version.
+  build-sh:
+    name: build.sh (no cmake)
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with build.sh
+        run: sh build.sh
+
+      - name: Version matches CMakeLists.txt
+        run: |
+          expected=$(sed -n 's/^project(makexx VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
+          got=$(./makexx --version | awk '{print $2}')
+          echo "CMake version: $expected · build.sh binary: $got"
+          test -n "$expected"
+          test "$got" = "$expected"
+
+      - name: Smoke test (compile + standalone graph assembly)
+        run: |
+          mkdir -p /tmp/makexx_bs
+          cd /tmp/makexx_bs
+          "${{ github.workspace }}/makexx" -c
+          test -f makefile
+          test -f makefile.hpp
+          test -f .makexx_graph.json
+          "${{ github.workspace }}/makexx" --build-graph
+          test -f makefile_graph.html
+          grep -q cytoscape makefile_graph.html
