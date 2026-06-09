@@ -21,6 +21,8 @@ int main() {
     //    rule << FINAL;                             // include in 'make all'
     //    rule << HELP("description");               // document the target
     //    rule << MENU("Group");                     // organise under a group
+    //    rule << TOOL("prog");                      // external prereq, mtime-tracked
+    //    rule << TOOLDESC("prog", "apt install p"); // ...also record an install hint
     //    rule << "your shell command $< $@ $^";    // append a shell command
     //
     //  Flags:

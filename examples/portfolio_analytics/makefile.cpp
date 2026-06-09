@@ -26,6 +26,18 @@ int main() {
         "simulation. Manages data import, QC, forecasting, and reporting "
         "across multiple deposits, zones, and regions.";
 
+    // ─── External tools ──────────────────────────────────────────────
+    // The analytics binaries ship together in the internal `miningtools`
+    // suite, so they share one install hint — declared in a single braced
+    // TOOLDESC. `make check_tools` verifies them all and prints the hint for
+    // any that are missing; the hints also appear in AGENTS.md.
+    mf << TOOLDESC({"mcsim", "qc_tool", "portfolio_qc", "merge_forecasts",
+                    "aggregate", "convergence_check", "validate",
+                    "report_tool", "benchmark", "rare_earth_qc"},
+                   "build the miningtools suite: https://example.com/miningtools");
+    mf << TOOLDESC("gis_export", "pip install gis-export");
+    mf << TOOLDESC("sqlite3", "apt install sqlite3 (or: brew install sqlite)");
+
     // ─── Data Import ─────────────────────────────────────────────────
 
     mf.add("portfolio.db", portfolio_file)
@@ -74,6 +86,7 @@ int main() {
         mf.add(gold_out, dep_tbl)
             << MENU("Forecast")
             << HELP("forecast gold for " + d.title)
+            << TOOL("mcsim")   // rule-level: mtime-tracked, so forecasts rebuild if mcsim changes
             << ("mcsim --commodity=gold"
                 _cont "  --rf=" + d.gold_rf +
                 _cont "  --iter=" + to_string(mc_iterations) +
@@ -83,6 +96,7 @@ int main() {
         mf.add(ore_out, dep_tbl)
             << MENU("Forecast")
             << HELP("forecast ore for " + d.title)
+            << TOOL("mcsim")
             << ("mcsim --commodity=ore"
                 _cont "  --rf=" + d.ore_rf +
                 _cont "  --iter=" + to_string(mc_iterations) +

@@ -11,6 +11,15 @@ int main(int argc, char **argv) {
         "from a SQLite database using Graphviz, syncs data with a remote server, "
         "and generates vCard contact files.";
 
+    // ─── External tools ──────────────────────────────────────────────
+    // The genealogy binaries are built from a sibling project, so they share
+    // one install hint (braced TOOLDESC). `dot` comes from Graphviz. Run
+    // `make check_tools` to see which are missing, with these hints.
+    mf << TOOLDESC({"familytree2gv", "extracttree", "tforeach",
+                    "dbdump", "familyeditor"},
+                   "build from ../genealogy-tools (make && make install)");
+    mf << TOOLDESC("dot", "apt install graphviz");
+
     string ssh_cmd = "-e 'ssh -p 22'";
     string ssh_usr = "user";
     string server = "example.com";

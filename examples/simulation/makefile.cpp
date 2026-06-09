@@ -13,12 +13,17 @@ int main() {
     mf.title = "Simulation Workflow";
     mf.description = "Runs numerical simulations with configurable parameters.";
 
+    // External tools, each with an install hint shown by `make check_tools`.
+    mf << TOOLDESC("runsim", "spack install runsim");
+    mf << TOOLDESC("plot_results", "pip install plot-results");
+
     for (auto& r : runs) {
         string output = r.name + "_result.bin";
         mf.add(output, r.grid)
             << MENU("Simulate")
             << FINAL
             << HELP("Run " + r.name + " simulation")
+            << TOOL("runsim")   // mtime-tracked prereq: results rebuild if the solver changes
             << ("runsim --solver=" + solver
                 + " --iter=" + to_string(iterations)
                 + " " + r.params

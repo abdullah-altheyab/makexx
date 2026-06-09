@@ -268,6 +268,7 @@ Shows how to manage a project with many executables and shared object files. Key
 - **Groups**: `mf.get_rule(group)` + `mf.add_source(rule, target)` wires multiple executables as dependencies of a named group target (e.g., `"social"`)
 - **Conditional rules**: platform detection inside `makefile.cpp` itself controls which rules are added
 - **`xxd -i` embed pattern**: used in user projects to compile binary resources (e.g. header files) into `_xxd.hpp` byte arrays and list them as dependencies so make reruns the embed when the source changes
+- **Tool declarations**: `astyle` and `xxd` declared with `mf << TOOLDESC(...)` so `make check_tools` flags them with an install hint when absent
 
 ### `examples/portfolio_analytics/` — Domain-specific workflow with config separation
 
@@ -280,6 +281,7 @@ Shows how `makefile.cpp` can act as a full workflow orchestration script, not ju
 - **Helper functions** return shell command fragments composed into rule commands
 - **per-rule `<< MENU()`** organizes targets into groups (Data, QC, Forecast, Reports, Benchmark, GIS, Utilities)
 - **Incremental rule building**: `list_deposits`/`list_zones` hold a rule reference (`auto& list = mf.add(...)`) and append one `echo` command per deposit/zone in a loop
+- **Tool declarations**: the `miningtools` analytics binaries are declared with a single braced `mf << TOOLDESC({...}, "hint")` (one shared install hint), with `gis_export`/`sqlite3` declared separately; `mcsim` is additionally attached rule-level (`<< TOOL("mcsim")`) so forecasts are mtime-tracked against the simulator. `make check_tools` verifies them all
 
 ### `examples/family_tree/makefile.cpp` — Genealogy workflow with AI context
 
@@ -288,6 +290,7 @@ Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealo
 - **`mf.description = "..."`** provides a project summary for the generated `AGENTS.md`
 - **per-rule `<< MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
+- **Tool declarations**: the genealogy binaries built from a sibling project (`familytree2gv`, `extracttree`, `tforeach`, …) share one braced `mf << TOOLDESC({...}, "build from ../genealogy-tools")`, with `dot` declared via Graphviz — the canonical "tools from a sibling build" case
 - **Incremental rule building**: the `push` rule is assembled by appending one `rsync` command per `(source, subdir)` pair from a `vector<pair<...>>` — adding a new path to deploy is one line of data, not a new shell line
 - **`mf.generate()`** produces the makefile, menu, context file, and (since `mf.graph` defaults on) the dependency graph in one call
 
@@ -298,6 +301,7 @@ Shows how to separate configuration from rules by putting parameters in a `confi
 - **`#include "config.hpp"`** keeps data (runs, solver, iterations, trial flag) separate from logic
 - **`#define TRIAL`** toggles between trial and production runs
 - **Struct-based config** (`vector<Run>`) drives rule generation via loops
+- **Tool declarations**: `runsim`/`plot_results` declared with `mf << TOOLDESC(...)` for install hints; `runsim` is also a rule-level `<< TOOL("runsim")` prereq so results rebuild if the solver binary changes
 - Editing `config.hpp` and running `make` auto-regenerates the makefile (via `-MMD` dependency tracking)
 
 ## Architecture

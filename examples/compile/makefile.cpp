@@ -116,6 +116,10 @@ int main(int argc, char **argv) {
     Makefile mf;
     cout<<"compiling on "<<runsys<<endl;
 
+    // External tools used by some rules, with install hints for `make check_tools`.
+    mf << TOOLDESC("astyle", "apt install astyle");
+    mf << TOOLDESC("xxd", "apt install xxd (ships with vim)");
+
     mf.add("astyle")
         <<HELP("style source files")
         <<"astyle --options=astylerc java/*.java src/*.cpp inc/*.hpp dev/* qt/*/*.h qt/*/*.cpp";
