@@ -1855,8 +1855,13 @@ class Makefile {
 				std::vector<std::string> rule_tools(cmd->tools.begin(), cmd->tools.end());
 				// Append rule node into the still-open nodes JSON array.
 				if(!first) j << ","; first = false;
+				// A rule's targets all share its MENU group, so the rule node
+				// inherits that group (and HELP) — otherwise it floats outside
+				// its group box in the viewer.
 				j << "{\"id\":\"" << json_escape(rid) << "\","
 				  << "\"type\":\"rule\",\"rule\":" << ridx << ","
+				  << "\"group\":\"" << json_escape(node_group(tgts[0])) << "\","
+				  << "\"help\":\"" << json_escape(node_help(tgts[0])) << "\","
 				  << "\"srcline\":" << node_srcline(tgts[0]) << ","
 				  << "\"cmds\":[" << json_arr(node_cmds(tgts[0])) << "],"
 				  << "\"tools\":[" << json_arr(rule_tools) << "],"
