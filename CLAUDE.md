@@ -89,10 +89,12 @@ rule << BYPRODUCT("byproduct.log"); // cleaned by full_clean and soft_clean
 rule << TARGET("manual_output");    // hidden/non-reproducible target
 rule << TOOL("prog1");               // external executable: mtime-tracked prereq, not in `$^`
                                      // bare name → resolved via $(shell command -v ...);
-                                     // path with '/' → used literally. braced list TOOL({"a","b"}).
-rule << TOOL("xx", "brew install xx"); // optional install hint (URL / pkg cmd / free text):
-                                     // shown in AGENTS.md and by `make check_tools` when missing.
-mf   << TOOL("xx", "brew install xx"); // project-level hint, attached to no rule; wins on conflict.
+                                     // path with '/' → used literally.
+rule << TOOL("awk", "sed", "jq");    // several at once (variadic); braced TOOL({"a","b"}) too.
+rule << TOOLDESC("xx", "brew install xx"); // declare a tool AND its install hint (URL / pkg cmd /
+                                     // free text) in one call; shown in AGENTS.md + `make check_tools`.
+mf   << TOOL("xx");                   // project-level: declare tool(s) attached to no rule.
+mf   << TOOLDESC("xx", "brew install xx"); // project-level tool + hint; mf-level wins on conflict.
 rule << HELP("builds the thing");   // shown by 'make help'
 rule << HELP("Deploy", "deploy it"); // with explicit group
 rule << HELP("forecast #alpha play"); // #hashtags in HELP/DESC become graph filter tags

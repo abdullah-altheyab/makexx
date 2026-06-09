@@ -83,7 +83,7 @@ mf << MENU("Processing", "Run the data pipeline");             // optional: decl
 
 **Usage & timing data.** By default makexx logs how long each rule takes to an append-only `.makexx_hits` on every run (set `mf.profile = false` to turn it off). `makexx --stats` reads it back as a per-rule table — runs, last-used, total and median time, sorted so the **bottleneck is on top** — plus the targets nobody has run (review/deletion candidates). Local, append-only, no server: build-scan insight for a plain Makefile.
 
-**Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project. Add an install hint with `TOOL("prog", "brew install prog")`, and `make check_tools` verifies every declared tool is present, printing the hint for any that are missing.
+**Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes (variadic: `TOOL("awk", "sed")`). Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project. Pair a tool with an install hint via `<< TOOLDESC("prog", "brew install prog")` (declares the tool *and* the hint in one call), and `make check_tools` verifies every declared tool is present, printing the hint for any that are missing.
 
 **Helpful errors.** When `make` fails, `makexx` parses the error and points back to the matching `mf.add(...)` line in your `makefile.cpp` — no more chasing the generated makefile.
 
@@ -225,8 +225,10 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   r << RETAIN("file.bin");                      // selective; also RETAIN("a","b") or RETAIN({"a","b"})
   r << TOOL("prog");                            // external executable: mtime-tracked prereq
                                                 //   not in `$^`. Bare name → command -v lookup;
-                                                //   path with '/' → literal. Braced: TOOL({"a","b"}).
-  r << TOOL("prog", "brew install prog");       // with install hint (shown by `make check_tools`)
+                                                //   path with '/' → literal.
+  r << TOOL("awk", "sed");                      // several at once (variadic); also TOOL({"a","b"})
+  r << TOOLDESC("prog", "brew install prog");   // declare a tool + its install hint in one call
+                                                //   (shown by `make check_tools`); mf << TOOLDESC too
   r  << MENU("Build");                          // put THIS rule in a group (not sticky)
   r  << MENU("Build/Tests");                    // nested group via slash separator
   mf << MENU("Build/Tests", "unit tests");      // declare a group's description / FOLDED

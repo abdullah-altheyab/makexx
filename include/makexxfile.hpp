@@ -25,6 +25,10 @@
 //                                                            not added to `$^`. Bare name →
 //                                                            $(shell command -v ...); path
 //                                                            with `/` → used literally
+//   r << TOOLDESC("prog","brew install prog") — declare a tool AND its install hint in one
+//                                            call; hint shown in AGENTS.md + `make check_tools`.
+//                                            Also mf << TOOL(...) / mf << TOOLDESC(...) at the
+//                                            project level (mf-level hint wins on conflict)
 //   r << HELP("description")               — shown by 'make help' and makexx -i
 //   r << HELP("group", "description")      — with explicit group override
 //   r << DESC("file","what it is") / mf << DESC(...) — describe a file (typically an
@@ -359,11 +363,29 @@ inline const PHONY_t PHONY;
 class TOOL {
   public:
 	std::set<std::string> tools;
-	std::string hint;   // optional install hint — shown in AGENTS.md and check_tools
 	TOOL(std::string name)                        { tools.insert(name); }
-	TOOL(std::string name, std::string install_hint) { tools.insert(name); hint = install_hint; }
+	// Variadic: TOOL("a", "b", "c") declares several tools at once.
+	template <class... Rest>
+	TOOL(std::string a, std::string b, Rest... rest) {
+		tools.insert(a);
+		tools.insert(b);
+		(tools.insert(std::string(rest)), ...);
+	}
 	TOOL(StringList ts)                           { for(auto &t : ts) tools.insert(t); }
 	TOOL(std::vector<std::string> ts)             { for(auto &t : ts) tools.insert(t); }
+};
+
+// TOOLDESC("name", "install hint") registers a tool AND records its install
+// hint in one call (no separate TOOL needed). The hint — a URL, a
+// package-manager command, or any free text — is shown in AGENTS.md and by
+// `make check_tools` when the tool is missing. Usable on a rule (rule <<
+// TOOLDESC(...)) or the makefile (mf << TOOLDESC(...)); mf-level wins on conflict.
+class TOOLDESC {
+  public:
+	std::string tool;
+	std::string hint;
+	TOOLDESC(std::string name, std::string install_hint)
+		: tool(name), hint(install_hint) {}
 };
 
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
@@ -455,8 +477,11 @@ inline Rule &operator<<(Rule &a, TARGET t) {
 }
 inline Rule &operator<<(Rule &a, TOOL t) {
 	for(auto &x : t.tools) a.tools.insert(x);
-	if(!t.hint.empty())
-		for(auto &x : t.tools) a.tool_hints[x] = t.hint;
+	return a;
+}
+inline Rule &operator<<(Rule &a, TOOLDESC td) {
+	a.tools.insert(td.tool);
+	a.tool_hints[td.tool] = td.hint;
 	return a;
 }
 inline Rule &operator<<(Rule &a, DESC d) {
@@ -495,6 +520,7 @@ class Makefile {
 	std::set<std::string> mf_phony_targets;
 	std::map<std::string, std::string> mf_file_descriptions;
 	std::map<std::string, std::string> tool_hints;  // tool name → install hint
+	std::set<std::string> mf_tools;                 // project-level tools (mf << TOOL/TOOLDESC)
 	std::set<std::string> folded_groups;
 	std::map<std::string, std::string> group_descriptions;
 
@@ -1009,7 +1035,7 @@ class Makefile {
 
 		// check_tools: verify each declared tool is on PATH; print hint if missing.
 		{
-			std::set<std::string> all_tools;
+			std::set<std::string> all_tools = mf_tools;   // project-level (mf << TOOL/TOOLDESC)
 			for(auto const &cmd : commands)
 				for(auto const &t : cmd->tools) all_tools.insert(t);
 			myfile << "\ncheck_tools:\n";
@@ -1087,7 +1113,9 @@ class Makefile {
 		cf << "        << TEMP(\"scratch.tmp\")                 // cleaned by full_clean/soft_clean\n";
 		cf << "        << RETAIN                              // exclude outputs from soft_clean\n";
 		cf << "        << TOOL(\"g++\")                         // executable prereq, mtime-tracked\n";
-		cf << "        << TOOL(\"xx\", \"https://github.com/author/xx\") // with install hint\n";
+		cf << "        << TOOL(\"awk\", \"sed\")                  // several at once (also TOOL({\"a\",\"b\"}))\n";
+		cf << "        << TOOLDESC(\"xx\", \"brew install xx\")   // = TOOL(\"xx\") + an install hint in one\n";
+		cf << "                                              //   (registers the prereq; no separate TOOL)\n";
 		cf << "        << MENU(\"Build\");                      // group (nested: \"Build/Tests\")\n";
 		cf << "\n";
 		cf << "    // Use auto& only when building a rule across statements (e.g. in a loop):\n";
@@ -1261,7 +1289,7 @@ class Makefile {
 
 		// Tools section — only if any tools are declared.
 		{
-			std::set<std::string> all_tools;
+			std::set<std::string> all_tools = mf_tools;   // project-level (mf << TOOL/TOOLDESC)
 			for(auto const &cmd : commands)
 				for(auto const &t : cmd->tools) all_tools.insert(t);
 			if(!all_tools.empty()) {
@@ -1311,6 +1339,11 @@ class Makefile {
 			      "`make -n <target>` to see which rules would actually execute, and sum just those.\n";
 			cf << "\nCaveat: under `make -j` rule timings overlap, so the sum overestimates parallel "
 			      "wall time — the critical path is the better parallel estimate.\n\n";
+			cf << "### Reading the log\n\n";
+			cf << "Run `makexx --stats` for a per-rule summary read straight from `.makexx_hits` — "
+			      "run count, last-run, total and median time, sorted so the slowest rule is on top, "
+			      "plus a list of **menu targets that have never run** (review/deletion candidates). "
+			      "No need to parse the log by hand for these.\n\n";
 		}
 		cf.close();
 	}
@@ -1465,11 +1498,19 @@ class Makefile {
 		return *this;
 	}
 
-	// `mf << TOOL("name", "hint")` declares a project-level install hint for a
-	// tool without attaching it to any rule. Shown in AGENTS.md and check_tools.
+	// `mf << TOOL(...)` declares one or more tools at the project level, without
+	// attaching them to any rule — central documentation, surfaced in AGENTS.md
+	// and `make check_tools`.
 	Makefile& operator<<(TOOL t) {
-		if(!t.hint.empty())
-			for(auto &x : t.tools) tool_hints[x] = t.hint;
+		for(auto &x : t.tools) mf_tools.insert(x);
+		return *this;
+	}
+	// `mf << TOOLDESC("name", "hint")` does the same and records the install
+	// hint. mf-level hints win over rule-level ones (rule hints are merged with
+	// emplace at generate() time, so they don't overwrite these).
+	Makefile& operator<<(TOOLDESC td) {
+		mf_tools.insert(td.tool);
+		tool_hints[td.tool] = td.hint;
 		return *this;
 	}
 

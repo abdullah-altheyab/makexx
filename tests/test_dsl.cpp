@@ -456,6 +456,44 @@ static void test_tool() {
     CHECK_NOT_CONTAINS(line2, "$(shell command -v ../bin/prog2");
 }
 
+static void test_tool_variadic_and_tooldesc() {
+    current_test = "test_tool_variadic_and_tooldesc";
+    TempDir td;
+    Makefile mf;
+    // Variadic TOOL declares several tools at once on one rule.
+    mf.add("out.bin", "in.dat") << TOOL("awk", "sed", "jq") << "process $< > $@";
+    // Braced list form still works.
+    mf.add("out2.bin", "in2.dat") << TOOL({"cut", "tr"}) << "cut $< > $@";
+    // TOOLDESC registers a tool AND its install hint, on a rule.
+    mf.add("gis.shp", "in.dat") << TOOLDESC("gdal", "apt install gdal-bin") << "gdal $< $@";
+    // mf-level TOOL (no hint) and TOOLDESC (with hint), attached to no rule.
+    mf << TOOL("ripgrep");
+    mf << TOOLDESC("mcsim", "https://example.com/mcsim");
+    mf.generate();
+    auto content = read_makefile();
+    // Variadic tools all become $(shell command -v ...) prereqs.
+    auto pos = content.find("out.bin :");
+    auto line = content.substr(pos, content.find('\n', pos) - pos);
+    CHECK_CONTAINS(line, "$(shell command -v awk 2>/dev/null)");
+    CHECK_CONTAINS(line, "$(shell command -v sed 2>/dev/null)");
+    CHECK_CONTAINS(line, "$(shell command -v jq 2>/dev/null)");
+    // check_tools lists every declared tool — rule-level, mf-level, and TOOLDESC.
+    auto ctpos = content.find("check_tools:");
+    auto ct = content.substr(ctpos);
+    CHECK_CONTAINS(ct, "awk");
+    CHECK_CONTAINS(ct, "gdal");
+    CHECK_CONTAINS(ct, "ripgrep");     // mf-level TOOL with no rule
+    CHECK_CONTAINS(ct, "mcsim");       // mf-level TOOLDESC
+    // Install hints appear next to MISSING in check_tools.
+    CHECK_CONTAINS(ct, "apt install gdal-bin");
+    CHECK_CONTAINS(ct, "https://example.com/mcsim");
+    // AGENTS.md Tools section carries the hints too.
+    std::ifstream af("AGENTS.md");
+    std::string agents((std::istreambuf_iterator<char>(af)), std::istreambuf_iterator<char>());
+    CHECK_CONTAINS(agents, "## Tools");
+    CHECK_CONTAINS(agents, "apt install gdal-bin");
+}
+
 static void test_agents_md() {
     current_test = "test_agents_md";
     TempDir td;
@@ -775,6 +813,7 @@ int main() {
     test_user_phony();
     test_open_file();
     test_tool();
+    test_tool_variadic_and_tooldesc();
     test_desc();
     test_desc_accumulates();
     test_agents_md();
