@@ -27,6 +27,8 @@
 //                                                            with `/` → used literally
 //   r << TOOLDESC("prog","brew install prog") — declare a tool AND its install hint in one
 //                                            call; hint shown in AGENTS.md + `make check_tools`.
+//                                            Braced TOOLDESC({"a","b"},"hint") gives several
+//                                            tools the SAME hint (one package, many binaries).
 //                                            Also mf << TOOL(...) / mf << TOOLDESC(...) at the
 //                                            project level (mf-level hint wins on conflict)
 //   r << HELP("description")               — shown by 'make help' and makexx -i
@@ -380,12 +382,18 @@ class TOOL {
 // package-manager command, or any free text — is shown in AGENTS.md and by
 // `make check_tools` when the tool is missing. Usable on a rule (rule <<
 // TOOLDESC(...)) or the makefile (mf << TOOLDESC(...)); mf-level wins on conflict.
+// A braced list — TOOLDESC({"a","b"}, "hint") — gives every named tool the SAME
+// hint, for several executables that ship in one package.
 class TOOLDESC {
   public:
-	std::string tool;
+	std::set<std::string> tools;
 	std::string hint;
 	TOOLDESC(std::string name, std::string install_hint)
-		: tool(name), hint(install_hint) {}
+		: hint(install_hint) { tools.insert(name); }
+	TOOLDESC(StringList names, std::string install_hint)
+		: hint(install_hint) { for(auto &n : names) tools.insert(n); }
+	TOOLDESC(std::vector<std::string> names, std::string install_hint)
+		: hint(install_hint) { for(auto &n : names) tools.insert(n); }
 };
 
 class TARGET { // hidden target, usually for non-reproducible (manual) targets
@@ -480,8 +488,7 @@ inline Rule &operator<<(Rule &a, TOOL t) {
 	return a;
 }
 inline Rule &operator<<(Rule &a, TOOLDESC td) {
-	a.tools.insert(td.tool);
-	a.tool_hints[td.tool] = td.hint;
+	for(auto &t : td.tools) { a.tools.insert(t); a.tool_hints[t] = td.hint; }
 	return a;
 }
 inline Rule &operator<<(Rule &a, DESC d) {
@@ -1115,7 +1122,8 @@ class Makefile {
 		cf << "        << TOOL(\"g++\")                         // executable prereq, mtime-tracked\n";
 		cf << "        << TOOL(\"awk\", \"sed\")                  // several at once (also TOOL({\"a\",\"b\"}))\n";
 		cf << "        << TOOLDESC(\"xx\", \"brew install xx\")   // = TOOL(\"xx\") + an install hint in one\n";
-		cf << "                                              //   (registers the prereq; no separate TOOL)\n";
+		cf << "                                              //   (registers the prereq; no separate TOOL).\n";
+		cf << "                                              //   TOOLDESC({\"a\",\"b\"},\"hint\") shares one hint.\n";
 		cf << "        << MENU(\"Build\");                      // group (nested: \"Build/Tests\")\n";
 		cf << "\n";
 		cf << "    // Use auto& only when building a rule across statements (e.g. in a loop):\n";
@@ -1509,8 +1517,7 @@ class Makefile {
 	// hint. mf-level hints win over rule-level ones (rule hints are merged with
 	// emplace at generate() time, so they don't overwrite these).
 	Makefile& operator<<(TOOLDESC td) {
-		mf_tools.insert(td.tool);
-		tool_hints[td.tool] = td.hint;
+		for(auto &t : td.tools) { mf_tools.insert(t); tool_hints[t] = td.hint; }
 		return *this;
 	}
 

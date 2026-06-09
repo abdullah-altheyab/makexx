@@ -469,6 +469,8 @@ static void test_tool_variadic_and_tooldesc() {
     // mf-level TOOL (no hint) and TOOLDESC (with hint), attached to no rule.
     mf << TOOL("ripgrep");
     mf << TOOLDESC("mcsim", "https://example.com/mcsim");
+    // Braced TOOLDESC: same hint applied to several tools from one package.
+    mf << TOOLDESC({"gdalinfo", "gdalwarp"}, "apt install gdal-bin");
     mf.generate();
     auto content = read_makefile();
     // Variadic tools all become $(shell command -v ...) prereqs.
@@ -484,6 +486,9 @@ static void test_tool_variadic_and_tooldesc() {
     CHECK_CONTAINS(ct, "gdal");
     CHECK_CONTAINS(ct, "ripgrep");     // mf-level TOOL with no rule
     CHECK_CONTAINS(ct, "mcsim");       // mf-level TOOLDESC
+    // Braced TOOLDESC registered both tools, each with the shared hint.
+    CHECK_CONTAINS(ct, "gdalinfo");
+    CHECK_CONTAINS(ct, "gdalwarp");
     // Install hints appear next to MISSING in check_tools.
     CHECK_CONTAINS(ct, "apt install gdal-bin");
     CHECK_CONTAINS(ct, "https://example.com/mcsim");

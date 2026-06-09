@@ -93,6 +93,8 @@ rule << TOOL("prog1");               // external executable: mtime-tracked prere
 rule << TOOL("awk", "sed", "jq");    // several at once (variadic); braced TOOL({"a","b"}) too.
 rule << TOOLDESC("xx", "brew install xx"); // declare a tool AND its install hint (URL / pkg cmd /
                                      // free text) in one call; shown in AGENTS.md + `make check_tools`.
+rule << TOOLDESC({"gdalinfo","gdalwarp"}, "apt install gdal-bin"); // braced: same hint for each
+                                     // tool — for several binaries that ship in one package.
 mf   << TOOL("xx");                   // project-level: declare tool(s) attached to no rule.
 mf   << TOOLDESC("xx", "brew install xx"); // project-level tool + hint; mf-level wins on conflict.
 rule << HELP("builds the thing");   // shown by 'make help'
