@@ -1133,6 +1133,10 @@ class Makefile {
 		cf << "\n";
 		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // DECLARE a group description/FOLDED\n";
 		cf << "    mf << PHONY(\"install\");                       // declare phony by name\n";
+		cf << "    mf << TOOLDESC(\"xx\", \"apt install xx\");        // project-wide tool + hint, attached\n";
+		cf << "                                                  //   to no rule (documented, NOT a per-\n";
+		cf << "                                                  //   target prereq — use rule-level <<TOOL\n";
+		cf << "                                                  //   / <<TOOLDESC for an mtime edge)\n";
 		cf << "    mf.title            = \"My Project\";\n";
 		cf << "    mf.description      = \"What this project does\"; // shown in " << context_filename << " header\n";
 		cf << "    mf.preamble         = \"CFLAGS ?= -O2\\n\";      // raw make injected near top\n";
@@ -1288,6 +1292,7 @@ class Makefile {
 		cf << "- `make list` — List all files makexx tracks (inputs + intermediates + final + temp)\n";
 		cf << "- `make list_input` — List input files (sources not produced by any rule)\n";
 		cf << "- `make list_unknown` — List files in the directory that makexx doesn't know about\n";
+		cf << "- `make check_tools` — Check declared external tools are installed (prints install hints)\n";
 		cf << "- `make help` — Same target list as above with brackets / grouping\n";
 		if(graph) {
 			cf << "- `make makefile_graph.pdf` — Render dependency graph as PDF (requires Graphviz)\n";
@@ -1302,14 +1307,27 @@ class Makefile {
 				for(auto const &t : cmd->tools) all_tools.insert(t);
 			if(!all_tools.empty()) {
 				cf << "## Tools\n\n";
-				cf << "External executables used by this build. Run `make check_tools` to verify they are all installed.\n\n";
+				cf << "External executables used by this build. Run `make check_tools` to see "
+				      "which are installed and the install hint for any that are missing. Tools "
+				      "that share an install hint are grouped on one line (they come from one "
+				      "package / one install step).\n\n";
+				// Group tools by shared install hint: N tools from one package read as one
+				// install, not N. std::map keeps the order deterministic; the no-hint bucket
+				// (empty key) sorts first, so emit it last for readability.
+				std::map<std::string, std::vector<std::string>> by_hint;
 				for(auto const &t : all_tools) {
-					cf << "- `" << t << "`";
 					auto hit = tool_hints.find(t);
-					if(hit != tool_hints.end())
-						cf << " \xe2\x80\x94 install: " << hit->second;
-					cf << "\n";
+					by_hint[hit != tool_hints.end() ? hit->second : ""].push_back(t);
 				}
+				auto emit = [&](std::vector<std::string> const &ts, std::string const &hint) {
+					cf << "- ";
+					for(size_t i = 0; i < ts.size(); ++i) cf << (i ? ", " : "") << "`" << ts[i] << "`";
+					if(!hint.empty()) cf << " \xe2\x80\x94 install: " << hint;
+					cf << "\n";
+				};
+				for(auto const &kv : by_hint) if(!kv.first.empty()) emit(kv.second, kv.first);
+				auto none = by_hint.find("");
+				if(none != by_hint.end()) emit(none->second, "");
 				cf << "\n";
 			}
 		}
