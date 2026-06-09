@@ -201,6 +201,8 @@
         <div class="sep"></div>
         <button data-act="themeLight" class="opt">Light Background</button>
         <button data-act="themeDark" class="opt on">Dark Background</button>
+        <div class="sep"></div>
+        <button data-act="alignInputs" class="opt on" title="Pin every input node to a single column (one vertical line)">Align inputs in a column</button>
         <div class="sep" data-heat hidden></div>
         <button data-act="heat:off" class="opt on" data-heat hidden>Heat: off</button>
         <button data-act="heat:total" class="opt" data-heat hidden>Heat: total time</button>
@@ -493,11 +495,35 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
 
   const api = cy.expandCollapse({ layoutBy: dagreLayout, fisheye: false, animate: false, undoable: false, expandCollapseCascade: true });
 
-  function relayout(keepView) {
-    // keepView → lay out but suppress dagre's auto-fit, so zoom/pan are kept.
-    const opts = keepView ? Object.assign(dagreLayout(), { fit: false }) : dagreLayout();
-    cy.elements(":visible").layout(opts).run();
+  // dagre pulls a source node toward whatever consumes it, so inputs scatter
+  // across ranks. When on, pin every visible input to one vertical line (the
+  // leftmost column) after layout, de-overlapping them along the cross-axis.
+  let alignInputsOn = true;
+  function alignInputColumn() {
+    if (!alignInputsOn) return;
+    const inputs = cy.nodes(":visible").filter(n => n.data("type") === "input");
+    if (inputs.length < 2) return;
+    let minX = Infinity;
+    cy.nodes(":visible").forEach(n => { const x = n.position("x"); if (x < minX) minX = x; });
+    const gap = (dagreLayout().nodeSep || 22) + 6;
+    let prevY = -Infinity;
+    inputs.toArray().sort((a, b) => a.position("y") - b.position("y")).forEach(n => {
+      n.position("x", minX);
+      let y = n.position("y");
+      if (y - prevY < gap) y = prevY + gap;     // keep the column collision-free
+      n.position("y", y);
+      prevY = y;
+    });
   }
+  function relayout(keepView) {
+    // Always suppress dagre's auto-fit: we reposition inputs afterward, then fit
+    // to the final positions (instantly, to match the prior non-animated behavior).
+    cy.elements(":visible").layout(Object.assign(dagreLayout(), { fit: false })).run();
+    alignInputColumn();
+    if (!keepView) cy.fit(cy.elements(":visible"), 30);
+  }
+  // Covers layout paths that bypass relayout() (e.g. expand/collapse of groups).
+  cy.on("layoutstop", alignInputColumn);
 
   // --- Legend + counts ------------------------------------------------------
   const present = new Set(G.nodes.map(n => n.type || "intermediate"));
@@ -1174,6 +1200,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
       searchInView: searchInView.checked,
       heat: heatMode,
       theme: theme,
+      alignInputs: alignInputsOn,
     };
   }
   function applyState(s) {
@@ -1192,6 +1219,8 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     searchInView.checked = !!s.searchInView;
     if (hasStats && typeof s.heat === "string" && heatMetric[s.heat]) setHeat(s.heat); else setHeat("off");
     if (s.theme === "light" || s.theme === "dark") setTheme(s.theme);
+    alignInputsOn = s.alignInputs !== false;     // default on
+    document.querySelector('[data-act="alignInputs"]').classList.toggle("on", alignInputsOn);
     refreshSeeds();
     renderTagChips();
     if (!picker.hidden) curRender();             // refresh an open picker in place
@@ -1294,6 +1323,11 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     else if (act === "load") stateFile.click();
     else if (act === "themeLight") setTheme("light");
     else if (act === "themeDark") setTheme("dark");
+    else if (act === "alignInputs") {
+      alignInputsOn = !alignInputsOn;
+      e.target.classList.toggle("on", alignInputsOn);
+      scheduleFilter(true);   // re-lay out: align (or restore dagre positions), camera steady
+    }
     else if (act === "clearSeed") { seedInput.value = ""; seedInput.focus(); scheduleFilter(); }
     else if (act === "unhide") { hidden.clear(); scheduleFilter(); }
     else if (act === "collapseAll") api.collapseAll();
