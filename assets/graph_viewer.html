@@ -203,6 +203,10 @@
         <button data-act="themeDark" class="opt on">Dark Background</button>
         <div class="sep"></div>
         <button data-act="alignInputs" class="opt on" title="Pin every input node to a single column (one vertical line)">Align inputs in a column</button>
+        <div class="sep"></div>
+        <button data-act="ranker:network-simplex" class="opt on" title="dagre rank assignment: most compact, minimizes total edge length (default)">Ranker: network-simplex</button>
+        <button data-act="ranker:tight-tree" class="opt" title="dagre rank assignment: tight spanning tree — often shorter, narrower layering">Ranker: tight tree</button>
+        <button data-act="ranker:longest-path" class="opt" title="dagre rank assignment: longest path — pushes nodes as early as possible (tall, simple)">Ranker: longest path</button>
         <div class="sep" data-heat hidden></div>
         <button data-act="heat:off" class="opt on" data-heat hidden>Heat: off</button>
         <button data-act="heat:total" class="opt" data-heat hidden>Heat: total time</button>
@@ -369,8 +373,9 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
   for (const e of G.edges)
     els.push({ data: { id: "e" + (ei++), source: e.source, target: e.target }, classes: e.tool ? "tool" : "" });
 
+  let ranker = "network-simplex";   // dagre rank-assignment strategy (View ▾)
   function dagreLayout() {
-    return { name: "dagre", rankDir: "LR", nodeSep: 22, rankSep: 60, edgeSep: 10, fit: true, padding: 30 };
+    return { name: "dagre", rankDir: "LR", nodeSep: 22, rankSep: 60, edgeSep: 10, ranker: ranker, fit: true, padding: 30 };
   }
 
   // Cytoscape ignores CSS var(), so the canvas carries its own two palettes.
@@ -631,6 +636,14 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
       if (b) b.classList.toggle("on", k === mode);
     });
     applyHeat();
+  }
+  function setRanker(mode) {
+    ranker = mode;
+    ["network-simplex", "tight-tree", "longest-path"].forEach(k => {
+      const b = document.querySelector('[data-act="ranker:' + k + '"]');
+      if (b) b.classList.toggle("on", k === mode);
+    });
+    scheduleFilter(true);   // re-run dagre with the new ranker, camera steady
   }
   if (hasStats) document.querySelectorAll("[data-heat]").forEach(el => { el.hidden = false; });
 
@@ -1201,6 +1214,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
       heat: heatMode,
       theme: theme,
       alignInputs: alignInputsOn,
+      ranker: ranker,
     };
   }
   function applyState(s) {
@@ -1221,6 +1235,8 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     if (s.theme === "light" || s.theme === "dark") setTheme(s.theme);
     alignInputsOn = s.alignInputs !== false;     // default on
     document.querySelector('[data-act="alignInputs"]').classList.toggle("on", alignInputsOn);
+    if (["network-simplex", "tight-tree", "longest-path"].indexOf(s.ranker) >= 0) setRanker(s.ranker);
+    else setRanker("network-simplex");
     refreshSeeds();
     renderTagChips();
     if (!picker.hidden) curRender();             // refresh an open picker in place
@@ -1296,6 +1312,7 @@ const MAKEXX_STATS = /*makexx-stats-start*/{}/*makexx-stats-end*/;
     else if (act === "seeds") openSeedsPicker();
     else if (act === "help") help.hidden = false;
     else if (act.indexOf("heat:") === 0) setHeat(act.slice(5));
+    else if (act.indexOf("ranker:") === 0) setRanker(act.slice(7));
     else if (act === "seedResults" || act === "unseedResults") {
       // Promote (or drop) every current search-box match to / from the seeds.
       const rx = seedRegexes();
