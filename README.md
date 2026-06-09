@@ -118,29 +118,6 @@ These dependencies are declared by the `.deb` package below — `dpkg -i` / `apt
 
 ## Installation
 
-**Quick install (prebuilt binary, Linux & macOS):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/install.sh | sh
-```
-
-Detects your OS/arch, downloads the matching binary from the latest release, and installs it to `/usr/local/bin` (uses `sudo` only if that directory isn't writable). Set `PREFIX=$HOME/.local` to install elsewhere, or pass a tag (`… | sh -s v0.6.0`) to pin a version. Prebuilt binaries are published for `linux-x86_64`, `macos-arm64`, and `macos-x86_64`.
-
-**Debian / Ubuntu (`.deb`):**
-
-```bash
-curl -fsSLO https://github.com/abdullah-altheyab/makexx/releases/latest/download/makexx_0.6.0_amd64.deb
-sudo dpkg -i makexx_0.6.0_amd64.deb
-```
-
-Pulls in `make` and a C++ compiler automatically as package dependencies.
-
-**Manual download:** grab the tarball for your platform from the [latest release](https://github.com/abdullah-altheyab/makexx/releases/latest), then:
-
-```bash
-tar -xzf makexx-linux-x86_64.tar.gz
-sudo mv makexx-linux-x86_64 /usr/local/bin/makexx
-```
 
 **From source (with cmake):**
 
