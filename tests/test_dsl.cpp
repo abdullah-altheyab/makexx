@@ -499,6 +499,51 @@ static void test_tool_variadic_and_tooldesc() {
     CHECK_CONTAINS(agents, "apt install gdal-bin");
 }
 
+static void test_validation() {
+    current_test = "test_validation";
+    TempDir td;
+    auto join = [](std::vector<std::string> const& v) {
+        std::string s; for (auto& e : v) s += e + "\n"; return s;
+    };
+    // 1) Duplicate target -> one error naming the target and both intents.
+    {
+        Makefile mf;
+        mf.add("dup.o", "a.cpp") << "g++ -c a.cpp -o dup.o";
+        mf.add("dup.o", "b.cpp") << "g++ -c b.cpp -o dup.o";
+        auto issues = mf.validation_issues();
+        CHECK_EQ((int)issues.first.size(), 1);
+        CHECK_CONTAINS(join(issues.first), "dup.o");
+        CHECK_CONTAINS(join(issues.first), "redefined");
+    }
+    // 2) Empty rule (no recipe, no sources) -> warning.
+    {
+        Makefile mf;
+        mf.add("ghost");
+        CHECK_CONTAINS(join(mf.validation_issues().second), "builds nothing");
+    }
+    // 3) Dangling prerequisite (not produced, not on disk) -> warning naming it.
+    {
+        Makefile mf;
+        mf.add("out.bin", "nope_missing_input.dat") << "cp $< $@";
+        CHECK_CONTAINS(join(mf.validation_issues().second), "nope_missing_input.dat");
+    }
+    // 4) A source with make metacharacters is NOT flagged dangling.
+    {
+        Makefile mf;
+        mf.add("out2.bin", "$(SRC)") << "cp $< $@";
+        CHECK_NOT_CONTAINS(join(mf.validation_issues().second), "SRC");
+    }
+    // 5) Clean rule with an on-disk source -> no errors, no warnings.
+    {
+        { std::ofstream f("real_input.cpp"); f << "int main(){}\n"; }
+        Makefile mf;
+        mf.add("clean.o", "real_input.cpp") << "g++ -c real_input.cpp -o clean.o";
+        auto issues = mf.validation_issues();
+        CHECK_EQ((int)issues.first.size(), 0);
+        CHECK_EQ((int)issues.second.size(), 0);
+    }
+}
+
 static void test_agents_md() {
     current_test = "test_agents_md";
     TempDir td;
@@ -819,6 +864,7 @@ int main() {
     test_open_file();
     test_tool();
     test_tool_variadic_and_tooldesc();
+    test_validation();
     test_desc();
     test_desc_accumulates();
     test_agents_md();

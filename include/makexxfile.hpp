@@ -519,6 +519,7 @@ class Makefile {
 	std::map<std::string, Rule *> target_rule;
 	std::multimap<Rule *, std::string> rule_source;
 	std::multimap<Rule *, std::string> rule_target;
+	std::vector<std::string> dup_errors;   // duplicate-target redefinitions (validate())
 	enum BracketType { BRK_NORMAL=0, BRK_MULTI_FIRST=1, BRK_MULTI_MID=2, BRK_MULTI_END=3 };
 	struct HelpEntry { std::string target; std::string description; std::string group; BracketType bracket; };
 	std::vector<HelpEntry> help_menu;
@@ -544,8 +545,16 @@ class Makefile {
 			rule_source.insert({A, s});
 		}
 		for(auto &t : targets) {
-			if(target_rule.find(t) != target_rule.end()) {
-				std::cerr << "# WARNING! Multiple build rules for the same target '" << t << "' only the latest rule defined will be used!" << std::endl;
+			auto existing = target_rule.find(t);
+			if(existing != target_rule.end()) {
+				// A target may be defined only once. Record both locations; validate()
+				// reports them all and aborts before the makefile is written.
+				dup_errors.push_back(
+					"target '" + t + "' redefined at makefile.cpp:" + std::to_string(src_line)
+					+ " (first defined at makefile.cpp:" + std::to_string(existing->second->src_line)
+					+ "). A target may be defined only once \xe2\x80\x94 list all its prerequisites in"
+					+ " the single mf.add(), or use mf.add_source() for a dependency you can't"
+					+ " know until later.");
 			}
 			nodes.insert(t);
 			target_rule[t] = A;
@@ -782,7 +791,74 @@ class Makefile {
 		}
     }
 
+	// Pre-generate sanity pass. Collects structural problems with the rule graph
+	// and reports them pointing back to makefile.cpp lines (makexx's house style).
+	// ERRORS abort generation before the makefile is written; WARNINGS are advisory.
+	//   - duplicate target definitions          -> ERROR (recorded at add() time)
+	//   - rule with no recipe and no sources     -> WARNING (builds nothing)
+	//   - prerequisite that no rule produces, isn't on disk, and has no make
+	//     metacharacters ($ % * ? [ ] ~)         -> WARNING (likely a typo)
+	// Pure detection: returns {errors, warnings} without printing or exiting, so
+	// it can be unit-tested. validate() wraps this with reporting + abort.
+	std::pair<std::vector<std::string>, std::vector<std::string>> validation_issues() {
+		std::vector<std::string> errors = dup_errors;
+		std::vector<std::string> warnings;
+
+		auto first_target = [&](Rule *r) -> std::string {
+			auto it = rule_target.find(r);
+			return it != rule_target.end() ? it->second : std::string("<unnamed>");
+		};
+		for(auto const &up : commands) {
+			Rule *r = up.get();
+			bool has_src = rule_source.find(r) != rule_source.end();
+			if(r->commands.empty() && !has_src)
+				warnings.push_back("rule for '" + first_target(r) + "' (makefile.cpp:"
+					+ std::to_string(r->src_line) + ") has no recipe and no prerequisites "
+					"\xe2\x80\x94 it builds nothing.");
+		}
+		auto has_make_meta = [](std::string const &s) {
+			return s.find_first_of("$%*?[]~") != std::string::npos;
+		};
+		// Collect unique dangling prerequisites and report them as ONE summarized
+		// line — a real project may legitimately have hundreds of sources not yet
+		// on disk at generate time, and one warning per source would bury signal.
+		std::set<std::string> dangling;
+		for(auto const &rs : rule_source) {
+			std::string const &src = rs.second;
+			if(src.empty() || has_make_meta(src)) continue;
+			if(target_rule.find(src) != target_rule.end()) continue;   // produced by a rule
+			if(access(src.c_str(), F_OK) == 0) continue;               // exists on disk
+			dangling.insert(src);
+		}
+		if(!dangling.empty()) {
+			std::string list; size_t shown = 0;
+			for(auto const &d : dangling) {
+				if(shown == 8) { list += ", (+" + std::to_string(dangling.size() - 8) + " more)"; break; }
+				list += (shown ? ", " : "") + d; ++shown;
+			}
+			warnings.push_back(std::to_string(dangling.size()) + " prerequisite(s) are not "
+				"produced by any rule and not on disk (typos, or inputs not present yet): "
+				+ list);
+		}
+
+		return {errors, warnings};
+	}
+
+	void validate() {
+		auto issues = validation_issues();
+		auto const &errors = issues.first;
+		auto const &warnings = issues.second;
+		for(auto const &w : warnings) std::cerr << "makexx: warning: " << w << std::endl;
+		if(!errors.empty()) {
+			for(auto const &e : errors) std::cerr << "makexx: error: " << e << std::endl;
+			std::cerr << "makexx: " << errors.size() << " error(s) in makefile.cpp; "
+			             "makefile not written." << std::endl;
+			std::exit(1);
+		}
+	}
+
 	void generate() {
+		validate();
 		dump_help(graph);
 		std::set<std::string> processed_nodes;
 		std::string makefile;
@@ -1056,8 +1132,9 @@ class Makefile {
 						? "command -v " + t + " >/dev/null 2>&1"
 						: "test -x " + t;
 					std::string ok_msg  = "  " + t;
-					// pad to column 20 for alignment
-					if(ok_msg.size() < 20) ok_msg += std::string(20 - ok_msg.size(), ' ');
+					// pad to column 20 for alignment; always leave >=2 spaces so long
+					// names (e.g. a path tool) don't run into the ok/MISSING column.
+					ok_msg += std::string(ok_msg.size() < 18 ? 20 - ok_msg.size() : 2, ' ');
 					std::string miss_msg = ok_msg + "MISSING";
 					auto hit = tool_hints.find(t);
 					if(hit != tool_hints.end())
@@ -1130,6 +1207,15 @@ class Makefile {
 		cf << "    auto& r = mf.add(\"list\") << PHONY;\n";
 		cf << "    for (auto& item : items)\n";
 		cf << "        r << (\"echo '  \" + item + \"'\");\n";
+		cf << "\n";
+		cf << "    // Pass ALL prerequisites in the ONE add() for a target — build a\n";
+		cf << "    // std::vector<std::string> of sources first if you must compute them:\n";
+		cf << "    std::vector<std::string> srcs;\n";
+		cf << "    for (auto& o : objs) srcs.push_back(o);\n";
+		cf << "    mf.add(\"app\", srcs) << \"g++ $^ -o $@\";\n";
+		cf << "    // A 2nd mf.add(\"app\", ...) is an ERROR (a target may be defined once;\n";
+		cf << "    // generation aborts). Only if a source truly isn't known until after\n";
+		cf << "    // the rule exists: mf.add_source(rule, \"late.dep\") as a last resort.\n";
 		cf << "\n";
 		cf << "    mf << MENU(\"Build/Tests\", \"unit tests\");      // DECLARE a group description/FOLDED\n";
 		cf << "    mf << PHONY(\"install\");                       // declare phony by name\n";

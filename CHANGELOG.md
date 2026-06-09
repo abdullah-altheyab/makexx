@@ -6,6 +6,11 @@
 
 - **`generate_with_graph()` removed; `mf.generate()` does everything.** The graph is now controlled by a new `mf.graph` field (default **on**) instead of a separate method, and `mf.generate()` takes no parameters. Migration: replace `mf.generate_with_graph()` with `mf.generate()`; add `mf.graph = false;` if you want to opt out of graph emission.
 - **Profiling and graph generation are now on by default.** `mf.profile` flips from `false` → `true` (per-rule timing logged to `.makexx_hits` on every run) and `mf.graph` defaults to `true` (emits `.makexx_graph.json` + a `graph` target). Set either to `false` to opt out. Existing `makefile.cpp` files keep working; they just get timing data and a graph for free.
+- **Defining the same target twice is now an error.** `mf.generate()` runs a pre-generate validation pass (`mf.validate()`); a second `mf.add()` for a target that's already defined aborts generation and prints both `makefile.cpp:NN` locations, instead of the old silent "last rule wins" warning that could quietly drop the earlier rule's recipe. Migration: pass all of a target's prerequisites in its single `add()` (build a `std::vector` of sources first if you compute them), or use `mf.add_source(rule, "dep")` for a dependency not known until later.
+
+### Makefile DSL — validation
+
+- **Pre-generate validation pass.** `mf.generate()` now first runs `mf.validate()`, a sanity check over the rule graph that points back to `makefile.cpp` lines: duplicate targets (error, aborts — see above), rules with no recipe and no prerequisites (warning — they build nothing), and prerequisites that no rule produces, aren't on disk, and have no make metacharacters (warning — likely a typo or a not-yet-present input). Dangling-prerequisite warnings are summarized into a single capped line so a project with many not-yet-present inputs doesn't flood stderr. Only errors abort; warnings are advisory.
 
 ### Makefile DSL
 

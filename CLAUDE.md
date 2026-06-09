@@ -71,6 +71,14 @@ Makefile mf;
 auto& rule = mf.add("output.o", "input.cpp");
 rule << "g++ -c input.cpp -o output.o";  // shell commands via <<
 
+// Pass ALL prerequisites in the ONE mf.add() for a target (build a
+// std::vector<std::string> of sources first if you must compute them).
+// Calling mf.add() a SECOND time for the same target is an ERROR — generate()
+// validates the rule graph and aborts (pointing at both makefile.cpp lines)
+// rather than silently dropping the earlier recipe. It does NOT append a
+// prerequisite. mf.add_source(rule, "dep") is a last resort for a source not
+// known until after the rule exists (see mf.get_rule / add_source in examples/compile).
+
 // Hold a rule reference and append commands across statements (incl. loops).
 // Commands execute in the order they were appended.
 auto& list = mf.add("list_deposits");
@@ -179,6 +187,16 @@ The generated makefile always includes `.PHONY` and the built-in targets: `all`,
 The `### GENERATING` decoration is suppressed for phony/built-in targets.
 
 On Windows, the `<<` operator automatically replaces `/` with `\` in shell commands.
+
+### Pre-generate validation
+
+`mf.generate()` first runs `mf.validate()`, a sanity pass over the rule graph that reports problems pointing back to `makefile.cpp` lines (the same house style as the make-error parser):
+
+- **Duplicate target → error.** Defining the same target with `mf.add()` twice aborts generation (the makefile is not written) and prints both `makefile.cpp:NN` locations. A target may be defined once; list all its prerequisites in the single `add()`, or use `mf.add_source()` for a dependency you can't know until then. (This replaced the old silent "last rule wins" warning that could quietly drop a recipe.)
+- **Empty rule → warning.** A rule with no recipe *and* no prerequisites builds nothing.
+- **Dangling prerequisite → warning.** A source that no rule produces, isn't on disk at generate time, and has no make metacharacters (`$ % * ? [ ] ~`) is likely a typo (or an input not present yet). These are collected and reported as a single summarized line (capped, with a `(+N more)`) so a project with many not-yet-present inputs doesn't flood stderr.
+
+Only errors abort; warnings are advisory and generation continues.
 
 ### Usage / timing data (`mf.profile`)
 

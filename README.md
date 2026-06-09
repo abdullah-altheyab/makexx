@@ -260,6 +260,12 @@ Idioms when porting:
     are emitted automatically.
   - Mark any target that doesn't produce an output file (`install`, `deploy`,
     `test`, etc.) with `<< PHONY`.
+  - Give a target ALL its prerequisites in the single `mf.add(target, sources)`
+    call — build a `std::vector<std::string>` of sources first if you must
+    compute them. Calling `mf.add()` again for the same target is an **error**
+    (a target may be defined only once; `makexx` aborts and points at both
+    lines), not a way to append a prerequisite; reach for
+    `mf.add_source(rule, "dep")` only when a source isn't known until later.
 
 Translate the Makefile below into a single `makefile.cpp`. Output only the
 C++ source.
