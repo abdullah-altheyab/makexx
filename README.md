@@ -79,11 +79,11 @@ mf << MENU("Processing", "Run the data pipeline");             // optional: decl
 
 **Interactive mode (`makexx -i`).** A TUI for browsing and running targets: `/` to search and filter, Space to multi-select, `d` to dry-run, `?` to show dependencies, `r` to refresh after editing `makefile.cpp` (cursor / fold / select / search are preserved across the reload). `q` quits; Esc dismisses; double-Esc quits when nothing is active. Targets without a `HELP()` are tucked into a folded **Undocumented** group — browse or `/`-search it to find rules you haven't documented yet.
 
-**Interactive dependency graph.** With `mf.generate_with_graph()`, `make graph` opens a **single self-contained `makefile_graph.html`** in your browser — no server, no network, works offline. The Cytoscape/dagre viewer colours nodes by kind (input / intermediate / final / phony / tool) and is built around **trace-seeded filtering**: when the same pipeline is instantiated many times (per play, region, AOI…), pick **seeds** — double-click a node, browse `Targets ▾` / `Tags ▾` (hashtags from `HELP`/`DESC`), or a node type — and it shows just that slice, connecting the seeds through their shared steps with `↑ inputs` / `↓ finals` for provenance and impact. The **Search** box highlights matches by name / `HELP` / `DESC` (kept distinct from seeds), and you can promote matches to seeds in one click. Tidy menus (File / View / Tracing / Actions), **save/load** of a view to a portable `.state.json`, PNG/SVG export, light/dark, and — when `mf.profile` data exists — **heat-coloring** nodes by run time / count / recency. A built-in `? Help` lists it all. The static Graphviz `make makefile_graph.pdf` is still there for a shareable artifact.
+**Interactive dependency graph.** `make graph` opens a **single self-contained `makefile_graph.html`** in your browser — no server, no network, works offline (on by default; set `mf.graph = false` to opt out). The Cytoscape/dagre viewer colours nodes by kind (input / intermediate / final / phony), routes multi-input/output rules through a synthetic **rule node**, and is built around **trace-seeded filtering**: when the same pipeline is instantiated many times (per play, region, AOI…), pick **seeds** — double-click a node, browse `Targets ▾` / `Tags ▾` (hashtags from `HELP`/`DESC`) / `Tools ▾`, or a node type — and it shows just that slice, connecting the seeds through their shared steps with `↑ inputs` / `↓ finals` for provenance and impact. The **Search** box highlights matches by name / `HELP` / `DESC` / tool name (kept distinct from seeds), and you can promote matches to seeds in one click. Tidy menus (File / View / Tracing / Actions), **save/load** of a view to a portable `.state.json`, PNG/SVG export, light/dark, and — when profiling data exists — **heat-coloring** nodes by run time / count / recency. A built-in `? Help` lists it all. The static Graphviz `make makefile_graph.pdf` is still there for a shareable artifact.
 
-**Usage & timing data.** Set `mf.profile = true` and makexx logs how long each rule takes to an append-only `.makexx_hits` on every run. `makexx --stats` reads it back as a per-rule table — runs, last-used, total and median time, sorted so the **bottleneck is on top** — plus the targets nobody has run (review/deletion candidates). Local, append-only, no server: build-scan insight for a plain Makefile.
+**Usage & timing data.** By default makexx logs how long each rule takes to an append-only `.makexx_hits` on every run (set `mf.profile = false` to turn it off). `makexx --stats` reads it back as a per-rule table — runs, last-used, total and median time, sorted so the **bottleneck is on top** — plus the targets nobody has run (review/deletion candidates). Local, append-only, no server: build-scan insight for a plain Makefile.
 
-**Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project.
+**Cross-project tool tracking.** `<< TOOL("prog")` declares an executable as a prereq so downstream targets rebuild when the tool changes. Bare names resolve via `command -v`; paths with `/` are literal — perfect for tools built in a sibling project. Add an install hint with `TOOL("prog", "brew install prog")`, and `make check_tools` verifies every declared tool is present, printing the hint for any that are missing.
 
 **Helpful errors.** When `make` fails, `makexx` parses the error and points back to the matching `mf.add(...)` line in your `makefile.cpp` — no more chasing the generated makefile.
 
@@ -114,9 +114,33 @@ mf << MENU("Processing", "Run the data pipeline");             // optional: decl
 - **GNU make** (`apt install make`, ships on macOS, in any HPC environment).
 - **A C++17 compiler.** `makexx` honors `$CXX` if set, otherwise probes `g++`, `clang++`, `icpx`, `icpc` in that order. Any one of these is enough (`apt install g++` or `apt install clang`; on macOS install the Xcode Command Line Tools).
 
-These dependencies are declared by the `.deb` and Homebrew packages below — `apt install` and `brew install` will pull them in automatically. The bare-binary install (`install.sh` / manual download) won't.
+These dependencies are declared by the `.deb` package below — `dpkg -i` / `apt install` will pull them in automatically. The bare-binary installs (`install.sh` / manual download) won't.
 
 ## Installation
+
+**Quick install (prebuilt binary, Linux & macOS):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/abdullah-altheyab/makexx/main/install.sh | sh
+```
+
+Detects your OS/arch, downloads the matching binary from the latest release, and installs it to `/usr/local/bin` (uses `sudo` only if that directory isn't writable). Set `PREFIX=$HOME/.local` to install elsewhere, or pass a tag (`… | sh -s v0.5.0`) to pin a version. Prebuilt binaries are published for `linux-x86_64`, `macos-arm64`, and `macos-x86_64`.
+
+**Debian / Ubuntu (`.deb`):**
+
+```bash
+curl -fsSLO https://github.com/abdullah-altheyab/makexx/releases/latest/download/makexx_0.5.0_amd64.deb
+sudo dpkg -i makexx_0.5.0_amd64.deb
+```
+
+Pulls in `make` and a C++ compiler automatically as package dependencies.
+
+**Manual download:** grab the tarball for your platform from the [latest release](https://github.com/abdullah-altheyab/makexx/releases/latest), then:
+
+```bash
+tar -xzf makexx-linux-x86_64.tar.gz
+sudo mv makexx-linux-x86_64 /usr/local/bin/makexx
+```
 
 **From source (with cmake):**
 
@@ -201,7 +225,8 @@ DSL cheat sheet (all `<<` operators accept `std::string`, so concatenation works
   r << RETAIN("file.bin");                      // selective; also RETAIN("a","b") or RETAIN({"a","b"})
   r << TOOL("prog");                            // external executable: mtime-tracked prereq
                                                 //   not in `$^`. Bare name → command -v lookup;
-                                                //   path with '/' → literal. Variadic too.
+                                                //   path with '/' → literal. Braced: TOOL({"a","b"}).
+  r << TOOL("prog", "brew install prog");       // with install hint (shown by `make check_tools`)
   r  << MENU("Build");                          // put THIS rule in a group (not sticky)
   r  << MENU("Build/Tests");                    // nested group via slash separator
   mf << MENU("Build/Tests", "unit tests");      // declare a group's description / FOLDED

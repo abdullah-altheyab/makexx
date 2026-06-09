@@ -54,7 +54,7 @@ The `.makexx_*` prefix means plain `ls` hides them, so `list_unknown` ignores th
 | `-i` | Interactive target selector (TUI with arrow keys, foldable groups, search) |
 | `-Dname=value` | Define a C++ preprocessor macro, forwarded to the compiler when compiling `makefile.cpp` |
 | `--build-graph` | Assemble the standalone `makefile_graph.html` from `.makexx_graph.json` and exit (no compile, no `make`). Invoked by the generated `makefile_graph.html` rule; normally you run `make graph` rather than this directly |
-| `--stats` | Read the `.makexx_hits` usage/timing log (written when `mf.profile = true`) and print per-rule run counts, last-run, total and median time — sorted by total time (bottleneck first) — plus menu targets with zero recorded runs. Read-only; no compile, no `make` |
+| `--stats` | Read the `.makexx_hits` usage/timing log (written whenever `mf.profile` is on — the default) and print per-rule run counts, last-run, total and median time — sorted by total time (bottleneck first) — plus menu targets with zero recorded runs. Read-only; no compile, no `make` |
 | `-h`, `--help` | Show usage help |
 | `--version` | Show version |
 
@@ -89,7 +89,10 @@ rule << BYPRODUCT("byproduct.log"); // cleaned by full_clean and soft_clean
 rule << TARGET("manual_output");    // hidden/non-reproducible target
 rule << TOOL("prog1");               // external executable: mtime-tracked prereq, not in `$^`
                                      // bare name → resolved via $(shell command -v ...);
-                                     // path with '/' → used literally. variadic + braced too.
+                                     // path with '/' → used literally. braced list TOOL({"a","b"}).
+rule << TOOL("xx", "brew install xx"); // optional install hint (URL / pkg cmd / free text):
+                                     // shown in AGENTS.md and by `make check_tools` when missing.
+mf   << TOOL("xx", "brew install xx"); // project-level hint, attached to no rule; wins on conflict.
 rule << HELP("builds the thing");   // shown by 'make help'
 rule << HELP("Deploy", "deploy it"); // with explicit group
 rule << HELP("forecast #alpha play"); // #hashtags in HELP/DESC become graph filter tags
@@ -109,7 +112,8 @@ mf << RETAIN("artifact.bin");            // same forms as the per-rule version
 
 mf.silent = true;   // prefix commands with @ in makefile
 mf.echo = false;    // suppress ### GENERATING echo lines
-mf.profile = true;  // log per-rule run time to .makexx_hits on each run (off by default)
+mf.profile = false; // log per-rule run time to .makexx_hits on each run (ON by default)
+mf.graph = false;   // emit .makexx_graph.json + `graph` target (ON by default)
 mf.preamble = "CFLAGS ?= -O2\n";    // raw make injected near top of generated makefile
 
 // Help organization
@@ -139,11 +143,13 @@ mf.context = true;                           // enable AGENTS.md generation (def
 mf.context = false;                          // disable AGENTS.md generation
 mf.context_filename = "CLAUDE.md";           // override output filename (default "AGENTS.md")
 
-mf.generate();              // write the makefile + .makexx_menu + AGENTS.md
-mf.generate_with_graph();   // also write makefile_graph.gv (Graphviz DOT) + .makexx_graph.json,
-                            //   and add a `graph` target. `make graph` assembles a standalone
-                            //   interactive makefile_graph.html and opens it; `make makefile_graph.pdf`
-                            //   still renders the static Graphviz PDF.
+mf.generate();              // write the makefile + .makexx_menu + AGENTS.md, and (when
+                            //   mf.graph, the default) makefile_graph.gv (Graphviz DOT) +
+                            //   .makexx_graph.json plus a `graph` target. `make graph` assembles
+                            //   a standalone interactive makefile_graph.html and opens it;
+                            //   `make makefile_graph.pdf` still renders the static Graphviz PDF.
+                            //   (generate_with_graph() was removed — mf.generate() covers it;
+                            //    set mf.graph = false to opt out.)
 ```
 
 ### Helper functions
@@ -164,7 +170,7 @@ to_upper(str) / to_lower(str)          // case conversion
 
 ### Generated makefile features
 
-The generated makefile always includes `.PHONY` and the built-in targets: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, and `help`. The `help` target shows user-defined targets with box-drawing brackets for multi-target rules, organized by groups, with parent sections auto-created for nested group paths and built-in targets listed at the bottom. Long descriptions word-wrap to the terminal width.
+The generated makefile always includes `.PHONY` and the built-in targets: `all`, `full_clean`, `soft_clean`, `list`, `list_unknown`, `list_input`, `check_tools`, and `help`. `check_tools` (always generated, always phony) iterates every declared `TOOL`, checks `command -v` (or `test -x` for paths), and prints `ok` or `MISSING -> <hint>` per tool. The `help` target shows user-defined targets with box-drawing brackets for multi-target rules, organized by groups, with parent sections auto-created for nested group paths and built-in targets listed at the bottom. Long descriptions word-wrap to the terminal width.
 
 The `### GENERATING` decoration is suppressed for phony/built-in targets.
 
@@ -184,13 +190,13 @@ The target column is the literal `$@`, so the log joins cleanly to graph nodes a
 - Each recipe line stays its own shell (no `.ONESHELL`); the wrappers just bracket the recipe via a per-target temp file under `.makexx_prof/`. Make's fail-fast / per-line semantics are unchanged. A **failed** recipe doesn't reach the trailing log line, so only successful runs are recorded.
 - Under `make -j`, per-rule wall times are real but **don't sum** to elapsed time — treat the data as a relative ranking, not a budget.
 - `.makexx_hits` is **never** removed by `full_clean`/`soft_clean` (it's accumulated history); the `.makexx_prof/` temp dir is cleaned by `full_clean`. Both are gitignored and excluded from `list_unknown`.
-- Off by default — it adds two process spawns + a temp file per built target.
+- On by default; set `mf.profile = false` to disable (it adds two process spawns + a temp file per built target).
 
 `makexx --stats` reads this log and prints a per-rule table — run count, last-run (relative), total time, median — sorted by total time so the bottleneck is on top, plus a "never recorded" list of menu targets with zero runs (review/deletion candidates). It aggregates entirely at read time. The interactive graph's **heat-coloring** (View ▾ ▸ Heat) is the other reader of the same raw events: `makexx --build-graph` aggregates `.makexx_hits` per target at assemble time and injects it into the HTML as `MAKEXX_STATS` (`{target: {runs, total, median, last}}`), which the viewer maps to node fills.
 
 ### AI agent context file (AGENTS.md)
 
-`mf.generate()` writes an `AGENTS.md` file alongside the makefile. This gives AI coding agents (Claude Code, Cursor, Copilot, etc.) a plain-English summary of the project: description, input files, targets with dependencies organized by group, and built-in targets. Nested groups such as `Build/Tests` appear with their parent sections automatically.
+`mf.generate()` writes an `AGENTS.md` file alongside the makefile. This gives AI coding agents (Claude Code, Cursor, Copilot, etc.) a plain-English summary of the project: description, input files, targets with dependencies organized by group, a **Tools** section listing every declared `TOOL` (with `— install: <hint>` where a hint was given, and a pointer to `make check_tools`), and built-in targets. Nested groups such as `Build/Tests` appear with their parent sections automatically. The file opens with a do-not-edit warning noting it is regenerated from `makefile.cpp`.
 
 - `mf.description = "..."` sets the project description included in the file
 - `mf.context = false` disables generation
@@ -220,18 +226,20 @@ Controls: ↑↓ navigate, PgUp/PgDn jump one page, Home/End jump to top/bottom,
 
 ## Interactive dependency graph
 
-`mf.generate_with_graph()` emits `.makexx_graph.json` (the DAG + per-node `type`/`group`/`HELP`/`DESC`/`tags`/`cmds`/`rule` — `rule` is a per-rule index shared by the targets of one multi-target rule, `-1` for inputs/tools — plus a top-level `folded_groups` array of groups declared `MENU(..., FOLDED)`); `make graph` assembles a standalone, offline `makefile_graph.html` (Cytoscape.js + dagre, vendored and embedded) and opens it. The static Graphviz `make makefile_graph.pdf` remains available.
+`mf.generate()` (with `mf.graph` on, the default) emits `.makexx_graph.json` (the DAG + per-node `type`/`group`/`HELP`/`DESC`/`tags`/`cmds`/`tools`/`tool_hints`/`rule` — `rule` is a per-rule index shared by the targets of one multi-target rule, `-1` for inputs — plus a top-level `folded_groups` array of groups declared `MENU(..., FOLDED)`); `make graph` assembles a standalone, offline `makefile_graph.html` (Cytoscape.js + dagre, vendored and embedded) and opens it. The static Graphviz `make makefile_graph.pdf` remains available. Set `mf.graph = false` to skip graph emission entirely.
+
+**Graph nodes are targets, inputs, and rule nodes.** A multi-input/multi-output rule gets a synthetic **rule node** that its inputs and outputs connect through (so heat and reveal flow along the actual rule, not a fan of edges); single-target rules connect directly. **Tools are not nodes** — declared `TOOL`s are shown in a node's hover tooltip (with install hints in muted parens) and in the **Tools ▾** picker, and the **Search** box matches tool names too.
 
 The viewer is built around **trace-seeded filtering** — the answer to "the graph is a hairball because the same pipeline is instantiated N times" (e.g. per play / per region). You pick **seeds** and the viewer renders only the connected subgraph.
 
-**Top bar** is a menu bar: **File ▾** (Export as PNG / SVG, Save / Save As / Open state), **View ▾** (Fit — keyboard `F` — and Light / Dark background), **Tracing ▾** (`← inputs` / `→ finals` / `↔ Link`), **Actions ▾** (Reset / Clear / Unhide / Fold-Unfold all), and a **Filter** slide-switch. The project **title + stats** sit on the top row with the **Search** box (and an **in view** switch + **Seed results / Unseed results** buttons) at the right; a **Seed:** cluster — **Targets ▾**, the type **legend**, **Tags ▾**, **Seeds ▾ (N)** — sits on the row below, with a **seed key** up top.
+**Top bar** is a menu bar: **File ▾** (Export as PNG / SVG, Save / Save As / Open state), **View ▾** (Fit — keyboard `F` — and Light / Dark background), **Tracing ▾** (`← inputs` / `→ finals` / `↔ Link`), **Actions ▾** (Reset / Clear / Unhide / Fold-Unfold all), and a **Filter** slide-switch. The project **title + stats** sit on the top row with the **Search** box (and an **in view** switch + **Seed results / Unseed results** buttons) at the right; a **Seed:** cluster — **Targets ▾**, the type **legend**, **Tags ▾**, **Tools ▾**, **Seeds ▾ (N)** — sits on the row below, with a **seed key** up top. A **Refresh** action reloads the page and restores the current view state.
 
 - **Two highlight sets.** *Seeds* (picked, **solid yellow**) are deliberate anchors: **double-click a node**, or pick from **Targets ▾** / **Tags ▾** / a legend **type** / the **Seeds ▾** menu. *Search results* (**dashed orange**) are nodes matching the **Search** box — name *or* `HELP` *or* `DESC`; substring, or glob with `*` (e.g. `*_alpha_*`); **applies on Enter**. A node that's **both** is **dashed yellow**. `/` focuses the Search box; a spinner shows while a filter/layout computes.
 - **Tracing applies to seeds only.** Connect-between, `↑ inputs`, `↓ finals`, and `↔ Link` all operate on **seeds**; search results are shown and highlighted but never extend the trace. **Seed results** / **Unseed results** (by the Search box) add/remove *all* current matches to/from the seeds; the **in view** switch scopes the search to nodes already on screen (it can't pull in new ones).
 - **Connect** = every node on a path *between* two seeds (`(seeds ∪ descendants) ∩ (seeds ∪ ancestors)`), so shared/untagged convergence nodes are pulled in automatically.
 - **Modifiers** (Tracing ▾) — `↑ inputs` (extend upstream to source files) and `↓ finals` (extend downstream to final targets), both **off by default**. A single seed + `↑ inputs` = provenance; + `↓ finals` = impact/blast-radius.
 - **`↔ Link`** answers "how are these two related?" — with 2+ seeds it shows the **shortest path between them ignoring edge direction** (`aStar({directed:false})`), finding connections through a shared ancestor / convergence point. If a seed can't reach the first, the count line says "not linked."
-- **Pickers** — **Targets ▾**, **Tags ▾**, **Seeds ▾**, and each legend **type** open a shared searchable panel. **Targets ▾** mirrors `makexx -i` (documented targets under `MENU` groups nested via `/`, foldable, with a folded **Undocumented** bucket; honors `MENU(..., FOLDED)` via the JSON `folded_groups`). Each panel has **Add visible / Remove visible** buttons that act only on currently-shown rows — **rows under folded groups are left untouched**. **Seeds ▾** lists the current seeds as toggles (toggling applies to the graph immediately; a row stays listed until the panel reopens).
+- **Pickers** — **Targets ▾**, **Tags ▾**, **Tools ▾**, **Seeds ▾**, and each legend **type** open a shared searchable panel. **Tools ▾** lists every declared `TOOL` with its install hint inline; seeding a tool seeds the targets that use it. **Targets ▾** mirrors `makexx -i` (documented targets under `MENU` groups nested via `/`, foldable, with a folded **Undocumented** bucket; honors `MENU(..., FOLDED)` via the JSON `folded_groups`). Each panel has **Add visible / Remove visible** buttons that act only on currently-shown rows — **rows under folded groups are left untouched**. **Seeds ▾** lists the current seeds as toggles (toggling applies to the graph immediately; a row stays listed until the panel reopens).
 - **Step-by-step expand** — **hover a node** and two **`⊕` handles** appear (left = parents, right = children); click to reveal one level, accumulating. (Single-click pins the handles; double-click seeds it.) The on-node bar also has **hide** (✕ / ⊘← / ⊘→) and **add siblings (`⧉`)** — the latter seeds *all* targets of a multi-target rule (its co-outputs), shown only for multi-target nodes, via the per-node `rule` index in the JSON. Hiding/revealing keeps the camera put (no auto-refit); seed/filter changes re-frame; **`F`** / Fit re-frames on demand.
 - **Hover** shows type, `HELP`, `DESC`, `#tags`, the seed kind (`● seed` / `▢ search result` / `◈ both`), **`makefile.cpp:<line>`** (rule definition; for loop-generated rules the template line, captured via `__builtin_LINE()` and emitted as `srcline`), and the rule's **commands** (`cmds`, numbered, continuations collapsed, capped with `… +N more`).
 - **`Filter`** applies/suspends the filter without losing seeds (off = full graph with seeds still highlighted). **Actions ▾**: **Clear** wipes seeds + toggles; **Reset** keeps the seeds but drops reveals / hides / modifiers; **Unhide** restores manually-hidden nodes; **Fold / Unfold all** for groups.
@@ -277,7 +285,7 @@ Shows how `makefile.cpp` can drive a non-build workflow (database-backed genealo
 - **per-rule `<< MENU()`** organizes targets into logical sections (Visualize, Subtrees, Deploy, Utilities)
 - **String variables** (`ssh_cmd`, `ssh_usr`, `server`) parameterize deployment commands
 - **Incremental rule building**: the `push` rule is assembled by appending one `rsync` command per `(source, subdir)` pair from a `vector<pair<...>>` — adding a new path to deploy is one line of data, not a new shell line
-- **`mf.generate_with_graph()`** produces the makefile, menu, context file, and dependency graph in one call
+- **`mf.generate()`** produces the makefile, menu, context file, and (since `mf.graph` defaults on) the dependency graph in one call
 
 ### `examples/simulation/` — Config separation pattern
 

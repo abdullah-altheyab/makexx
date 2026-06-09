@@ -2,9 +2,33 @@
 
 ## Unreleased
 
+### Makefile DSL — breaking
+
+- **`generate_with_graph()` removed; `mf.generate()` does everything.** The graph is now controlled by a new `mf.graph` field (default **on**) instead of a separate method, and `mf.generate()` takes no parameters. Migration: replace `mf.generate_with_graph()` with `mf.generate()`; add `mf.graph = false;` if you want to opt out of graph emission.
+- **Profiling and graph generation are now on by default.** `mf.profile` flips from `false` → `true` (per-rule timing logged to `.makexx_hits` on every run) and `mf.graph` defaults to `true` (emits `.makexx_graph.json` + a `graph` target). Set either to `false` to opt out. Existing `makefile.cpp` files keep working; they just get timing data and a graph for free.
+
+### Makefile DSL
+
+- **`TOOL` install hints.** New two-string form `TOOL("name", "install hint")` carries an optional hint (URL, package-manager command, or free text). `mf << TOOL("name", "hint")` registers a hint at the project level without attaching to any rule (wins over rule-level hints on conflict). The old variadic multi-tool constructor is **removed** to disambiguate from the name+hint form — use `TOOL({"a", "b"})` for multiple tools.
+- **`check_tools` built-in target.** Always generated, always phony. Iterates every declared tool, checks `command -v` (or `test -x` for paths), and prints `ok` or `MISSING -> <hint>` aligned per tool — a one-shot environment check for a freshly cloned project.
+- **AGENTS.md gains a `## Tools` section** listing every declared tool (with `— install: <hint>` where given) and pointing agents at `make check_tools`. The generated context file also now opens with a do-not-edit warning and uses consistent `<<` chaining style. `mf.profile` / `mf.silent` / `mf.context_filename` / `mf.preamble` are surfaced in the AGENTS.md quick-reference and the starter template.
+
 ### Interactive dependency graph
 
-- **Heat-coloring from `.makexx_hits`.** When `mf.profile = true` has accumulated timing data, **View ▾ ▸ Heat** tints node fills by usage — **total time**, **run count**, or **recency** — on a cool→hot (blue→amber→red) scale (log-scaled for time/count); targets with no recorded runs stay dim, and type/seed info remains on the borders. A gradient **scale** with min/max shows on the top row, and the hover tooltip gains a `runs · total · median · last` line. `makexx --build-graph` aggregates the log at assemble time and injects it as `MAKEXX_STATS`, so the heat reflects every run since the graph JSON was generated; the Heat options only appear when there's data. The chosen mode is saved with the view state. (Second reader of the same raw `.makexx_hits` events as `makexx --stats`.)
+- **Heat-coloring from `.makexx_hits`.** With profiling data (now the default), **View ▾ ▸ Heat** tints node fills by usage — **total time**, **run count**, or **recency** — on a cool→hot (blue→amber→red) scale (log-scaled for time/count); targets with no recorded runs stay dim, and type/seed info remains on the borders. A gradient **scale** with min/max shows on the top row, and the hover tooltip gains a `runs · total · median · last` line. `makexx --build-graph` aggregates the log at assemble time and injects it as `MAKEXX_STATS`, so the heat reflects every run since the graph JSON was generated; the Heat options only appear when there's data. Heat now also applies to **rule nodes and edges**, not just target nodes. The chosen mode is saved with the view state. (Second reader of the same raw `.makexx_hits` events as `makexx --stats`.)
+- **Rule nodes for multi-input/output rules.** A rule with multiple inputs or outputs is drawn as a synthetic **rule node** that its inputs and outputs connect through (single-target rules still connect directly), so heat and step-by-step reveal flow along the actual rule rather than a fan of edges. A one-level reveal passes through rule nodes transparently. Backed by a per-node `rule` index in `.makexx_graph.json`.
+- **Tools are no longer graph nodes.** Declared `TOOL`s clutter the DAG less: they're shown in a node's **hover tooltip** (with install hints in muted parens) and in a new **Tools ▾** picker (hint shown inline per tool), and the **Search** box now matches tool names. The node data carries the `tools` array and a `tool_hints` map.
+- **Tracing options moved to slide switches**, a **Tools** toggle added, and the **Filter** switch relocated, for a tidier menu bar.
+- **Refresh** action reloads the page and restores the current view state.
+- **Page title** is set from the project name (`mf.title`).
+
+### Interactive TUI
+
+- Group rows now extend their highlight to the column edge like target entries, and group descriptions are aligned to the target description column.
+
+### Fixes
+
+- **Phony targets are skipped in the generated `clean` rules** (they have no output file to remove), and the broken starter template was replaced.
 
 ## v0.5.0
 

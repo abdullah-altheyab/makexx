@@ -39,3 +39,8 @@ AGENTS.md
 .makexx_err
 .makexx_nodes
 .makexx_lsdir
+
+# Local scratch / demos (not part of the repo)
+graph_demo.html
+makexx_next_feature.txt
+pap_graph.html
