@@ -3,6 +3,8 @@ build2/
 bin/
 Testing/
 .claude/
+/makexx
+/*_embed.hpp
 
 # Editor/tool temps
 *.tmp.*

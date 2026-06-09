@@ -37,6 +37,7 @@
 ### Fixes
 
 - **Phony targets are skipped in the generated `clean` rules** (they have no output file to remove), and the broken starter template was replaced.
+- **`build.sh` (the no-cmake build path) un-stale'd.** It had drifted since the graph feature: it embedded only the DSL header + starter, so `src/makexx.cpp` (which `#include`s six vendored graph-asset embeds) wouldn't compile, and it hardcoded `MAKEXX_VERSION="0.1.0"` so a `build.sh`-built binary mis-reported its version. It now embeds the full asset set (matching the `VAR` names in `CMakeLists.txt`) and derives the version from the CMake `project()` line — one source of truth. Verified: builds cleanly, reports the right version, and `--build-graph` assembles the standalone HTML.
 
 ## v0.5.0
 
